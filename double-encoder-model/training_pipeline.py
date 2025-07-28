@@ -44,7 +44,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         device: Device to train on
     """
 
-    # Create model-specific folder for all outputs
+    # Create model-specific folder for all outputs with consistent timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_folder = f"../figures/double_encoder_model_{timestamp}"
     os.makedirs(model_folder, exist_ok=True)
@@ -84,9 +84,11 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         epoch_kl_losses = []
         epoch_metrics = []
 
-        # Create batches (we'll create multiple batches per epoch)
-        num_batches = 100  # Number of batches per epoch
-        batch_losses = []
+        # Calculate number of batches needed to cover the training dataset
+        # MNIST has ~60,000 training samples
+        total_train_samples = 60000  # Approximate MNIST training set size
+        num_batches = total_train_samples // batch_size
+        print(f"Epoch {epoch+1}/{num_epochs}: Processing {num_batches} batches ({total_train_samples} samples)")
 
         for batch_idx in range(num_batches):
             # Create triplet batch
@@ -117,7 +119,6 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             optimizer.step()
 
             # Store losses
-            batch_losses.append(total_loss.item())
             epoch_losses.append(total_loss.item())
             epoch_recon_losses.append(recon_loss.item())
             epoch_kl_losses.append(kl_loss.item())
@@ -128,7 +129,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
             # Print progress every 50 batches
             if batch_idx % 50 == 0:
-                avg_loss = np.mean(batch_losses[-10:]) if len(batch_losses) >= 10 else np.mean(batch_losses)
+                avg_loss = np.mean(epoch_losses[-10:]) if len(epoch_losses) >= 10 else np.mean(epoch_losses)
                 print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx}/{num_batches}, "
                       f"Avg Loss: {avg_loss:.4f}")
 
@@ -142,7 +143,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         for key in epoch_metrics[0].keys():
             avg_train_metrics[key] = np.mean([m[key] for m in epoch_metrics])
 
-        # Validation
+        # Validation - use proper validation set size
         model.eval()
         val_losses_epoch = []
         val_recon_losses_epoch = []
@@ -150,8 +151,11 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         val_metrics_epoch = []
 
         with torch.no_grad():
-            # Create validation batches
-            num_val_batches = 20  # Fewer validation batches
+            # Calculate number of validation batches
+            total_val_samples = 10000  # Approximate MNIST test set size
+            num_val_batches = total_val_samples // batch_size
+            print(f"Validation: Processing {num_val_batches} batches ({total_val_samples} samples)")
+
             for batch_idx in range(num_val_batches):
                 # Create triplet batch for validation
                 ground_truth, different_digit, same_digit, original_labels, different_labels = \
@@ -299,13 +303,13 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
 
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
 
-    # Plot losses
-    axes[0, 0].plot(epochs, train_losses, 'b-', label='Train Total Loss')
-    axes[0, 0].plot(epochs, train_recon_losses, 'b--', label='Train Recon Loss')
-    axes[0, 0].plot(epochs, train_kl_losses, 'b:', label='Train KL Loss')
-    axes[0, 0].plot(epochs, val_losses, 'r-', label='Val Total Loss')
-    axes[0, 0].plot(epochs, val_recon_losses, 'r--', label='Val Recon Loss')
-    axes[0, 0].plot(epochs, val_kl_losses, 'r:', label='Val KL Loss')
+    # Plot losses with distinct colors
+    axes[0, 0].plot(epochs, train_losses, 'b-', label='Train Total Loss', linewidth=2)
+    axes[0, 0].plot(epochs, train_recon_losses, 'g-', label='Train Recon Loss', linewidth=2)
+    axes[0, 0].plot(epochs, train_kl_losses, 'orange', label='Train KL Loss', linewidth=2)
+    axes[0, 0].plot(epochs, val_losses, 'r-', label='Val Total Loss', linewidth=2)
+    axes[0, 0].plot(epochs, val_recon_losses, 'purple', label='Val Recon Loss', linewidth=2)
+    axes[0, 0].plot(epochs, val_kl_losses, 'brown', label='Val KL Loss', linewidth=2)
     axes[0, 0].set_title('Training and Validation Losses')
     axes[0, 0].set_xlabel('Epoch')
     axes[0, 0].set_ylabel('Loss')
@@ -315,8 +319,8 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
     # Plot MSE
     train_mse = [m['mse'] for m in train_metrics]
     val_mse = [m['mse'] for m in val_metrics]
-    axes[0, 1].plot(epochs, train_mse, 'b-', label='Train MSE')
-    axes[0, 1].plot(epochs, val_mse, 'r-', label='Val MSE')
+    axes[0, 1].plot(epochs, train_mse, 'b-', label='Train MSE', linewidth=2)
+    axes[0, 1].plot(epochs, val_mse, 'r-', label='Val MSE', linewidth=2)
     axes[0, 1].set_title('Mean Squared Error')
     axes[0, 1].set_xlabel('Epoch')
     axes[0, 1].set_ylabel('MSE')
@@ -327,8 +331,8 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
     train_psnr = [m['psnr'] for m in train_metrics if not np.isinf(m['psnr'])]
     val_psnr = [m['psnr'] for m in val_metrics if not np.isinf(m['psnr'])]
     if train_psnr and val_psnr:
-        axes[1, 0].plot(epochs[:len(train_psnr)], train_psnr, 'b-', label='Train PSNR')
-        axes[1, 0].plot(epochs[:len(val_psnr)], val_psnr, 'r-', label='Val PSNR')
+        axes[1, 0].plot(epochs[:len(train_psnr)], train_psnr, 'b-', label='Train PSNR', linewidth=2)
+        axes[1, 0].plot(epochs[:len(val_psnr)], val_psnr, 'r-', label='Val PSNR', linewidth=2)
         axes[1, 0].set_title('Peak Signal-to-Noise Ratio')
         axes[1, 0].set_xlabel('Epoch')
         axes[1, 0].set_ylabel('PSNR (dB)')
@@ -341,10 +345,10 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
     val_number_z_std = [m['number_z_std'] for m in val_metrics]
     val_filter_z_std = [m['filter_z_std'] for m in val_metrics]
 
-    axes[1, 1].plot(epochs, train_number_z_std, 'b-', label='Train Number Z std')
-    axes[1, 1].plot(epochs, train_filter_z_std, 'b--', label='Train Filter Z std')
-    axes[1, 1].plot(epochs, val_number_z_std, 'r-', label='Val Number Z std')
-    axes[1, 1].plot(epochs, val_filter_z_std, 'r--', label='Val Filter Z std')
+    axes[1, 1].plot(epochs, train_number_z_std, 'b-', label='Train Number Z std', linewidth=2)
+    axes[1, 1].plot(epochs, train_filter_z_std, 'g-', label='Train Filter Z std', linewidth=2)
+    axes[1, 1].plot(epochs, val_number_z_std, 'r-', label='Val Number Z std', linewidth=2)
+    axes[1, 1].plot(epochs, val_filter_z_std, 'purple', label='Val Filter Z std', linewidth=2)
     axes[1, 1].set_title('Latent Space Standard Deviation')
     axes[1, 1].set_xlabel('Epoch')
     axes[1, 1].set_ylabel('Standard Deviation')
@@ -433,9 +437,9 @@ def test_trained_model(model, triplet_creator, model_folder):
         metrics = compute_metrics(reconstruction, ground_truth, number_z, filter_z)
         print_metrics(metrics, 0, "Test ")
 
-        # Visualize results
+        # Visualize results with distinct filename
         visualize_triplet_reconstruction(
-            ground_truth, different_digit, same_digit, reconstruction, 0, model_folder
+            ground_truth, different_digit, same_digit, reconstruction, "test", model_folder
         )
 
         # Test generation with different combinations

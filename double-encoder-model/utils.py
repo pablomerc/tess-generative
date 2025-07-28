@@ -86,42 +86,50 @@ def compute_total_loss(reconstruction, target, number_mu, number_logvar,
     return total_loss, recon_loss, total_kl
 
 
-def save_model(model, optimizer, epoch, loss, save_dir=MODELS_DIR, model_name="double_encoder"):
+def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_dir="../models"):
     """
-    Save model checkpoint
+    Save model checkpoint with comprehensive metadata
 
     Args:
-        model: Model to save
-        optimizer: Optimizer state
+        model: The model to save
+        optimizer: The optimizer state
         epoch: Current epoch
-        loss: Current loss
-        save_dir: Directory to save model
-        model_name: Name of the model
+        loss: Current loss value
+        model_name: Name for the model file
+        save_dir: Directory to save models in
     """
-    os.makedirs(save_dir, exist_ok=True)
-
+    # Create timestamped subfolder in models directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{model_name}_epoch_{epoch}_loss_{loss:.4f}_{timestamp}.pth"
-    filepath = os.path.join(save_dir, filename)
+    model_subfolder = f"double_encoder_model_{timestamp}"
+    model_path = os.path.join(save_dir, model_subfolder)
+    os.makedirs(model_path, exist_ok=True)
 
-    torch.save({
+    # Save model state
+    model_filename = f"{model_name}_epoch_{epoch}.pth"
+    model_filepath = os.path.join(model_path, model_filename)
+
+    checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
         'config': {
-            'latent_dim': LATENT_DIM,
-            'number_latent_dim': NUMBER_ENCODER_LATENT_DIM,
-            'filter_latent_dim': FILTER_ENCODER_LATENT_DIM,
-            'beta_kl': BETA_KL,
-            'reconstruction_weight': RECONSTRUCTION_WEIGHT,
-            'learning_rate': LEARNING_RATE,
-            'batch_size': BATCH_SIZE,
+            'BETA_KL': BETA_KL,
+            'RECONSTRUCTION_WEIGHT': RECONSTRUCTION_WEIGHT,
+            'LEARNING_RATE': LEARNING_RATE,
+            'BATCH_SIZE': BATCH_SIZE,
+            'NUM_EPOCHS': NUM_EPOCHS,
+            'LATENT_DIM': LATENT_DIM,
+            'MIN_ROTATION_DIFF': MIN_ROTATION_DIFF,
+            'SAVE_INTERVAL': SAVE_INTERVAL,
+            'VISUALIZATION_INTERVAL': VISUALIZATION_INTERVAL
         }
-    }, filepath)
+    }
 
-    print(f"Model saved to: {filepath}")
-    return filepath
+    torch.save(checkpoint, model_filepath)
+    print(f"Model saved to: {model_filepath}")
+
+    return model_path  # Return the path for potential use by other functions
 
 
 def load_model(model, optimizer, filepath):
@@ -159,7 +167,7 @@ def visualize_triplet_reconstruction(ground_truth, different_digit, same_digit,
         different_digit: Different digit with same augmentation
         same_digit: Same digit with different augmentation
         reconstruction: Reconstructed image
-        epoch: Current epoch
+        epoch: Current epoch (can be int or string like "test")
         save_dir: Directory to save figure
     """
     os.makedirs(save_dir, exist_ok=True)
@@ -185,11 +193,19 @@ def visualize_triplet_reconstruction(ground_truth, different_digit, same_digit,
         axes[1, i].set_title(f'Reconstruction {i+1}')
         axes[1, i].axis('off')
 
-    plt.suptitle(f'Triplet Reconstruction - Epoch {epoch}')
+    # Handle both numeric epochs and string labels
+    if isinstance(epoch, str):
+        title_epoch = epoch.capitalize()
+        filename_epoch = epoch
+    else:
+        title_epoch = f"Epoch {epoch}"
+        filename_epoch = f"epoch_{epoch}"
+
+    plt.suptitle(f'Triplet Reconstruction - {title_epoch}')
     plt.tight_layout()
 
-    # Save figure
-    filename = f"triplet_reconstruction_epoch_{epoch}.png"
+    # Save figure with appropriate filename
+    filename = f"triplet_reconstruction_{filename_epoch}.png"
     filepath = os.path.join(save_dir, filename)
     plt.savefig(filepath, dpi=150, bbox_inches='tight')
     plt.close()
