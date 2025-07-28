@@ -1,0 +1,38 @@
+"""
+Configuration file for the Double Encoder Model
+"""
+
+import torch
+
+# Device configuration
+device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+
+# Model hyperparameters
+LATENT_DIM = 32
+NUMBER_ENCODER_LATENT_DIM = LATENT_DIM
+FILTER_ENCODER_LATENT_DIM = LATENT_DIM
+
+# Training hyperparameters
+BATCH_SIZE = 256  # Reduced for quick test, use 128
+NUM_EPOCHS = 150   # Just 1 epoch for quick test, use 50
+LEARNING_RATE = 1e-3
+BETA_KL = 0.1  # KL divergence weight
+RECONSTRUCTION_WEIGHT = 1.0  # Reconstruction loss weight
+
+# Data paths
+DATA_DIR = '../data'
+AUGMENTED_DATA_DIR = '../data/augmented'
+MODELS_DIR = '../models'
+
+# Augmentation parameters (from augment_mnist.py)
+ROTATION_DEGREES = 30
+SCALE_RANGE = (1, 1)  # No scaling for now
+TRANSLATE_RANGE = (0, 0)  # No translation for now
+
+# Triplet creation parameters
+MIN_ROTATION_DIFF = 20  # Minimum rotation difference between same digit samples
+MAX_ROTATION_DIFF = 60  # Maximum rotation difference between same digit samples
+
+# Model save settings
+SAVE_INTERVAL = 10  # Save model every N epochs
+VISUALIZATION_INTERVAL = 10  # Show visualizations every N epochs
