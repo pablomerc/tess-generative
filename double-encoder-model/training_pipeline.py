@@ -29,7 +29,7 @@ from utils import (
 
 def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
                 batch_size=BATCH_SIZE, save_interval=SAVE_INTERVAL,
-                vis_interval=VISUALIZATION_INTERVAL, device=device):
+                vis_interval=VISUALIZATION_INTERVAL, device=device, start_epoch=0):
     """
     Main training loop
 
@@ -42,6 +42,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         save_interval: Save model every N epochs
         vis_interval: Create visualizations every N epochs
         device: Device to train on
+        start_epoch: Starting epoch (for continuing training)
     """
 
     # Create model-specific folder for all outputs with consistent timestamp
@@ -68,11 +69,12 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
     print(f"Starting training on {device}")
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"Starting from epoch: {start_epoch}")
     print(f"Number of epochs: {num_epochs}")
     print(f"Batch size: {batch_size}")
     print("="*60)
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, start_epoch + num_epochs):
         epoch_start = time.time()
 
         # Set model to training mode
@@ -88,7 +90,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         # MNIST has ~60,000 training samples
         total_train_samples = 60000  # Approximate MNIST training set size
         num_batches = total_train_samples // batch_size
-        print(f"Epoch {epoch+1}/{num_epochs}: Processing {num_batches} batches ({total_train_samples} samples)")
+        print(f"Epoch {epoch+1}/{start_epoch + num_epochs}: Processing {num_batches} batches ({total_train_samples} samples)")
 
         for batch_idx in range(num_batches):
             # Create triplet batch
@@ -130,7 +132,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             # Print progress every 50 batches
             if batch_idx % 50 == 0:
                 avg_loss = np.mean(epoch_losses[-10:]) if len(epoch_losses) >= 10 else np.mean(epoch_losses)
-                print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_idx}/{num_batches}, "
+                print(f"Epoch {epoch+1}/{start_epoch + num_epochs}, Batch {batch_idx}/{num_batches}, "
                       f"Avg Loss: {avg_loss:.4f}")
 
         # Compute training epoch averages
@@ -215,7 +217,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
         # Estimate remaining time
         avg_epoch_time = sum(epoch_times) / len(epoch_times)
-        remaining_epochs = num_epochs - (epoch + 1)
+        remaining_epochs = (start_epoch + num_epochs) - (epoch + 1)
         estimated_remaining = avg_epoch_time * remaining_epochs
 
         # Format time strings
@@ -223,7 +225,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         remaining_str = str(timedelta(seconds=int(estimated_remaining)))
 
         # Print epoch summary
-        print(f"\nEpoch {epoch+1}/{num_epochs} Summary:")
+        print(f"\nEpoch {epoch+1}/{start_epoch + num_epochs} Summary:")
         print(f"  Training - Total Loss: {avg_epoch_loss:.4f}, Recon Loss: {avg_epoch_recon_loss:.4f}, KL Loss: {avg_epoch_kl_loss:.4f}")
         print(f"  Validation - Total Loss: {avg_val_loss:.4f}, Recon Loss: {avg_val_recon_loss:.4f}, KL Loss: {avg_val_kl_loss:.4f}")
         print_metrics(avg_train_metrics, epoch+1, "  Train ")
@@ -285,7 +287,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     print(f"Average epoch time: {sum(epoch_times)/len(epoch_times):.1f} seconds")
 
     # Save final model
-    save_model(model, optimizer, num_epochs, val_losses[-1], model_name="double_encoder_final")
+    save_model(model, optimizer, start_epoch + num_epochs, val_losses[-1], model_name="double_encoder_final")
 
     # Plot training curves
     plot_training_curves(train_losses, train_recon_losses, train_kl_losses, train_metrics,
@@ -303,20 +305,30 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
 
     fig, axes = plt.subplots(2, 2, figsize=(9, 6))
 
-    # Plot losses with distinct colors
-    axes[0, 0].plot(epochs, train_losses, 'b-', label='Train Total Loss', linewidth=2)
-    axes[0, 0].plot(epochs, train_recon_losses, 'g-', label='Train Recon Loss', linewidth=2)
-    axes[0, 0].plot(epochs, train_kl_losses, 'orange', label='Train KL Loss', linewidth=2)
-    axes[0, 0].plot(epochs, val_losses, 'r-', label='Val Total Loss', linewidth=2)
-    axes[0, 0].plot(epochs, val_recon_losses, 'purple', label='Val Recon Loss', linewidth=2)
-    axes[0, 0].plot(epochs, val_kl_losses, 'brown', label='Val KL Loss', linewidth=2)
-    axes[0, 0].set_title('Training and Validation Losses')
-    axes[0, 0].set_xlabel('Epoch')
-    axes[0, 0].set_ylabel('Loss')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True)
+    # Plot losses with distinct colors (log scale for better visualization)
+    # Primary y-axis for reconstruction and total losses
+    ax1 = axes[0, 0]
+    ax1.plot(epochs, train_losses, 'b-', label='Train Total Loss', linewidth=2)
+    ax1.plot(epochs, train_recon_losses, 'g-', label='Train Recon Loss', linewidth=2)
+    ax1.plot(epochs, val_losses, 'r-', label='Val Total Loss', linewidth=2)
+    ax1.plot(epochs, val_recon_losses, 'purple', label='Val Recon Loss', linewidth=2)
+    ax1.set_title('Training and Validation Losses (Log Scale)')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss (log scale)')
+    ax1.set_yscale('log')
+    ax1.grid(True)
+    ax1.legend(loc='upper left')
 
-    # Plot MSE
+    # Secondary y-axis for KL losses
+    ax2 = ax1.twinx()
+    ax2.plot(epochs, train_kl_losses, 'orange', label='Train KL Loss', linewidth=2, linestyle='--')
+    ax2.plot(epochs, val_kl_losses, 'brown', label='Val KL Loss', linewidth=2, linestyle='--')
+    ax2.set_ylabel('KL Loss (log scale)', color='orange')
+    ax2.set_yscale('log')
+    ax2.tick_params(axis='y', labelcolor='orange')
+    ax2.legend(loc='upper right')
+
+    # Plot MSE (linear scale is fine for MSE)
     train_mse = [m['mse'] for m in train_metrics]
     val_mse = [m['mse'] for m in val_metrics]
     axes[0, 1].plot(epochs, train_mse, 'b-', label='Train MSE', linewidth=2)
@@ -327,7 +339,7 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
     axes[0, 1].legend()
     axes[0, 1].grid(True)
 
-    # Plot PSNR
+    # Plot PSNR (linear scale is fine for PSNR)
     train_psnr = [m['psnr'] for m in train_metrics if not np.isinf(m['psnr'])]
     val_psnr = [m['psnr'] for m in val_metrics if not np.isinf(m['psnr'])]
     if train_psnr and val_psnr:
@@ -339,7 +351,7 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
         axes[1, 0].legend()
         axes[1, 0].grid(True)
 
-    # Plot latent space std
+    # Plot latent space std (linear scale is fine)
     train_number_z_std = [m['number_z_std'] for m in train_metrics]
     train_filter_z_std = [m['filter_z_std'] for m in train_metrics]
     val_number_z_std = [m['number_z_std'] for m in val_metrics]
@@ -397,20 +409,25 @@ def main():
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
 
     # Check if we should load a pre-trained model
-    load_pretrained = False  # Set to True if you want to continue training
+    load_pretrained = True  # Set to True to continue training
+    start_epoch = 0  # Default starting epoch
+
     if load_pretrained:
-        # You would specify the path to your pre-trained model here
-        pretrained_path = "../models/your_pretrained_model.pth"
+        # Specify the path to your pre-trained model
+        pretrained_path = "../models/double_encoder_model_20250729_131611/double_encoder_epoch_20.pth"
         if os.path.exists(pretrained_path):
             start_epoch, _ = load_model(model, optimizer, pretrained_path)
             print(f"Loaded pre-trained model, starting from epoch {start_epoch}")
+            print(f"Continuing training for {NUM_EPOCHS} more epochs...")
         else:
             print(f"Pre-trained model not found at {pretrained_path}")
+            print("Starting training from scratch...")
+            start_epoch = 0
 
     # Train the model
     print("\nStarting training...")
     train_losses, train_recon_losses, train_kl_losses, train_metrics, val_losses, val_recon_losses, val_kl_losses, val_metrics, model_folder = train_model(
-        model, triplet_creator, optimizer
+        model, triplet_creator, optimizer, start_epoch=start_epoch
     )
 
     print("\nTraining completed successfully!")
