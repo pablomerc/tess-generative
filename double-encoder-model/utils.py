@@ -103,7 +103,7 @@ def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_
     """
     # Create timestamped subfolder in models directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_subfolder = f"double_encoder_model_{timestamp}"
+    model_subfolder = f"double_encoder_model_{DATASET_TYPE}_{timestamp}"
     model_path = os.path.join(save_dir, model_subfolder)
     os.makedirs(model_path, exist_ok=True)
 
@@ -117,6 +117,7 @@ def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
         'config': {
+            'DATASET_TYPE': DATASET_TYPE,
             'BETA_KL': BETA_KL,
             'RECONSTRUCTION_WEIGHT': RECONSTRUCTION_WEIGHT,
             'LEARNING_RATE': LEARNING_RATE,

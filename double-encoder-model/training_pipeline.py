@@ -47,9 +47,10 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
     # Create model-specific folder for all outputs with consistent timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_folder = f"../figures/double_encoder_model_{timestamp}"
+    model_folder = f"../figures/double_encoder_model_{DATASET_TYPE}_{timestamp}"
     os.makedirs(model_folder, exist_ok=True)
     print(f"All outputs will be saved to: {model_folder}")
+    print(f"Using dataset: {DATASET_TYPE}")
 
     # Training history
     train_losses = []
@@ -396,7 +397,10 @@ def main():
 
     # Create triplet creator
     print("Initializing triplet creator...")
-    triplet_creator = TripletCreator()
+    triplet_creator = TripletCreator(dataset_type=DATASET_TYPE)
+
+    # Display dataset information
+    triplet_creator.get_dataset_info()
 
     # Create model
     print("Creating model...")
@@ -409,7 +413,7 @@ def main():
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
 
     # Check if we should load a pre-trained model
-    load_pretrained = True  # Set to True to continue training
+    load_pretrained = False  # Set to True to continue training
     start_epoch = 0  # Default starting epoch
 
     if load_pretrained:
@@ -502,16 +506,16 @@ def test_generation(model, triplet_creator, model_folder):
         for i in range(4):
             # Original reconstructions
             axes[0, i].imshow(gt1[i, 0].cpu(), cmap='gray')
-            axes[0, i].set_title(f'Original 1\nLabel: {labels1[i]}')
+            axes[0, i].set_title(f'Original 1\nLabel: {triplet_creator.class_names[labels1[i]]}')
             axes[0, i].axis('off')
 
             axes[1, i].imshow(gt2[i, 0].cpu(), cmap='gray')
-            axes[1, i].set_title(f'Original 2\nLabel: {labels2[i]}')
+            axes[1, i].set_title(f'Original 2\nLabel: {triplet_creator.class_names[labels2[i]]}')
             axes[1, i].axis('off')
 
             # Combinations
             axes[2, i].imshow(combination1[i, 0].cpu(), cmap='gray')
-            axes[2, i].set_title(f'Combination\nNumber: {labels1[i]}, Filter: {labels2[i]}')
+            axes[2, i].set_title(f'Combination\nNumber: {triplet_creator.class_names[labels1[i]]}, Filter: {triplet_creator.class_names[labels2[i]]}')
             axes[2, i].axis('off')
 
         plt.suptitle('Generation Test: Combining Different Number and Filter Encodings')

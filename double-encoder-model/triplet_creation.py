@@ -17,27 +17,56 @@ from config import *
 
 
 class TripletCreator:
-    def __init__(self, data_dir=DATA_DIR):
+    def __init__(self, data_dir=DATA_DIR, dataset_type=DATASET_TYPE):
         """
-        Initialize the triplet creator with MNIST dataset
+        Initialize the triplet creator with MNIST or Fashion MNIST dataset
+
+        Args:
+            data_dir: Directory to store/load the dataset
+            dataset_type: Type of dataset ('mnist' or 'fashion_mnist')
         """
         self.data_dir = data_dir
         self.device = device
+        self.dataset_type = dataset_type
 
-        # Load original MNIST (no augmentation)
-        self.mnist_train = datasets.MNIST(
-            root=data_dir,
-            train=True,
-            transform=None,  # We'll apply transforms manually
-            download=False
-        )
+        # Load original dataset (no augmentation)
+        if dataset_type == 'fashion_mnist':
+            self.train_dataset = datasets.FashionMNIST(
+                root=data_dir,
+                train=True,
+                transform=None,  # We'll apply transforms manually
+                download=True
+            )
 
-        self.mnist_test = datasets.MNIST(
-            root=data_dir,
-            train=False,
-            transform=None,  # We'll apply transforms manually
-            download=False
-        )
+            self.test_dataset = datasets.FashionMNIST(
+                root=data_dir,
+                train=False,
+                transform=None,  # We'll apply transforms manually
+                download=True
+            )
+
+            # Fashion MNIST class names
+            self.class_names = [
+                'T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
+                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot'
+            ]
+        else:  # Default to MNIST
+            self.train_dataset = datasets.MNIST(
+                root=data_dir,
+                train=True,
+                transform=None,  # We'll apply transforms manually
+                download=True
+            )
+
+            self.test_dataset = datasets.MNIST(
+                root=data_dir,
+                train=False,
+                transform=None,  # We'll apply transforms manually
+                download=True
+            )
+
+            # MNIST class names (digits 0-9)
+            self.class_names = [str(i) for i in range(10)]
 
         # Create augmentation transforms
         self.create_augmentation_transforms()
@@ -158,7 +187,7 @@ class TripletCreator:
             tuple: (ground_truth, different_digit, same_digit, original_digit, ground_truth_label, different_digit_label)
         """
         # Select dataset
-        mnist_dataset = self.mnist_train if dataset == 'train' else self.mnist_test
+        mnist_dataset = self.train_dataset if dataset == 'train' else self.test_dataset
 
         # Sample original digit
         original_idx = random.randint(0, len(mnist_dataset) - 1)
@@ -228,22 +257,39 @@ class TripletCreator:
 
         return ground_truth_batch, different_digit_batch, same_digit_batch, original_labels, different_labels
 
+    def get_dataset_info(self):
+        """Get information about the loaded dataset"""
+        print(f"Dataset type: {self.dataset_type}")
+        print(f"Training samples: {len(self.train_dataset)}")
+        print(f"Test samples: {len(self.test_dataset)}")
+        print(f"Number of classes: {len(self.class_names)}")
+        print(f"Class names: {self.class_names}")
+
 
 def test_triplet_creation():
     """Test function to visualize triplets with rotation and zoom"""
     import matplotlib.pyplot as plt
 
-    creator = TripletCreator()
+    # Test with MNIST
+    print("Testing with MNIST dataset:")
+    creator_mnist = TripletCreator(dataset_type='mnist')
+    creator_mnist.get_dataset_info()
 
-    # Create a few triplets and visualize them
+    # Test with Fashion MNIST
+    print("\nTesting with Fashion MNIST dataset:")
+    creator_fashion = TripletCreator(dataset_type='fashion_mnist')
+    creator_fashion.get_dataset_info()
+
+    # Create a few triplets and visualize them for MNIST
     fig, axes = plt.subplots(3, 5, figsize=(15, 9))
+    fig.suptitle('MNIST Triplets', fontsize=16)
 
     for i in range(5):
-        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator.create_triplet()
+        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_mnist.create_triplet()
 
         # Plot original
         axes[0, i].imshow(original, cmap='gray')
-        axes[0, i].set_title(f'Original\nLabel: {orig_label}')
+        axes[0, i].set_title(f'Original\nLabel: {creator_mnist.class_names[orig_label]}')
         axes[0, i].axis('off')
 
         # Plot ground truth
@@ -253,21 +299,47 @@ def test_triplet_creation():
 
         # Plot different digit (filter encoder input)
         axes[2, i].imshow(different_digit.squeeze(), cmap='gray')
-        axes[2, i].set_title(f'Different Digit\nFilter encoder input\nLabel: {diff_label}')
+        axes[2, i].set_title(f'Different Digit\nFilter encoder input\nLabel: {creator_mnist.class_names[diff_label]}')
         axes[2, i].axis('off')
 
     plt.tight_layout()
     plt.show()
 
-    # Show examples with different transformations
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    # Create a few triplets and visualize them for Fashion MNIST
+    fig, axes = plt.subplots(3, 5, figsize=(15, 9))
+    fig.suptitle('Fashion MNIST Triplets', fontsize=16)
 
-    for i in range(4):
-        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator.create_triplet()
+    for i in range(5):
+        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_fashion.create_triplet()
 
         # Plot original
         axes[0, i].imshow(original, cmap='gray')
-        axes[0, i].set_title(f'Original\nLabel: {orig_label}')
+        axes[0, i].set_title(f'Original\nLabel: {creator_fashion.class_names[orig_label]}')
+        axes[0, i].axis('off')
+
+        # Plot ground truth
+        axes[1, i].imshow(ground_truth.squeeze(), cmap='gray')
+        axes[1, i].set_title(f'Ground Truth\nTarget for reconstruction')
+        axes[1, i].axis('off')
+
+        # Plot different digit (filter encoder input)
+        axes[2, i].imshow(different_digit.squeeze(), cmap='gray')
+        axes[2, i].set_title(f'Different Digit\nFilter encoder input\nLabel: {creator_fashion.class_names[diff_label]}')
+        axes[2, i].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Show examples with different transformations for Fashion MNIST
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    fig.suptitle('Fashion MNIST with Different Transformations', fontsize=16)
+
+    for i in range(4):
+        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_fashion.create_triplet()
+
+        # Plot original
+        axes[0, i].imshow(original, cmap='gray')
+        axes[0, i].set_title(f'Original\nLabel: {creator_fashion.class_names[orig_label]}')
         axes[0, i].axis('off')
 
         # Plot ground truth (same digit, rotation + scale 1)
@@ -278,14 +350,15 @@ def test_triplet_creation():
     plt.tight_layout()
     plt.show()
 
-    # Show the triplet structure more clearly
+    # Show the triplet structure more clearly for Fashion MNIST
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    fig.suptitle('Fashion MNIST Triplet Structure', fontsize=16)
 
-    ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator.create_triplet()
+    ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_fashion.create_triplet()
 
     # Plot original
     axes[0].imshow(original, cmap='gray')
-    axes[0].set_title(f'Original\nLabel: {orig_label}')
+    axes[0].set_title(f'Original\nLabel: {creator_fashion.class_names[orig_label]}')
     axes[0].axis('off')
 
     # Plot ground truth (same digit, rotation + scale 1)
@@ -300,16 +373,16 @@ def test_triplet_creation():
 
     # Plot different digit with same rotation + scale
     axes[3].imshow(different_digit.squeeze(), cmap='gray')
-    axes[3].set_title(f'Different digit, same rotation + scale\nFilter encoder input\nLabel: {diff_label}')
+    axes[3].set_title(f'Different digit, same rotation + scale\nFilter encoder input\nLabel: {creator_fashion.class_names[diff_label]}')
     axes[3].axis('off')
 
     plt.tight_layout()
     plt.show()
 
     # Print some statistics about the transforms
-    print(f"Number of available transforms: {len(creator.augmentation_transforms)}")
-    angles = list(set(key[0] for key in creator.augmentation_transforms.keys()))
-    scales = list(set(key[1] for key in creator.augmentation_transforms.keys()))
+    print(f"\nNumber of available transforms: {len(creator_fashion.augmentation_transforms)}")
+    angles = list(set(key[0] for key in creator_fashion.augmentation_transforms.keys()))
+    scales = list(set(key[1] for key in creator_fashion.augmentation_transforms.keys()))
     print(f"Available rotation angles: {angles}")
     print(f"Available scale factors: {scales}")
 
@@ -322,7 +395,7 @@ def test_scale_configurations():
 
     # Test with scale enabled
     print("\n1. Testing with SCALE_RANGE = (0.5, 1.0):")
-    creator_with_scale = TripletCreator()
+    creator_with_scale = TripletCreator(dataset_type='fashion_mnist')
     print(f"Number of transforms: {len(creator_with_scale.augmentation_transforms)}")
     angles = list(set(key[0] for key in creator_with_scale.augmentation_transforms.keys()))
     scales = list(set(key[1] for key in creator_with_scale.augmentation_transforms.keys()))
@@ -344,7 +417,7 @@ def test_scale_configurations():
     # Create a test creator with scale disabled
     SCALE_RANGE = (1.0, 1.0)
 
-    creator_no_scale = TripletCreator()
+    creator_no_scale = TripletCreator(dataset_type='fashion_mnist')
     print(f"Number of transforms: {len(creator_no_scale.augmentation_transforms)}")
     angles = list(set(key[0] for key in creator_no_scale.augmentation_transforms.keys()))
     scales = list(set(key[1] for key in creator_no_scale.augmentation_transforms.keys()))
