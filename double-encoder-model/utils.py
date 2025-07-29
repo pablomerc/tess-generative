@@ -70,7 +70,7 @@ def compute_total_loss(reconstruction, target, number_mu, number_logvar,
         reconstruction_weight: Weight for reconstruction loss
 
     Returns:
-        tuple: (total_loss, recon_loss, kl_loss)
+        tuple: (total_loss, recon_loss, weighted_kl_loss)
     """
     # Reconstruction loss
     recon_loss = reconstruction_loss(reconstruction, target)
@@ -80,10 +80,13 @@ def compute_total_loss(reconstruction, target, number_mu, number_logvar,
     filter_kl = kl_divergence_loss(filter_mu, filter_logvar)
     total_kl = number_kl + filter_kl
 
-    # Total loss
-    total_loss = reconstruction_weight * recon_loss + beta * total_kl
+    # Weighted KL loss for tracking
+    weighted_kl = beta * total_kl
 
-    return total_loss, recon_loss, total_kl
+    # Total loss
+    total_loss = reconstruction_weight * recon_loss + weighted_kl
+
+    return total_loss, recon_loss, weighted_kl
 
 
 def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_dir="../models"):
