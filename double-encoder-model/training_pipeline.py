@@ -301,7 +301,7 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
     """
     epochs = range(1, len(train_losses) + 1)
 
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(9, 6))
 
     # Plot losses with distinct colors
     axes[0, 0].plot(epochs, train_losses, 'b-', label='Train Total Loss', linewidth=2)
@@ -375,6 +375,12 @@ def main():
 
     # Set device
     print(f"Using device: {device}")
+
+    # Log scale configuration
+    if SCALE_RANGE[0] == SCALE_RANGE[1] and SCALE_RANGE[0] == 1.0:
+        print(f"Scale is set to {SCALE_RANGE}, so no scale transformation will be used")
+    else:
+        print(f"Scale is set to {SCALE_RANGE}, so there will be scale augmentation")
 
     # Create triplet creator
     print("Initializing triplet creator...")
@@ -474,7 +480,7 @@ def test_generation(model, triplet_creator, model_folder):
         combination2 = model.decode_only(number_z2, filter_z1)
 
         # Visualize combinations
-        fig, axes = plt.subplots(3, 4, figsize=(16, 12))
+        fig, axes = plt.subplots(3, 4, figsize=(8, 6))
 
         for i in range(4):
             # Original reconstructions
