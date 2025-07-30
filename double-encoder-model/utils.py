@@ -217,7 +217,7 @@ def visualize_triplet_reconstruction(ground_truth, different_digit, same_digit,
     print(f"Visualization saved to: {filepath}")
 
 
-def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figures"):
+def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figures", rotation_labels=None):
     """
     Visualize latent space with t-SNE
 
@@ -227,6 +227,7 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
         labels: Digit labels
         epoch: Current epoch
         save_dir: Directory to save figure
+        rotation_labels: Rotation labels for coloring (optional)
     """
     try:
         from sklearn.manifold import TSNE
@@ -242,6 +243,11 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
     filter_z_np = filter_z.detach().cpu().numpy()
     labels_np = labels.detach().cpu().numpy()
 
+    if rotation_labels is not None:
+        rotation_labels_np = rotation_labels.detach().cpu().numpy()
+    else:
+        rotation_labels_np = None
+
     # Use PCA for dimensionality reduction if latent dim > 2
     if number_z_np.shape[1] > 2:
         pca = PCA(n_components=2)
@@ -251,22 +257,59 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
         number_z_2d = number_z_np
         filter_z_2d = filter_z_np
 
-    # Create figure
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    # Determine subplot layout based on whether rotation labels are provided
+    if rotation_labels_np is not None:
+        # 2x2 subplot: digit coloring and rotation coloring for both encoders
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-    # Plot number encoder latent space
-    scatter1 = ax1.scatter(number_z_2d[:, 0], number_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
-    ax1.set_title(f'Number Encoder Latent Space - Epoch {epoch}')
-    ax1.set_xlabel('Component 1')
-    ax1.set_ylabel('Component 2')
-    plt.colorbar(scatter1, ax=ax1, label='Digit')
+        # Row 1: Digit coloring
+        # Number encoder - digit coloring
+        scatter1 = axes[0, 0].scatter(number_z_2d[:, 0], number_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
+        axes[0, 0].set_title(f'Number Encoder - Digit Coloring - Epoch {epoch}')
+        axes[0, 0].set_xlabel('Component 1')
+        axes[0, 0].set_ylabel('Component 2')
+        plt.colorbar(scatter1, ax=axes[0, 0], label='Digit')
 
-    # Plot filter encoder latent space
-    scatter2 = ax2.scatter(filter_z_2d[:, 0], filter_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
-    ax2.set_title(f'Filter Encoder Latent Space - Epoch {epoch}')
-    ax2.set_xlabel('Component 1')
-    ax2.set_ylabel('Component 2')
-    plt.colorbar(scatter2, ax=ax2, label='Digit')
+        # Filter encoder - digit coloring
+        scatter2 = axes[0, 1].scatter(filter_z_2d[:, 0], filter_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
+        axes[0, 1].set_title(f'Filter Encoder - Digit Coloring - Epoch {epoch}')
+        axes[0, 1].set_xlabel('Component 1')
+        axes[0, 1].set_ylabel('Component 2')
+        plt.colorbar(scatter2, ax=axes[0, 1], label='Digit')
+
+        # Row 2: Rotation coloring
+        # Number encoder - rotation coloring
+        scatter3 = axes[1, 0].scatter(number_z_2d[:, 0], number_z_2d[:, 1], c=rotation_labels_np, cmap='viridis', s=20, alpha=0.6)
+        axes[1, 0].set_title(f'Number Encoder - Rotation Coloring - Epoch {epoch}')
+        axes[1, 0].set_xlabel('Component 1')
+        axes[1, 0].set_ylabel('Component 2')
+        plt.colorbar(scatter3, ax=axes[1, 0], label='Rotation Angle')
+
+        # Filter encoder - rotation coloring
+        scatter4 = axes[1, 1].scatter(filter_z_2d[:, 0], filter_z_2d[:, 1], c=rotation_labels_np, cmap='viridis', s=20, alpha=0.6)
+        axes[1, 1].set_title(f'Filter Encoder - Rotation Coloring - Epoch {epoch}')
+        axes[1, 1].set_xlabel('Component 1')
+        axes[1, 1].set_ylabel('Component 2')
+        plt.colorbar(scatter4, ax=axes[1, 1], label='Rotation Angle')
+
+    else:
+        # Original 1x2 subplot: only digit coloring
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        axes = axes.reshape(1, -1)  # Make it 2D for consistent indexing
+
+        # Plot number encoder latent space
+        scatter1 = axes[0, 0].scatter(number_z_2d[:, 0], number_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
+        axes[0, 0].set_title(f'Number Encoder Latent Space - Epoch {epoch}')
+        axes[0, 0].set_xlabel('Component 1')
+        axes[0, 0].set_ylabel('Component 2')
+        plt.colorbar(scatter1, ax=axes[0, 0], label='Digit')
+
+        # Plot filter encoder latent space
+        scatter2 = axes[0, 1].scatter(filter_z_2d[:, 0], filter_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
+        axes[0, 1].set_title(f'Filter Encoder Latent Space - Epoch {epoch}')
+        axes[0, 1].set_xlabel('Component 1')
+        axes[0, 1].set_ylabel('Component 2')
+        plt.colorbar(scatter2, ax=axes[0, 1], label='Digit')
 
     plt.tight_layout()
 

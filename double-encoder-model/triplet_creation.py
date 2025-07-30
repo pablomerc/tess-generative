@@ -184,7 +184,9 @@ class TripletCreator:
         3. same_digit: same digit with different augmentation (different rotation + scale)
 
         Returns:
-            tuple: (ground_truth, different_digit, same_digit, original_digit, ground_truth_label, different_digit_label)
+            tuple: (ground_truth, different_digit, same_digit, original_digit,
+                   ground_truth_label, different_digit_label, ground_truth_rotation,
+                   ground_truth_scale, same_digit_rotation, same_digit_scale)
         """
         # Select dataset
         mnist_dataset = self.train_dataset if dataset == 'train' else self.test_dataset
@@ -222,7 +224,11 @@ class TripletCreator:
             same_digit,             # Input for number encoder
             original_image,         # Original image (for reference)
             original_label,         # Original label
-            different_label         # Different digit label
+            different_label,        # Different digit label
+            ground_truth_angle,     # Ground truth rotation angle
+            ground_truth_scale,     # Ground truth scale factor
+            different_rotation_angle, # Same digit rotation angle
+            different_scale_factor   # Same digit scale factor
         )
 
     def create_batch_triplets(self, batch_size=BATCH_SIZE, dataset='train'):
@@ -231,22 +237,32 @@ class TripletCreator:
 
         Returns:
             tuple: (ground_truth_batch, different_digit_batch, same_digit_batch,
-                   original_labels, different_labels)
+                   original_labels, different_labels, ground_truth_rotations,
+                   ground_truth_scales, same_digit_rotations, same_digit_scales)
         """
         ground_truth_batch = []
         different_digit_batch = []
         same_digit_batch = []
         original_labels = []
         different_labels = []
+        ground_truth_rotations = []
+        ground_truth_scales = []
+        same_digit_rotations = []
+        same_digit_scales = []
 
         for _ in range(batch_size):
-            ground_truth, different_digit, same_digit, _, orig_label, diff_label = self.create_triplet(dataset)
+            (ground_truth, different_digit, same_digit, _, orig_label, diff_label,
+             gt_rotation, gt_scale, same_rotation, same_scale) = self.create_triplet(dataset)
 
             ground_truth_batch.append(ground_truth)
             different_digit_batch.append(different_digit)
             same_digit_batch.append(same_digit)
             original_labels.append(orig_label)
             different_labels.append(diff_label)
+            ground_truth_rotations.append(gt_rotation)
+            ground_truth_scales.append(gt_scale)
+            same_digit_rotations.append(same_rotation)
+            same_digit_scales.append(same_scale)
 
         # Stack into tensors
         ground_truth_batch = torch.stack(ground_truth_batch)
@@ -254,8 +270,14 @@ class TripletCreator:
         same_digit_batch = torch.stack(same_digit_batch)
         original_labels = torch.tensor(original_labels)
         different_labels = torch.tensor(different_labels)
+        ground_truth_rotations = torch.tensor(ground_truth_rotations, dtype=torch.float32)
+        ground_truth_scales = torch.tensor(ground_truth_scales, dtype=torch.float32)
+        same_digit_rotations = torch.tensor(same_digit_rotations, dtype=torch.float32)
+        same_digit_scales = torch.tensor(same_digit_scales, dtype=torch.float32)
 
-        return ground_truth_batch, different_digit_batch, same_digit_batch, original_labels, different_labels
+        return (ground_truth_batch, different_digit_batch, same_digit_batch,
+                original_labels, different_labels, ground_truth_rotations,
+                ground_truth_scales, same_digit_rotations, same_digit_scales)
 
     def get_dataset_info(self):
         """Get information about the loaded dataset"""
@@ -285,7 +307,8 @@ def test_triplet_creation():
     fig.suptitle('MNIST Triplets', fontsize=16)
 
     for i in range(5):
-        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_mnist.create_triplet()
+        (ground_truth, different_digit, same_digit, original, orig_label, diff_label,
+         gt_rotation, gt_scale, same_rotation, same_scale) = creator_mnist.create_triplet()
 
         # Plot original
         axes[0, i].imshow(original, cmap='gray')
@@ -294,7 +317,7 @@ def test_triplet_creation():
 
         # Plot ground truth
         axes[1, i].imshow(ground_truth.squeeze(), cmap='gray')
-        axes[1, i].set_title(f'Ground Truth\nTarget for reconstruction')
+        axes[1, i].set_title(f'Ground Truth\nTarget for reconstruction\nRotation: {gt_rotation}°, Scale: {gt_scale}')
         axes[1, i].axis('off')
 
         # Plot different digit (filter encoder input)
@@ -310,7 +333,8 @@ def test_triplet_creation():
     fig.suptitle('Fashion MNIST Triplets', fontsize=16)
 
     for i in range(5):
-        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_fashion.create_triplet()
+        (ground_truth, different_digit, same_digit, original, orig_label, diff_label,
+         gt_rotation, gt_scale, same_rotation, same_scale) = creator_fashion.create_triplet()
 
         # Plot original
         axes[0, i].imshow(original, cmap='gray')
@@ -319,7 +343,7 @@ def test_triplet_creation():
 
         # Plot ground truth
         axes[1, i].imshow(ground_truth.squeeze(), cmap='gray')
-        axes[1, i].set_title(f'Ground Truth\nTarget for reconstruction')
+        axes[1, i].set_title(f'Ground Truth\nTarget for reconstruction\nRotation: {gt_rotation}°, Scale: {gt_scale}')
         axes[1, i].axis('off')
 
         # Plot different digit (filter encoder input)
@@ -335,7 +359,8 @@ def test_triplet_creation():
     fig.suptitle('Fashion MNIST with Different Transformations', fontsize=16)
 
     for i in range(4):
-        ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_fashion.create_triplet()
+        (ground_truth, different_digit, same_digit, original, orig_label, diff_label,
+         gt_rotation, gt_scale, same_rotation, same_scale) = creator_fashion.create_triplet()
 
         # Plot original
         axes[0, i].imshow(original, cmap='gray')
@@ -344,7 +369,7 @@ def test_triplet_creation():
 
         # Plot ground truth (same digit, rotation + scale 1)
         axes[1, i].imshow(ground_truth.squeeze(), cmap='gray')
-        axes[1, i].set_title(f'Ground Truth\nSame digit, rotation + scale 1')
+        axes[1, i].set_title(f'Ground Truth\nSame digit, rotation + scale 1\nRotation: {gt_rotation}°, Scale: {gt_scale}')
         axes[1, i].axis('off')
 
     plt.tight_layout()
@@ -354,7 +379,8 @@ def test_triplet_creation():
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     fig.suptitle('Fashion MNIST Triplet Structure', fontsize=16)
 
-    ground_truth, different_digit, same_digit, original, orig_label, diff_label = creator_fashion.create_triplet()
+    (ground_truth, different_digit, same_digit, original, orig_label, diff_label,
+     gt_rotation, gt_scale, same_rotation, same_scale) = creator_fashion.create_triplet()
 
     # Plot original
     axes[0].imshow(original, cmap='gray')
@@ -363,12 +389,12 @@ def test_triplet_creation():
 
     # Plot ground truth (same digit, rotation + scale 1)
     axes[1].imshow(ground_truth.squeeze(), cmap='gray')
-    axes[1].set_title(f'Ground Truth\nSame digit, rotation + scale 1')
+    axes[1].set_title(f'Ground Truth\nSame digit, rotation + scale 1\nRotation: {gt_rotation}°, Scale: {gt_scale}')
     axes[1].axis('off')
 
     # Plot same digit with different rotation + scale
     axes[2].imshow(same_digit.squeeze(), cmap='gray')
-    axes[2].set_title(f'Same digit, rotation + scale 2\nNumber encoder input')
+    axes[2].set_title(f'Same digit, rotation + scale 2\nNumber encoder input\nRotation: {same_rotation}°, Scale: {same_scale}')
     axes[2].axis('off')
 
     # Plot different digit with same rotation + scale
@@ -404,7 +430,7 @@ def test_scale_configurations():
 
     # Test a few triplets
     for i in range(3):
-        gt, diff, same, orig, orig_label, diff_label = creator_with_scale.create_triplet()
+        (gt, diff, same, orig, orig_label, diff_label, _, _, _, _) = creator_with_scale.create_triplet()
         print(f"Triplet {i+1}: Created successfully")
 
     # Test with scale disabled (temporarily modify config)
@@ -426,7 +452,7 @@ def test_scale_configurations():
 
     # Test a few triplets
     for i in range(3):
-        gt, diff, same, orig, orig_label, diff_label = creator_no_scale.create_triplet()
+        (gt, diff, same, orig, orig_label, diff_label, _, _, _, _) = creator_no_scale.create_triplet()
         print(f"Triplet {i+1}: Created successfully")
 
     # Restore original config

@@ -95,7 +95,8 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
         for batch_idx in range(num_batches):
             # Create triplet batch
-            ground_truth, different_digit, same_digit, original_labels, different_labels = \
+            (ground_truth, different_digit, same_digit, original_labels, different_labels,
+             ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
                 triplet_creator.create_batch_triplets(batch_size, dataset='train')
 
             # Move to device
@@ -104,6 +105,10 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             same_digit = same_digit.to(device)
             original_labels = original_labels.to(device)
             different_labels = different_labels.to(device)
+            ground_truth_rotations = ground_truth_rotations.to(device)
+            ground_truth_scales = ground_truth_scales.to(device)
+            same_digit_rotations = same_digit_rotations.to(device)
+            same_digit_scales = same_digit_scales.to(device)
 
             # Forward pass
             optimizer.zero_grad()
@@ -161,7 +166,8 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
             for batch_idx in range(num_val_batches):
                 # Create triplet batch for validation
-                ground_truth, different_digit, same_digit, original_labels, different_labels = \
+                (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
                     triplet_creator.create_batch_triplets(batch_size, dataset='test')
 
                 # Move to device
@@ -170,6 +176,10 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
                 same_digit = same_digit.to(device)
                 original_labels = original_labels.to(device)
                 different_labels = different_labels.to(device)
+                ground_truth_rotations = ground_truth_rotations.to(device)
+                ground_truth_scales = ground_truth_scales.to(device)
+                same_digit_rotations = same_digit_rotations.to(device)
+                same_digit_scales = same_digit_scales.to(device)
 
                 # Forward pass (no gradients)
                 (reconstruction, number_z, filter_z,
@@ -247,7 +257,8 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             with torch.no_grad():
                 # Create a small batch for reconstruction visualization
                 vis_batch_size = 4
-                ground_truth, different_digit, same_digit, original_labels, different_labels = \
+                (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
                     triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
 
                 ground_truth = ground_truth.to(device)
@@ -265,19 +276,21 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
                 # Create larger batch for latent space visualization
                 latent_batch_size = 4096  # Much larger for better latent space visualization
-                ground_truth_latent, different_digit_latent, same_digit_latent, original_labels_latent, different_labels_latent = \
+                (ground_truth_latent, different_digit_latent, same_digit_latent, original_labels_latent, different_labels_latent,
+                 ground_truth_rotations_latent, ground_truth_scales_latent, same_digit_rotations_latent, same_digit_scales_latent) = \
                     triplet_creator.create_batch_triplets(latent_batch_size, dataset='train')
 
                 ground_truth_latent = ground_truth_latent.to(device)
                 different_digit_latent = different_digit_latent.to(device)
                 same_digit_latent = same_digit_latent.to(device)
                 original_labels_latent = original_labels_latent.to(device)
+                same_digit_rotations_latent = same_digit_rotations_latent.to(device)
 
                 (reconstruction_latent, number_z_latent, filter_z_latent,
                  number_mu_latent, number_logvar_latent, filter_mu_latent, filter_logvar_latent) = model(same_digit_latent, different_digit_latent)
 
-                # Visualize latent space with larger dataset
-                visualize_latent_space(number_z_latent, filter_z_latent, original_labels_latent, epoch + 1, model_folder)
+                # Visualize latent space with larger dataset, including rotation labels
+                visualize_latent_space(number_z_latent, filter_z_latent, original_labels_latent, epoch + 1, model_folder, same_digit_rotations_latent)
 
             # Set back to training mode
             model.train()
@@ -413,12 +426,13 @@ def main():
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
 
     # Check if we should load a pre-trained model
-    load_pretrained = False  # Set to True to continue training
+    load_pretrained = True  # Set to True to continue training
     start_epoch = 0  # Default starting epoch
 
     if load_pretrained:
         # Specify the path to your pre-trained model
-        pretrained_path = "../models/double_encoder_model_20250729_131611/double_encoder_epoch_20.pth"
+        # /Users/pablom.perez/Desktop/MIT-PhD-macbook/AstroAI-Code/tess-generative/models/double_encoder_model_fashion_mnist_20250729_163634/double_encoder_epoch_30.pth
+        pretrained_path = "../models/double_encoder_model_fashion_mnist_20250729_165755/double_encoder_epoch_60.pth"
         if os.path.exists(pretrained_path):
             start_epoch, _ = load_model(model, optimizer, pretrained_path)
             print(f"Loaded pre-trained model, starting from epoch {start_epoch}")
@@ -449,7 +463,8 @@ def test_trained_model(model, triplet_creator, model_folder):
 
     with torch.no_grad():
         # Create test triplets
-        ground_truth, different_digit, same_digit, original_labels, different_labels = \
+        (ground_truth, different_digit, same_digit, original_labels, different_labels,
+         ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
             triplet_creator.create_batch_triplets(8, dataset='test')
 
         ground_truth = ground_truth.to(device)
@@ -482,8 +497,8 @@ def test_generation(model, triplet_creator, model_folder):
 
     with torch.no_grad():
         # Create two different triplets
-        gt1, diff1, same1, labels1, _ = triplet_creator.create_batch_triplets(4, dataset='test')
-        gt2, diff2, same2, labels2, _ = triplet_creator.create_batch_triplets(4, dataset='test')
+        (gt1, diff1, same1, labels1, _, _, _, _, _) = triplet_creator.create_batch_triplets(4, dataset='test')
+        (gt2, diff2, same2, labels2, _, _, _, _, _) = triplet_creator.create_batch_triplets(4, dataset='test')
 
         # Move to device
         gt1, diff1, same1 = gt1.to(device), diff1.to(device), same1.to(device)
