@@ -47,7 +47,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
     # Create model-specific folder for all outputs with consistent timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_folder = f"../figures/double_encoder_model_{DATASET_TYPE}_{timestamp}"
+    model_folder = f"../figures/{DATASET_TYPE}/double_encoder_model_{DATASET_TYPE}_{timestamp}"
     os.makedirs(model_folder, exist_ok=True)
     print(f"All outputs will be saved to: {model_folder}")
     print(f"Using dataset: {DATASET_TYPE}")
@@ -246,7 +246,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
         # Save model
         if (epoch + 1) % save_interval == 0:
-            save_model(model, optimizer, epoch + 1, avg_val_loss)  # Save based on validation loss
+            save_model(model, optimizer, epoch + 1, avg_val_loss, timestamp=timestamp)  # Save based on validation loss
 
         # Create visualizations
         if (epoch + 1) % vis_interval == 0:
@@ -301,7 +301,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     print(f"Average epoch time: {sum(epoch_times)/len(epoch_times):.1f} seconds")
 
     # Save final model
-    save_model(model, optimizer, start_epoch + num_epochs, val_losses[-1], model_name="double_encoder_final")
+    save_model(model, optimizer, start_epoch + num_epochs, val_losses[-1], model_name="double_encoder_final", timestamp=timestamp)
 
     # Plot training curves
     plot_training_curves(train_losses, train_recon_losses, train_kl_losses, train_metrics,
@@ -432,7 +432,8 @@ def main():
     if load_pretrained:
         # Specify the path to your pre-trained model
         # /Users/pablom.perez/Desktop/MIT-PhD-macbook/AstroAI-Code/tess-generative/models/double_encoder_model_fashion_mnist_20250729_163634/double_encoder_epoch_30.pth
-        pretrained_path = "../models/double_encoder_model_fashion_mnist_20250729_165755/double_encoder_epoch_60.pth"
+        # pretrained_path = "../models/double_encoder_model_fashion_mnist_20250729_165755/double_encoder_epoch_60.pth"
+        pretrained_path = "../models/double_encoder_model_mnist_20250801_172221/double_encoder_final_epoch_50.pth"
         if os.path.exists(pretrained_path):
             start_epoch, _ = load_model(model, optimizer, pretrained_path)
             print(f"Loaded pre-trained model, starting from epoch {start_epoch}")

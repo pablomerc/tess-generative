@@ -141,8 +141,10 @@ def prepare_rotation_labels(rotation_angles):
         torch.Tensor: Discrete class labels
     """
     # Convert angles to discrete bins
-    # Assuming angles are in range [-90, 90] with 15-degree steps
-    angle_bins = torch.arange(-90, 91, 15)
+    # Use ROTATION_DEGREES from config to determine the range
+    rotation_range = ROTATION_DEGREES
+    rotation_step = ROTATION_STEP
+    angle_bins = torch.arange(-rotation_range, rotation_range + 1, rotation_step)
 
     # Find the closest bin for each angle
     rotation_labels = []
@@ -297,9 +299,15 @@ def plot_training_curves(train_acc, val_acc, model_name, save_dir):
     print(f"Training curves saved to: {filepath}")
 
 
-def create_summary_visualization(all_results, save_dir):
+def create_summary_visualization(all_results, save_dir, digit_baseline, rotation_baseline):
     """
     Create a summary visualization showing all test results
+
+    Args:
+        all_results: Dictionary containing all test results
+        save_dir: Directory to save the visualization
+        digit_baseline: Expected random baseline for digit classification
+        rotation_baseline: Expected random baseline for rotation classification
     """
     # Extract test accuracies
     test_names = list(all_results.keys())
@@ -334,7 +342,8 @@ def create_summary_visualization(all_results, save_dir):
     # Add horizontal lines for reference
     # plt.axhline(y=0.8, color='green', linestyle='--', alpha=0.5, label='Good performance threshold')
     # plt.axhline(y=0.3, color='orange', linestyle='--', alpha=0.5, label='Poor performance threshold')
-    plt.axhline(y=0.1, color='red', linestyle='--', alpha=0.5, label='Random baseline threshold')
+    plt.axhline(y=digit_baseline, color='red', linestyle='--', alpha=0.5, label=f'Digit random baseline ({digit_baseline:.3f})')
+    plt.axhline(y=rotation_baseline, color='purple', linestyle='--', alpha=0.5, label=f'Rotation random baseline ({rotation_baseline:.3f})')
 
     plt.legend()
     plt.tight_layout()
@@ -348,9 +357,16 @@ def create_summary_visualization(all_results, save_dir):
     print(f"Summary visualization saved to: {filepath}")
 
 
-def save_comprehensive_results(all_results, save_dir, class_names):
+def save_comprehensive_results(all_results, save_dir, class_names, digit_baseline, rotation_baseline):
     """
     Save comprehensive results to a text file
+
+    Args:
+        all_results: Dictionary containing all test results
+        save_dir: Directory to save results
+        class_names: List of class names for digits
+        digit_baseline: Expected random baseline for digit classification
+        rotation_baseline: Expected random baseline for rotation classification
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_file = os.path.join(save_dir, f"comprehensive_downstream_results_{timestamp}.txt")
@@ -395,8 +411,8 @@ def save_comprehensive_results(all_results, save_dir, class_names):
         f.write(f"✓ z_filter captures rotation style: {filter_on_filter:.4f} (should be > 0.8)\n")
         f.write(f"✗ z_filter does NOT capture digit identity: {number_on_filter:.4f} (should be < 0.3)\n")
         f.write(f"✗ z_number does NOT capture rotation style: {filter_on_number:.4f} (should be < 0.3)\n")
-        f.write(f"✗ Random baseline for digit: {number_on_random:.4f} (should be ~0.1)\n")
-        f.write(f"✗ Random baseline for rotation: {filter_on_random:.4f} (should be ~0.1)\n\n")
+        f.write(f"✗ Random baseline for digit: {number_on_random:.4f} (should be ~{digit_baseline:.3f})\n")
+        f.write(f"✗ Random baseline for rotation: {filter_on_random:.4f} (should be ~{rotation_baseline:.3f})\n\n")
 
         # Overall score
         disentanglement_score = (number_on_number + filter_on_filter - number_on_filter - filter_on_number) / 2
@@ -421,6 +437,86 @@ def save_comprehensive_results(all_results, save_dir, class_names):
             f.write(f"{test_name},{results['train_acc'][-1]:.6f},{results['val_acc'][-1]:.6f},{results['test_acc']:.6f}\n")
 
     print(f"CSV results saved to: {csv_file}")
+
+
+def save_labels_to_csv(digit_labels, rotation_labels, save_dir, class_names):
+    """
+    Save digit and rotation labels to a CSV file for analysis.
+
+    Args:
+        digit_labels: Tensor of digit labels
+        rotation_labels: Tensor of rotation labels
+        save_dir: Directory to save the CSV file
+        class_names: List of class names for digits
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    labels_file = os.path.join(save_dir, f"downstream_labels_{timestamp}.csv")
+
+    # Convert tensors to numpy for easier handling
+    digit_labels_np = digit_labels.numpy()
+    rotation_labels_np = rotation_labels.numpy()
+
+    with open(labels_file, 'w') as f:
+        f.write("Sample_Index,Digit_Label,Digit_Class_Name,Rotation_Label\n")
+        for i in range(len(digit_labels_np)):
+            digit_label = int(digit_labels_np[i])
+            digit_class_name = class_names[digit_label] if digit_label < len(class_names) else f"Unknown_{digit_label}"
+            rotation_label = int(rotation_labels_np[i])
+            f.write(f"{i},{digit_label},{digit_class_name},{rotation_label}\n")
+
+    print(f"Labels saved to: {labels_file}")
+
+    # Print unique labels information
+    print("\n" + "="*50)
+    print("LABEL ANALYSIS")
+    print("="*50)
+
+    print("\nDigit Labels:")
+    unique_digits = torch.unique(digit_labels)
+    print(f"Number of unique digit labels: {len(unique_digits)}")
+    print(f"Unique digit labels: {unique_digits.tolist()}")
+    print(f"Digit label distribution:")
+    for label in unique_digits:
+        count = (digit_labels == label).sum().item()
+        class_name = class_names[label] if label < len(class_names) else f"Unknown_{label}"
+        print(f"  Label {label} ({class_name}): {count} samples")
+
+    print("\nRotation Labels:")
+    unique_rotations = torch.unique(rotation_labels)
+    print(f"Number of unique rotation labels: {len(unique_rotations)}")
+    print(f"Unique rotation labels: {unique_rotations.tolist()}")
+    print(f"Rotation label distribution:")
+    for label in unique_rotations:
+        count = (rotation_labels == label).sum().item()
+        # Convert label back to angle (using ROTATION_DEGREES and ROTATION_STEP from config)
+        angle = -ROTATION_DEGREES + label * ROTATION_STEP
+        print(f"  Label {label} (angle {angle}°): {count} samples")
+
+    # Save summary statistics to a separate file
+    summary_file = os.path.join(save_dir, f"label_summary_{timestamp}.txt")
+    with open(summary_file, 'w') as f:
+        f.write("Downstream Task Label Summary\n")
+        f.write("=" * 40 + "\n\n")
+
+        f.write("Digit Labels:\n")
+        f.write(f"Number of unique digit labels: {len(unique_digits)}\n")
+        f.write(f"Unique digit labels: {unique_digits.tolist()}\n")
+        f.write("Digit label distribution:\n")
+        for label in unique_digits:
+            count = (digit_labels == label).sum().item()
+            class_name = class_names[label] if label < len(class_names) else f"Unknown_{label}"
+            f.write(f"  Label {label} ({class_name}): {count} samples\n")
+
+        f.write("\nRotation Labels:\n")
+        f.write(f"Number of unique rotation labels: {len(unique_rotations)}\n")
+        f.write(f"Unique rotation labels: {unique_rotations.tolist()}\n")
+        f.write("Rotation label distribution:\n")
+        for label in unique_rotations:
+            count = (rotation_labels == label).sum().item()
+            angle = -ROTATION_DEGREES + label * ROTATION_STEP
+            f.write(f"  Label {label} (angle {angle}°): {count} samples\n")
+
+    print(f"\nLabel summary saved to: {summary_file}")
 
 
 def save_results(number_results, filter_results, save_dir):
@@ -467,25 +563,28 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = f"../figures/downstream_evaluation_{DATASET_TYPE}_{timestamp}"
-    os.makedirs(output_dir, exist_ok=True)
-    print(f"Results will be saved to: {output_dir}")
-
     # Load pretrained model
     print("\nLoading pretrained model...")
     model = DoubleEncoderDecoder().to(device)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Specify the path to your pretrained model
-    pretrained_path = "../models/double_encoder_model_20250729_134537/double_encoder_epoch_40.pth"
+    # pretrained_path = "../models/double_encoder_model_20250729_134537/double_encoder_epoch_40.pth"
+    # pretrained_path="../models/double_encoder_model_mnist_20250801_170446/double_encoder_epoch_20.pth"
+    pretrained_path="../models/double_encoder_model_mnist_20250801_171627/double_encoder_epoch_40.pth"
+
     if os.path.exists(pretrained_path):
         start_epoch, _ = load_model(model, optimizer, pretrained_path)
         print(f"Loaded pretrained model from epoch {start_epoch}")
     else:
         print(f"Error: Pretrained model not found at {pretrained_path}")
         return
+
+    # Create output directory with epoch information
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = f"../figures/downstream/downstream_evaluation_{DATASET_TYPE}_{start_epoch}epochs_{timestamp}"
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Results will be saved to: {output_dir}")
 
     # Create triplet creator
     print("\nInitializing triplet creator...")
@@ -500,8 +599,21 @@ def main():
     # Prepare rotation labels (convert to discrete classes)
     rotation_labels = prepare_rotation_labels(rotation_angles)
 
-    # Create random baseline
-    print("\nCreating random baseline...")
+    # Create proper baselines based on number of unique classes
+    print("\nCreating proper baselines...")
+    num_digit_classes = len(triplet_creator.class_names)
+    num_rotation_classes = len(torch.unique(rotation_labels))
+
+    # Baseline 1: Random chance for digit classification (1/num_digit_classes)
+    digit_baseline = 1.0 / num_digit_classes
+
+    # Baseline 2: Random chance for rotation classification (1/num_rotation_classes)
+    rotation_baseline = 1.0 / num_rotation_classes
+
+    print(f"Digit baseline (random chance): {digit_baseline:.4f} (1/{num_digit_classes})")
+    print(f"Rotation baseline (random chance): {rotation_baseline:.4f} (1/{num_rotation_classes})")
+
+    # Create random data for baseline tests (keeping the same shape for compatibility)
     z_random = torch.randn_like(z_number)  # Same shape as z_number
 
     print(f"\nData summary:")
@@ -513,6 +625,10 @@ def main():
     print(f"z_number shape: {z_number.shape}")
     print(f"z_filter shape: {z_filter.shape}")
     print(f"z_random shape: {z_random.shape}")
+
+    # Save all labels to CSV for analysis
+    print("\nSaving labels to CSV for analysis...")
+    save_labels_to_csv(digit_labels, rotation_labels, output_dir, triplet_creator.class_names)
 
     # Dictionary to store all results
     all_results = {}
@@ -605,10 +721,10 @@ def main():
         plot_training_curves(results['train_acc'], results['val_acc'], test_name.replace('_', ' ').title(), output_dir)
 
     # Create summary visualization
-    create_summary_visualization(all_results, output_dir)
+    create_summary_visualization(all_results, output_dir, digit_baseline, rotation_baseline)
 
     # Save comprehensive results
-    save_comprehensive_results(all_results, output_dir, triplet_creator.class_names)
+    save_comprehensive_results(all_results, output_dir, triplet_creator.class_names, digit_baseline, rotation_baseline)
 
     # Print summary
     print("\n" + "="*80)
@@ -630,8 +746,8 @@ def main():
     print("✓ filter_on_z_filter: HIGH (z_filter from 'different_digit_same_rotation' captures rotation style)")
     print("✗ number_on_z_filter: LOW (z_filter from 'different_digit_same_rotation' should NOT capture digit identity)")
     print("✗ filter_on_z_number: LOW (z_number from 'same_digit_different_rotation' should NOT capture rotation style)")
-    print("✗ number_on_z_random: LOW (random baseline)")
-    print("✗ filter_on_z_random: LOW (random baseline)")
+    print(f"✗ number_on_z_random: LOW (random baseline)")
+    print(f"✗ filter_on_z_random: LOW (random baseline)")
 
     # Check if disentanglement is achieved
     number_on_number = all_results['number_on_z_number']['test_acc']
@@ -646,8 +762,8 @@ def main():
     print(f"✓ z_filter captures rotation style: {filter_on_filter:.4f} (should be > 0.8)")
     print(f"✗ z_filter does NOT capture digit identity: {number_on_filter:.4f} (should be < 0.3)")
     print(f"✗ z_number does NOT capture rotation style: {filter_on_number:.4f} (should be < 0.3)")
-    print(f"✗ Random baseline for digit: {number_on_random:.4f} (should be ~0.1)")
-    print(f"✗ Random baseline for rotation: {filter_on_random:.4f} (should be ~0.1)")
+    print(f"✗ Random baseline for digit: {number_on_random:.4f} (should be ~{digit_baseline:.3f})")
+    print(f"✗ Random baseline for rotation: {filter_on_random:.4f} (should be ~{rotation_baseline:.3f})")
 
     # Overall assessment
     disentanglement_score = (number_on_number + filter_on_filter - number_on_filter - filter_on_number) / 2

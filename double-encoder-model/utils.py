@@ -89,7 +89,7 @@ def compute_total_loss(reconstruction, target, number_mu, number_logvar,
     return total_loss, recon_loss, weighted_kl
 
 
-def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_dir="../models"):
+def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_dir="../models", timestamp=None):
     """
     Save model checkpoint with comprehensive metadata
 
@@ -100,11 +100,15 @@ def save_model(model, optimizer, epoch, loss, model_name="double_encoder", save_
         loss: Current loss value
         model_name: Name for the model file
         save_dir: Directory to save models in
+        timestamp: Timestamp to use (if None, generate new one)
     """
+    # Use provided timestamp or create new one
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # Create timestamped subfolder in models directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_subfolder = f"double_encoder_model_{DATASET_TYPE}_{timestamp}"
-    model_path = os.path.join(save_dir, model_subfolder)
+    model_path = os.path.join(save_dir, DATASET_TYPE, model_subfolder)
     os.makedirs(model_path, exist_ok=True)
 
     # Save model state
