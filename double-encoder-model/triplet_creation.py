@@ -82,7 +82,10 @@ class TripletCreator:
         use_scale = SCALE_RANGE[0] != SCALE_RANGE[1] or SCALE_RANGE[0] != 1.0
 
         # Create transforms for different rotation angles
-        for angle in range(-90, 91, 15):  # -90 to 90 degrees in steps of 15
+        # Use ROTATION_DEGREES from config to determine the range
+        rotation_range = ROTATION_DEGREES
+        rotation_step = ROTATION_STEP
+        for angle in range(-rotation_range, rotation_range + 1, rotation_step):  # Use config values instead of hardcoded values
             if use_scale:
                 # Create transforms for different scale factors
                 for scale in np.arange(SCALE_RANGE[0], SCALE_RANGE[1] + 0.1, 0.1):  # Scale from 0.5 to 1.0 in steps of 0.1
@@ -124,7 +127,7 @@ class TripletCreator:
                 self.augmentation_transforms[(angle, 1.0)] = transform
 
     def get_random_rotation_angle(self):
-        """Get a random rotation angle between -90 and 90 degrees"""
+        """Get a random rotation angle between -ROTATION_DEGREES and +ROTATION_DEGREES"""
         angles = list(set(key[0] for key in self.augmentation_transforms.keys()))
         return random.choice(angles)
 
