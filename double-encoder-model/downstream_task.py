@@ -6,6 +6,15 @@ This script evaluates the quality of learned representations by:
 2. Extracting latent representations (z_number, z_filter) from test data
 3. Training MLPs to predict digit labels from z_number and rotation angles from z_filter
 4. Evaluating and visualizing the classification accuracy
+
+DISENTANGLEMENT EVALUATION LOGIC:
+- z_number comes from 'same_digit_different_rotation' (input to number encoder)
+- z_filter comes from 'different_digit_same_rotation' (input to filter encoder)
+- To test disentanglement:
+  * z_number should capture digit identity (high accuracy on digit classification)
+  * z_filter should capture rotation style (high accuracy on rotation classification)
+  * z_number should NOT capture rotation style (low accuracy on rotation classification)
+  * z_filter should NOT capture digit identity (low accuracy on digit classification)
 """
 
 import torch
@@ -30,7 +39,7 @@ class LatentClassifier(nn.Module):
     """
     Simple MLP classifier for downstream tasks
     """
-    def __init__(self, input_dim, num_classes, hidden_dims=[128, 64]):
+    def __init__(self, input_dim, num_classes, hidden_dims=[256,128, 64]):
         super().__init__()
 
         layers = []
@@ -39,6 +48,7 @@ class LatentClassifier(nn.Module):
         for hidden_dim in hidden_dims:
             layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
+                nn.BatchNorm1d(hidden_dim),
                 nn.ReLU(),
                 nn.Dropout(0.2)
             ])
@@ -93,7 +103,7 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
             different_digit = different_digit.to(device)
             same_digit = same_digit.to(device)
             original_labels = original_labels.to(device)
-            same_digit_rotations = same_digit_rotations.to(device)
+            ground_truth_rotations = ground_truth_rotations.to(device)
 
             # Extract latent representations
             number_z, filter_z, _, _, _, _ = model.encode_only(same_digit, different_digit)
@@ -102,7 +112,7 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
             z_number_list.append(number_z.cpu())
             z_filter_list.append(filter_z.cpu())
             digit_labels_list.append(original_labels.cpu())
-            rotation_labels_list.append(same_digit_rotations.cpu())
+            rotation_labels_list.append(ground_truth_rotations.cpu())
 
     # Concatenate all batches
     z_number = torch.cat(z_number_list, dim=0)[:num_samples]
@@ -113,6 +123,9 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
     print(f"Extracted {z_number.shape[0]} samples")
     print(f"z_number shape: {z_number.shape}")
     print(f"z_filter shape: {z_filter.shape}")
+    print(f"Note: z_number comes from 'same_digit_different_rotation' (number encoder input)")
+    print(f"Note: z_filter comes from 'different_digit_same_rotation' (filter encoder input)")
+    print(f"Note: rotation_labels correspond to the rotation of 'different_digit_same_rotation'")
 
     return z_number, z_filter, digit_labels, rotation_labels
 
@@ -319,8 +332,8 @@ def create_summary_visualization(all_results, save_dir):
                 f'{acc:.3f}', ha='center', va='bottom', fontsize=10)
 
     # Add horizontal lines for reference
-    plt.axhline(y=0.8, color='green', linestyle='--', alpha=0.5, label='Good performance threshold')
-    plt.axhline(y=0.3, color='orange', linestyle='--', alpha=0.5, label='Poor performance threshold')
+    # plt.axhline(y=0.8, color='green', linestyle='--', alpha=0.5, label='Good performance threshold')
+    # plt.axhline(y=0.3, color='orange', linestyle='--', alpha=0.5, label='Poor performance threshold')
     plt.axhline(y=0.1, color='red', linestyle='--', alpha=0.5, label='Random baseline threshold')
 
     plt.legend()
@@ -508,6 +521,7 @@ def main():
     print("\n" + "="*50)
     print("TEST 1: Number classifier on z_number")
     print("="*50)
+    print("Testing if z_number (from 'same_digit_different_rotation') captures digit identity")
     model_1, train_acc_1, val_acc_1, test_acc_1, pred_1, true_1 = train_downstream_classifier(
         z_number, digit_labels, num_classes=len(triplet_creator.class_names),
         model_name="Number_on_z_number", learning_rate=0.001, num_epochs=50
@@ -521,6 +535,7 @@ def main():
     print("\n" + "="*50)
     print("TEST 2: Filter classifier on z_number")
     print("="*50)
+    print("Testing if z_number (from 'same_digit_different_rotation') captures rotation style")
     model_2, train_acc_2, val_acc_2, test_acc_2, pred_2, true_2 = train_downstream_classifier(
         z_number, rotation_labels, num_classes=len(torch.unique(rotation_labels)),
         model_name="Filter_on_z_number", learning_rate=0.001, num_epochs=50
@@ -534,6 +549,7 @@ def main():
     print("\n" + "="*50)
     print("TEST 3: Number classifier on z_filter")
     print("="*50)
+    print("Testing if z_filter (from 'different_digit_same_rotation') captures digit identity")
     model_3, train_acc_3, val_acc_3, test_acc_3, pred_3, true_3 = train_downstream_classifier(
         z_filter, digit_labels, num_classes=len(triplet_creator.class_names),
         model_name="Number_on_z_filter", learning_rate=0.001, num_epochs=50
@@ -547,6 +563,7 @@ def main():
     print("\n" + "="*50)
     print("TEST 4: Filter classifier on z_filter")
     print("="*50)
+    print("Testing if z_filter (from 'different_digit_same_rotation') captures rotation style")
     model_4, train_acc_4, val_acc_4, test_acc_4, pred_4, true_4 = train_downstream_classifier(
         z_filter, rotation_labels, num_classes=len(torch.unique(rotation_labels)),
         model_name="Filter_on_z_filter", learning_rate=0.001, num_epochs=50
@@ -609,10 +626,10 @@ def main():
     print("INTERPRETATION")
     print("="*80)
     print("Expected good disentanglement pattern:")
-    print("✓ number_on_z_number: HIGH (z_number captures digit identity)")
-    print("✓ filter_on_z_filter: HIGH (z_filter captures rotation style)")
-    print("✗ number_on_z_filter: LOW (z_filter should NOT capture digit identity)")
-    print("✗ filter_on_z_number: LOW (z_number should NOT capture rotation style)")
+    print("✓ number_on_z_number: HIGH (z_number from 'same_digit_different_rotation' captures digit identity)")
+    print("✓ filter_on_z_filter: HIGH (z_filter from 'different_digit_same_rotation' captures rotation style)")
+    print("✗ number_on_z_filter: LOW (z_filter from 'different_digit_same_rotation' should NOT capture digit identity)")
+    print("✗ filter_on_z_number: LOW (z_number from 'same_digit_different_rotation' should NOT capture rotation style)")
     print("✗ number_on_z_random: LOW (random baseline)")
     print("✗ filter_on_z_random: LOW (random baseline)")
 
