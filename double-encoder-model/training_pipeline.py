@@ -34,28 +34,28 @@ def create_reconstruction_plot_for_wandb(ground_truth, different_digit, same_dig
     """
     Create reconstruction plot for wandb logging
     """
-    fig, axes = plt.subplots(4, 4, figsize=(12, 12))
+    fig, axes = plt.subplots(8, 4, figsize=(12, 24))
 
-    for i in range(4):
+    for i in range(8):
         # Ground truth (target)
-        axes[0, i].imshow(ground_truth[i, 0].cpu(), cmap='gray')
-        axes[0, i].set_title(f'Ground Truth\nLabel: {class_names[original_labels[i]]}')
-        axes[0, i].axis('off')
+        axes[i, 0].imshow(ground_truth[i, 0].cpu(), cmap='gray')
+        axes[i, 0].set_title(f'Example {i+1}: Ground Truth\nLabel: {class_names[original_labels[i]]}')
+        axes[i, 0].axis('off')
 
         # Different digit (filter encoder input)
-        axes[1, i].imshow(different_digit[i, 0].cpu(), cmap='gray')
-        axes[1, i].set_title(f'Different Digit\nFilter Encoder Input')
-        axes[1, i].axis('off')
+        axes[i, 1].imshow(different_digit[i, 0].cpu(), cmap='gray')
+        axes[i, 1].set_title(f'Different Digit\nFilter Encoder Input')
+        axes[i, 1].axis('off')
 
         # Same digit (number encoder input)
-        axes[2, i].imshow(same_digit[i, 0].cpu(), cmap='gray')
-        axes[2, i].set_title(f'Same Digit\nNumber Encoder Input')
-        axes[2, i].axis('off')
+        axes[i, 2].imshow(same_digit[i, 0].cpu(), cmap='gray')
+        axes[i, 2].set_title(f'Same Digit\nNumber Encoder Input')
+        axes[i, 2].axis('off')
 
         # Reconstruction
-        axes[3, i].imshow(reconstruction[i, 0].cpu(), cmap='gray')
-        axes[3, i].set_title(f'Reconstruction\nEpoch {epoch}')
-        axes[3, i].axis('off')
+        axes[i, 3].imshow(reconstruction[i, 0].cpu(), cmap='gray')
+        axes[i, 3].set_title(f'Reconstruction\nEpoch {epoch}')
+        axes[i, 3].axis('off')
 
     plt.tight_layout()
     return fig
@@ -64,66 +64,68 @@ def create_reconstruction_plot_for_wandb(ground_truth, different_digit, same_dig
 def create_generation_test_for_wandb(model, triplet_creator, epoch):
     """
     Create generation test plot for wandb logging - testing disentanglement
-    Shows how the model can swap number and filter components
+    Shows how the model can swap number and filter components for 8 different examples
     """
     model.eval()
 
-    with torch.no_grad():
-        # Create a single triplet for the main example
-        (ground_truth, different_digit, same_digit, original_label, different_label,
-         ground_truth_rotation, ground_truth_scale, same_digit_rotation, same_digit_scale) = \
-            triplet_creator.create_triplet(dataset='test')
+    # Create visualization for 8 different examples
+    fig, axes = plt.subplots(8, 5, figsize=(20, 32))
 
-        # Create a random image for swapping
-        (random_gt, random_diff, random_same, random_label, _, _, _, _, _) = \
-            triplet_creator.create_triplet(dataset='test')
+    for example_idx in range(8):
+        with torch.no_grad():
+            # Create a single triplet for this example
+            (ground_truth, different_digit, same_digit, original_image, original_label, different_label,
+             ground_truth_rotation, ground_truth_scale, same_digit_rotation, same_digit_scale) = \
+                triplet_creator.create_triplet(dataset='test')
 
-        # Move to device
-        ground_truth = ground_truth.unsqueeze(0).to(device)  # Add batch dimension
-        different_digit = different_digit.unsqueeze(0).to(device)
-        same_digit = same_digit.unsqueeze(0).to(device)
-        random_gt = random_gt.unsqueeze(0).to(device)
+            # Create a random image for swapping
+            (random_gt, random_diff, random_same, random_orig_image, random_label, _, _, _, _, _) = \
+                triplet_creator.create_triplet(dataset='test')
 
-        # 1. Normal reconstruction (baseline)
-        (reconstruction, number_z, filter_z, _, _, _, _) = model(same_digit, different_digit)
+            # Move to device
+            ground_truth = ground_truth.unsqueeze(0).to(device)  # Add batch dimension
+            different_digit = different_digit.unsqueeze(0).to(device)
+            same_digit = same_digit.unsqueeze(0).to(device)
+            random_gt = random_gt.unsqueeze(0).to(device)
 
-        # 2. Test 1: Same number encoder input, different filter encoder input
-        # Use same_digit for number encoder, random_gt for filter encoder
-        (reconstruction_test1, _, _, _, _, _, _) = model(same_digit, random_gt)
+            # 1. Normal reconstruction (baseline)
+            (reconstruction, number_z, filter_z, _, _, _, _) = model(same_digit, different_digit)
 
-        # 3. Test 2: Different number encoder input, same filter encoder input
-        # Use random_gt for number encoder, different_digit for filter encoder
-        (reconstruction_test2, _, _, _, _, _, _) = model(random_gt, different_digit)
+            # 2. Test 1: Same number encoder input, different filter encoder input
+            # Use same_digit for number encoder, random_gt for filter encoder
+            (reconstruction_test1, _, _, _, _, _, _) = model(same_digit, random_gt)
 
-    # Create visualization
-    fig, axes = plt.subplots(1, 5, figsize=(20, 4))
+            # 3. Test 2: Different number encoder input, same filter encoder input
+            # Use random_gt for number encoder, different_digit for filter encoder
+            (reconstruction_test2, _, _, _, _, _, _) = model(random_gt, different_digit)
 
-    # 1. Ground truth (target)
-    axes[0].imshow(ground_truth[0, 0].cpu(), cmap='gray')
-    axes[0].set_title(f'1. Ground Truth\nTarget for reconstruction\nLabel: {triplet_creator.class_names[original_label]}')
-    axes[0].axis('off')
+        # Create visualization for this example
+        # 1. Ground truth (target)
+        axes[example_idx, 0].imshow(ground_truth[0, 0].cpu(), cmap='gray')
+        axes[example_idx, 0].set_title(f'Example {example_idx+1}: Ground Truth\nLabel: {triplet_creator.class_names[original_label]}')
+        axes[example_idx, 0].axis('off')
 
-    # 2. Normal reconstruction
-    axes[1].imshow(reconstruction[0, 0].cpu(), cmap='gray')
-    axes[1].set_title(f'2. Normal Reconstruction\nNumber: {triplet_creator.class_names[original_label]}\nFilter: {triplet_creator.class_names[different_label]}')
-    axes[1].axis('off')
+        # 2. Normal reconstruction
+        axes[example_idx, 1].imshow(reconstruction[0, 0].cpu(), cmap='gray')
+        axes[example_idx, 1].set_title(f'Normal Reconstruction\nNumber: {triplet_creator.class_names[original_label]}\nFilter: {triplet_creator.class_names[different_label]}')
+        axes[example_idx, 1].axis('off')
 
-    # 3. Random image (for swapping)
-    axes[2].imshow(random_gt[0, 0].cpu(), cmap='gray')
-    axes[2].set_title(f'3. Random Image\nFor swapping components\nLabel: {triplet_creator.class_names[random_label]}')
-    axes[2].axis('off')
+        # 3. Random image (for swapping)
+        axes[example_idx, 2].imshow(random_gt[0, 0].cpu(), cmap='gray')
+        axes[example_idx, 2].set_title(f'Random Image\nLabel: {triplet_creator.class_names[random_label]}')
+        axes[example_idx, 2].axis('off')
 
-    # 4. Test 1: Same number, different filter
-    axes[3].imshow(reconstruction_test1[0, 0].cpu(), cmap='gray')
-    axes[3].set_title(f'4. Same Number, Different Filter\nNumber: {triplet_creator.class_names[original_label]}\nFilter: {triplet_creator.class_names[random_label]}')
-    axes[3].axis('off')
+        # 4. Test 1: Same number, different filter
+        axes[example_idx, 3].imshow(reconstruction_test1[0, 0].cpu(), cmap='gray')
+        axes[example_idx, 3].set_title(f'Same Number, Different Filter\nNumber: {triplet_creator.class_names[original_label]}\nFilter: {triplet_creator.class_names[random_label]}')
+        axes[example_idx, 3].axis('off')
 
-    # 5. Test 2: Different number, same filter
-    axes[4].imshow(reconstruction_test2[0, 0].cpu(), cmap='gray')
-    axes[4].set_title(f'5. Different Number, Same Filter\nNumber: {triplet_creator.class_names[random_label]}\nFilter: {triplet_creator.class_names[different_label]}')
-    axes[4].axis('off')
+        # 5. Test 2: Different number, same filter
+        axes[example_idx, 4].imshow(reconstruction_test2[0, 0].cpu(), cmap='gray')
+        axes[example_idx, 4].set_title(f'Different Number, Same Filter\nNumber: {triplet_creator.class_names[random_label]}\nFilter: {triplet_creator.class_names[different_label]}')
+        axes[example_idx, 4].axis('off')
 
-    plt.suptitle(f'Disentanglement Test: Swapping Number and Filter Components (Epoch {epoch})', fontsize=14)
+    plt.suptitle(f'Disentanglement Test: 8 Examples of Swapping Number and Filter Components (Epoch {epoch})', fontsize=16)
     plt.tight_layout()
 
     return fig
@@ -323,6 +325,18 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     val_kl_losses = []
     val_metrics = []
 
+    # Initialize learning rate scheduler (only for MNIST)
+    scheduler = None
+    if DATASET_TYPE == 'mnist':
+        # Simple step scheduler: reduce LR by 0.5 every 20 epochs
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Using StepLR scheduler for MNIST: step_size=20, gamma=0.5")
+        print(f"Initial learning rate: {current_lr}")
+        print(f"LR will be reduced to {current_lr * 0.5} at epoch 20, {current_lr * 0.25} at epoch 40, etc.")
+    else:
+        print(f"No learning rate scheduler for {DATASET_TYPE}")
+
     # Timing setup
     start_time = time.time()
     epoch_times = []
@@ -383,6 +397,11 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
 
             # Backward pass
             total_loss.backward()
+
+            # Gradient clipping (optional)
+            if GRADIENT_CLIPPING:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             optimizer.step()
 
             # Store losses
@@ -500,6 +519,10 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             "learning_rate": optimizer.param_groups[0]['lr']
         }, step=epoch + 1)
 
+        # Update learning rate if scheduler exists
+        if scheduler:
+            scheduler.step()
+
         # Calculate timing
         epoch_time = time.time() - epoch_start
         epoch_times.append(epoch_time)
@@ -535,7 +558,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             model.eval()
             with torch.no_grad():
                 # Create a small batch for reconstruction visualization
-                vis_batch_size = 4
+                vis_batch_size = 8
                 (ground_truth, different_digit, same_digit, original_labels, different_labels,
                  ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
                     triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
@@ -584,7 +607,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
                  number_mu_latent, number_logvar_latent, filter_mu_latent, filter_logvar_latent) = model(same_digit_latent, different_digit_latent)
 
                 # Visualize latent space with larger dataset, including rotation labels
-                visualize_latent_space(number_z_latent, filter_z_latent, original_labels_latent, epoch + 1, model_folder, same_digit_rotations_latent)
+                visualize_latent_space(number_z_latent, filter_z_latent, original_labels_latent, epoch + 1, model_folder, same_digit_rotations_latent, triplet_creator.class_names)
 
             # Set back to training mode
             model.train()
@@ -637,6 +660,17 @@ def main():
     # Print model summary
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
 
+    # Adjust learning rate for MNIST
+    if DATASET_TYPE == 'mnist':
+        # Use 5x higher learning rate for MNIST
+        lr_multiplier = 5
+        mnist_lr = LEARNING_RATE * lr_multiplier
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = mnist_lr
+        print(f"Using {lr_multiplier}x higher learning rate for MNIST: {mnist_lr} (original: {LEARNING_RATE})")
+    else:
+        print(f"Using standard learning rate for {DATASET_TYPE}: {LEARNING_RATE}")
+
     # Initialize wandb
     wandb.init(
         project="double-encoder-model",
@@ -660,6 +694,7 @@ def main():
             "min_scale_diff": MIN_SCALE_DIFF,
             "save_interval": SAVE_INTERVAL,
             "visualization_interval": VISUALIZATION_INTERVAL,
+            "gradient_clipping": GRADIENT_CLIPPING,
             "device": device
         }
     )
