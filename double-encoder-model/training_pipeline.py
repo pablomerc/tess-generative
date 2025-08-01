@@ -286,6 +286,324 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
     print(f"Training curves saved to: {filepath}")
 
 
+def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
+                batch_size=BATCH_SIZE, save_interval=SAVE_INTERVAL,
+                vis_interval=VISUALIZATION_INTERVAL, device=device, start_epoch=0):
+    """
+    Main training loop
+
+    Args:
+        model: DoubleEncoderDecoder model
+        triplet_creator: TripletCreator instance
+        optimizer: Optimizer
+        num_epochs: Number of training epochs
+        batch_size: Batch size
+        save_interval: Save model every N epochs
+        vis_interval: Create visualizations every N epochs
+        device: Device to train on
+        start_epoch: Starting epoch (for continuing training)
+    """
+
+    # Create model-specific folder for all outputs with consistent timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_folder = f"../figures/{DATASET_TYPE}/double_encoder_model_{DATASET_TYPE}_{timestamp}"
+    os.makedirs(model_folder, exist_ok=True)
+    print(f"All outputs will be saved to: {model_folder}")
+    print(f"Using dataset: {DATASET_TYPE}")
+
+    # Training history
+    train_losses = []
+    train_recon_losses = []
+    train_kl_losses = []
+    train_metrics = []
+
+    # Validation history
+    val_losses = []
+    val_recon_losses = []
+    val_kl_losses = []
+    val_metrics = []
+
+    # Timing setup
+    start_time = time.time()
+    epoch_times = []
+
+    print(f"Starting training on {device}")
+    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"Starting from epoch: {start_epoch}")
+    print(f"Number of epochs: {num_epochs}")
+    print(f"Batch size: {batch_size}")
+    print("="*60)
+
+    for epoch in range(start_epoch, start_epoch + num_epochs):
+        epoch_start = time.time()
+
+        # Set model to training mode
+        model.train()
+
+        # Training loop
+        epoch_losses = []
+        epoch_recon_losses = []
+        epoch_kl_losses = []
+        epoch_metrics = []
+
+        # Calculate number of batches needed to cover the training dataset
+        # MNIST has ~60,000 training samples
+        total_train_samples = 60000  # Approximate MNIST training set size
+        num_batches = total_train_samples // batch_size
+        print(f"Epoch {epoch+1}/{start_epoch + num_epochs}: Processing {num_batches} batches ({total_train_samples} samples)")
+
+        for batch_idx in range(num_batches):
+            # Create triplet batch
+            (ground_truth, different_digit, same_digit, original_labels, different_labels,
+             ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                triplet_creator.create_batch_triplets(batch_size, dataset='train')
+
+            # Move to device
+            ground_truth = ground_truth.to(device)
+            different_digit = different_digit.to(device)
+            same_digit = same_digit.to(device)
+            original_labels = original_labels.to(device)
+            different_labels = different_labels.to(device)
+            ground_truth_rotations = ground_truth_rotations.to(device)
+            ground_truth_scales = ground_truth_scales.to(device)
+            same_digit_rotations = same_digit_rotations.to(device)
+            same_digit_scales = same_digit_scales.to(device)
+
+            # Forward pass
+            optimizer.zero_grad()
+
+            (reconstruction, number_z, filter_z,
+             number_mu, number_logvar, filter_mu, filter_logvar) = model(same_digit, different_digit)
+
+            # Compute loss
+            total_loss, recon_loss, kl_loss = compute_total_loss(
+                reconstruction, ground_truth,
+                number_mu, number_logvar, filter_mu, filter_logvar
+            )
+
+            # Backward pass
+            total_loss.backward()
+            optimizer.step()
+
+            # Store losses
+            epoch_losses.append(total_loss.item())
+            epoch_recon_losses.append(recon_loss.item())
+            epoch_kl_losses.append(kl_loss.item())
+
+            # Compute metrics
+            metrics = compute_metrics(reconstruction, ground_truth, number_z, filter_z)
+            epoch_metrics.append(metrics)
+
+            # Print progress every 50 batches
+            if batch_idx % 50 == 0:
+                avg_loss = np.mean(epoch_losses[-10:]) if len(epoch_losses) >= 10 else np.mean(epoch_losses)
+                print(f"Epoch {epoch+1}/{start_epoch + num_epochs}, Batch {batch_idx}/{num_batches}, "
+                      f"Avg Loss: {avg_loss:.4f}")
+
+        # Compute training epoch averages
+        avg_epoch_loss = np.mean(epoch_losses)
+        avg_epoch_recon_loss = np.mean(epoch_recon_losses)
+        avg_epoch_kl_loss = np.mean(epoch_kl_losses)
+
+        # Average training metrics across epoch
+        avg_train_metrics = {}
+        for key in epoch_metrics[0].keys():
+            avg_train_metrics[key] = np.mean([m[key] for m in epoch_metrics])
+
+        # Validation - use proper validation set size
+        model.eval()
+        val_losses_epoch = []
+        val_recon_losses_epoch = []
+        val_kl_losses_epoch = []
+        val_metrics_epoch = []
+
+        with torch.no_grad():
+            # Calculate number of validation batches
+            total_val_samples = 10000  # Approximate MNIST test set size
+            num_val_batches = total_val_samples // batch_size
+            print(f"Validation: Processing {num_val_batches} batches ({total_val_samples} samples)")
+
+            for batch_idx in range(num_val_batches):
+                # Create triplet batch for validation
+                (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                    triplet_creator.create_batch_triplets(batch_size, dataset='test')
+
+                # Move to device
+                ground_truth = ground_truth.to(device)
+                different_digit = different_digit.to(device)
+                same_digit = same_digit.to(device)
+                original_labels = original_labels.to(device)
+                different_labels = different_labels.to(device)
+                ground_truth_rotations = ground_truth_rotations.to(device)
+                ground_truth_scales = ground_truth_scales.to(device)
+                same_digit_rotations = same_digit_rotations.to(device)
+                same_digit_scales = same_digit_scales.to(device)
+
+                # Forward pass (no gradients)
+                (reconstruction, number_z, filter_z,
+                 number_mu, number_logvar, filter_mu, filter_logvar) = model(same_digit, different_digit)
+
+                # Compute loss
+                total_loss, recon_loss, kl_loss = compute_total_loss(
+                    reconstruction, ground_truth,
+                    number_mu, number_logvar, filter_mu, filter_logvar
+                )
+
+                # Store validation losses
+                val_losses_epoch.append(total_loss.item())
+                val_recon_losses_epoch.append(recon_loss.item())
+                val_kl_losses_epoch.append(kl_loss.item())
+
+                # Compute validation metrics
+                metrics = compute_metrics(reconstruction, ground_truth, number_z, filter_z)
+                val_metrics_epoch.append(metrics)
+
+        # Compute validation epoch averages
+        avg_val_loss = np.mean(val_losses_epoch)
+        avg_val_recon_loss = np.mean(val_recon_losses_epoch)
+        avg_val_kl_loss = np.mean(val_kl_losses_epoch)
+
+        # Average validation metrics across epoch
+        avg_val_metrics = {}
+        for key in val_metrics_epoch[0].keys():
+            avg_val_metrics[key] = np.mean([m[key] for m in val_metrics_epoch])
+
+        # Store in history
+        train_losses.append(avg_epoch_loss)
+        train_recon_losses.append(avg_epoch_recon_loss)
+        train_kl_losses.append(avg_epoch_kl_loss)
+        train_metrics.append(avg_train_metrics)
+
+        val_losses.append(avg_val_loss)
+        val_recon_losses.append(avg_val_recon_loss)
+        val_kl_losses.append(avg_val_kl_loss)
+        val_metrics.append(avg_val_metrics)
+
+        # Log to wandb
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/total_loss": avg_epoch_loss,
+            "train/reconstruction_loss": avg_epoch_recon_loss,
+            "train/kl_loss": avg_epoch_kl_loss,
+            "val/total_loss": avg_val_loss,
+            "val/reconstruction_loss": avg_val_recon_loss,
+            "val/kl_loss": avg_val_kl_loss,
+            "train/mse": avg_train_metrics.get('mse', 0),
+            "train/psnr": avg_train_metrics.get('psnr', 0),
+            "train/number_z_std": avg_train_metrics.get('number_z_std', 0),
+            "train/filter_z_std": avg_train_metrics.get('filter_z_std', 0),
+            "val/mse": avg_val_metrics.get('mse', 0),
+            "val/psnr": avg_val_metrics.get('psnr', 0),
+            "val/number_z_std": avg_val_metrics.get('number_z_std', 0),
+            "val/filter_z_std": avg_val_metrics.get('filter_z_std', 0),
+            "learning_rate": optimizer.param_groups[0]['lr']
+        }, step=epoch + 1)
+
+        # Calculate timing
+        epoch_time = time.time() - epoch_start
+        epoch_times.append(epoch_time)
+        total_time = time.time() - start_time
+
+        # Estimate remaining time
+        avg_epoch_time = sum(epoch_times) / len(epoch_times)
+        remaining_epochs = (start_epoch + num_epochs) - (epoch + 1)
+        estimated_remaining = avg_epoch_time * remaining_epochs
+
+        # Format time strings
+        elapsed_str = str(timedelta(seconds=int(total_time)))
+        remaining_str = str(timedelta(seconds=int(estimated_remaining)))
+
+        # Print epoch summary
+        print(f"\nEpoch {epoch+1}/{start_epoch + num_epochs} Summary:")
+        print(f"  Training - Total Loss: {avg_epoch_loss:.4f}, Recon Loss: {avg_epoch_recon_loss:.4f}, KL Loss: {avg_epoch_kl_loss:.4f}")
+        print(f"  Validation - Total Loss: {avg_val_loss:.4f}, Recon Loss: {avg_val_recon_loss:.4f}, KL Loss: {avg_val_kl_loss:.4f}")
+        print_metrics(avg_train_metrics, epoch+1, "  Train ")
+        print_metrics(avg_val_metrics, epoch+1, "  Val  ")
+        print(f"  Time: {epoch_time:.1f}s, Elapsed: {elapsed_str}, ETA: {remaining_str}")
+        print("-" * 60)
+
+        # Save model
+        if (epoch + 1) % save_interval == 0:
+            save_model(model, optimizer, epoch + 1, avg_val_loss, timestamp=timestamp)  # Save based on validation loss
+
+        # Create visualizations and log to wandb
+        if (epoch + 1) % vis_interval == 0:
+            print("Creating visualizations and logging to wandb...")
+
+            # Set model to eval mode for visualization
+            model.eval()
+            with torch.no_grad():
+                # Create a small batch for reconstruction visualization
+                vis_batch_size = 4
+                (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                    triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
+
+                ground_truth = ground_truth.to(device)
+                different_digit = different_digit.to(device)
+                same_digit = same_digit.to(device)
+                original_labels = original_labels.to(device)
+
+                (reconstruction, number_z, filter_z,
+                 number_mu, number_logvar, filter_mu, filter_logvar) = model(same_digit, different_digit)
+
+                # Visualize triplet reconstruction and log to wandb
+                reconstruction_fig = create_reconstruction_plot_for_wandb(
+                    ground_truth, different_digit, same_digit, reconstruction,
+                    original_labels, triplet_creator.class_names, epoch + 1
+                )
+                wandb.log({"reconstructions": wandb.Image(reconstruction_fig)}, step=epoch + 1)
+                plt.close(reconstruction_fig)
+
+                # Save local copy
+                visualize_triplet_reconstruction(
+                    ground_truth, different_digit, same_digit, reconstruction, epoch + 1, model_folder
+                )
+
+                # Create generation test and log to wandb
+                generation_fig = create_generation_test_for_wandb(
+                    model, triplet_creator, epoch + 1
+                )
+                wandb.log({"generation_test": wandb.Image(generation_fig)}, step=epoch + 1)
+                plt.close(generation_fig)
+
+                # Create larger batch for latent space visualization
+                latent_batch_size = 4096  # Much larger for better latent space visualization
+                (ground_truth_latent, different_digit_latent, same_digit_latent, original_labels_latent, different_labels_latent,
+                 ground_truth_rotations_latent, ground_truth_scales_latent, same_digit_rotations_latent, same_digit_scales_latent) = \
+                    triplet_creator.create_batch_triplets(latent_batch_size, dataset='train')
+
+                ground_truth_latent = ground_truth_latent.to(device)
+                different_digit_latent = different_digit_latent.to(device)
+                same_digit_latent = same_digit_latent.to(device)
+                original_labels_latent = original_labels_latent.to(device)
+                same_digit_rotations_latent = same_digit_rotations_latent.to(device)
+
+                (reconstruction_latent, number_z_latent, filter_z_latent,
+                 number_mu_latent, number_logvar_latent, filter_mu_latent, filter_logvar_latent) = model(same_digit_latent, different_digit_latent)
+
+                # Visualize latent space with larger dataset, including rotation labels
+                visualize_latent_space(number_z_latent, filter_z_latent, original_labels_latent, epoch + 1, model_folder, same_digit_rotations_latent)
+
+            # Set back to training mode
+            model.train()
+
+    # Training completed
+    total_training_time = time.time() - start_time
+    print(f"\nTraining completed in {str(timedelta(seconds=int(total_training_time)))}")
+    print(f"Average epoch time: {sum(epoch_times)/len(epoch_times):.1f} seconds")
+
+    # Save final model
+    save_model(model, optimizer, start_epoch + num_epochs, val_losses[-1], model_name="double_encoder_final", timestamp=timestamp)
+
+    # Plot training curves
+    plot_training_curves(train_losses, train_recon_losses, train_kl_losses, train_metrics,
+                        val_losses, val_recon_losses, val_kl_losses, val_metrics, model_folder)
+
+    return train_losses, train_recon_losses, train_kl_losses, train_metrics, val_losses, val_recon_losses, val_kl_losses, val_metrics, model_folder
+
+
 def main():
     """
     Main function to run the training pipeline
