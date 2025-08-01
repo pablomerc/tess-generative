@@ -221,7 +221,7 @@ def visualize_triplet_reconstruction(ground_truth, different_digit, same_digit,
     print(f"Visualization saved to: {filepath}")
 
 
-def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figures", rotation_labels=None):
+def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figures", rotation_labels=None, class_names=None):
     """
     Visualize latent space with t-SNE
 
@@ -232,6 +232,7 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
         epoch: Current epoch
         save_dir: Directory to save figure
         rotation_labels: Rotation labels for coloring (optional)
+        class_names: List of class names for the labels (optional)
     """
     try:
         from sklearn.manifold import TSNE
@@ -261,6 +262,18 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
         number_z_2d = number_z_np
         filter_z_2d = filter_z_np
 
+    # Determine label type for colorbar
+    if class_names is not None:
+        label_type = "Class"
+        # Create custom colorbar with class names
+        unique_labels = np.unique(labels_np)
+        colorbar_ticks = unique_labels
+        colorbar_labels = [class_names[label] for label in unique_labels]
+    else:
+        label_type = "Digit"
+        colorbar_ticks = None
+        colorbar_labels = None
+
     # Determine subplot layout based on whether rotation labels are provided
     if rotation_labels_np is not None:
         # 2x2 subplot: digit coloring and rotation coloring for both encoders
@@ -269,17 +282,23 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
         # Row 1: Digit coloring
         # Number encoder - digit coloring
         scatter1 = axes[0, 0].scatter(number_z_2d[:, 0], number_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
-        axes[0, 0].set_title(f'Number Encoder - Digit Coloring - Epoch {epoch}')
+        axes[0, 0].set_title(f'Number Encoder - {label_type} Coloring - Epoch {epoch}')
         axes[0, 0].set_xlabel('Component 1')
         axes[0, 0].set_ylabel('Component 2')
-        plt.colorbar(scatter1, ax=axes[0, 0], label='Digit')
+        cbar1 = plt.colorbar(scatter1, ax=axes[0, 0], label=label_type)
+        if colorbar_labels is not None:
+            cbar1.set_ticks(colorbar_ticks)
+            cbar1.set_ticklabels(colorbar_labels)
 
         # Filter encoder - digit coloring
         scatter2 = axes[0, 1].scatter(filter_z_2d[:, 0], filter_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
-        axes[0, 1].set_title(f'Filter Encoder - Digit Coloring - Epoch {epoch}')
+        axes[0, 1].set_title(f'Filter Encoder - {label_type} Coloring - Epoch {epoch}')
         axes[0, 1].set_xlabel('Component 1')
         axes[0, 1].set_ylabel('Component 2')
-        plt.colorbar(scatter2, ax=axes[0, 1], label='Digit')
+        cbar2 = plt.colorbar(scatter2, ax=axes[0, 1], label=label_type)
+        if colorbar_labels is not None:
+            cbar2.set_ticks(colorbar_ticks)
+            cbar2.set_ticklabels(colorbar_labels)
 
         # Row 2: Rotation coloring
         # Number encoder - rotation coloring
@@ -306,14 +325,20 @@ def visualize_latent_space(number_z, filter_z, labels, epoch, save_dir="../figur
         axes[0, 0].set_title(f'Number Encoder Latent Space - Epoch {epoch}')
         axes[0, 0].set_xlabel('Component 1')
         axes[0, 0].set_ylabel('Component 2')
-        plt.colorbar(scatter1, ax=axes[0, 0], label='Digit')
+        cbar1 = plt.colorbar(scatter1, ax=axes[0, 0], label=label_type)
+        if colorbar_labels is not None:
+            cbar1.set_ticks(colorbar_ticks)
+            cbar1.set_ticklabels(colorbar_labels)
 
         # Plot filter encoder latent space
         scatter2 = axes[0, 1].scatter(filter_z_2d[:, 0], filter_z_2d[:, 1], c=labels_np, cmap='tab10', s=20, alpha=0.6)
         axes[0, 1].set_title(f'Filter Encoder Latent Space - Epoch {epoch}')
         axes[0, 1].set_xlabel('Component 1')
         axes[0, 1].set_ylabel('Component 2')
-        plt.colorbar(scatter2, ax=axes[0, 1], label='Digit')
+        cbar2 = plt.colorbar(scatter2, ax=axes[0, 1], label=label_type)
+        if colorbar_labels is not None:
+            cbar2.set_ticks(colorbar_ticks)
+            cbar2.set_ticklabels(colorbar_labels)
 
     plt.tight_layout()
 
