@@ -6,6 +6,7 @@ This script implements the complete training pipeline:
 2. Trains the DoubleEncoderDecoder model
 3. Uses reconstruction and KL divergence losses
 4. Saves models and visualizations
+5. Logs to wandb for experiment tracking
 """
 
 import torch
@@ -15,6 +16,7 @@ import matplotlib.pyplot as plt
 import time
 from datetime import datetime, timedelta
 import os
+import wandb
 
 # Import our modules
 from config import *
@@ -27,287 +29,179 @@ from utils import (
 )
 
 
-def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
-                batch_size=BATCH_SIZE, save_interval=SAVE_INTERVAL,
-                vis_interval=VISUALIZATION_INTERVAL, device=device, start_epoch=0):
+def create_reconstruction_plot_for_wandb(ground_truth, different_digit, same_digit, reconstruction,
+                                       original_labels, class_names, epoch):
     """
-    Main training loop
-
-    Args:
-        model: DoubleEncoderDecoder model
-        triplet_creator: TripletCreator instance
-        optimizer: Optimizer
-        num_epochs: Number of training epochs
-        batch_size: Batch size
-        save_interval: Save model every N epochs
-        vis_interval: Create visualizations every N epochs
-        device: Device to train on
-        start_epoch: Starting epoch (for continuing training)
+    Create reconstruction plot for wandb logging
     """
+    fig, axes = plt.subplots(4, 4, figsize=(12, 12))
 
-    # Create model-specific folder for all outputs with consistent timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_folder = f"../figures/{DATASET_TYPE}/double_encoder_model_{DATASET_TYPE}_{timestamp}"
-    os.makedirs(model_folder, exist_ok=True)
-    print(f"All outputs will be saved to: {model_folder}")
-    print(f"Using dataset: {DATASET_TYPE}")
+    for i in range(4):
+        # Ground truth (target)
+        axes[0, i].imshow(ground_truth[i, 0].cpu(), cmap='gray')
+        axes[0, i].set_title(f'Ground Truth\nLabel: {class_names[original_labels[i]]}')
+        axes[0, i].axis('off')
 
-    # Training history
-    train_losses = []
-    train_recon_losses = []
-    train_kl_losses = []
-    train_metrics = []
+        # Different digit (filter encoder input)
+        axes[1, i].imshow(different_digit[i, 0].cpu(), cmap='gray')
+        axes[1, i].set_title(f'Different Digit\nFilter Encoder Input')
+        axes[1, i].axis('off')
 
-    # Validation history
-    val_losses = []
-    val_recon_losses = []
-    val_kl_losses = []
-    val_metrics = []
+        # Same digit (number encoder input)
+        axes[2, i].imshow(same_digit[i, 0].cpu(), cmap='gray')
+        axes[2, i].set_title(f'Same Digit\nNumber Encoder Input')
+        axes[2, i].axis('off')
 
-    # Timing setup
-    start_time = time.time()
-    epoch_times = []
+        # Reconstruction
+        axes[3, i].imshow(reconstruction[i, 0].cpu(), cmap='gray')
+        axes[3, i].set_title(f'Reconstruction\nEpoch {epoch}')
+        axes[3, i].axis('off')
 
-    print(f"Starting training on {device}")
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
-    print(f"Starting from epoch: {start_epoch}")
-    print(f"Number of epochs: {num_epochs}")
-    print(f"Batch size: {batch_size}")
-    print("="*60)
+    plt.tight_layout()
+    return fig
 
-    for epoch in range(start_epoch, start_epoch + num_epochs):
-        epoch_start = time.time()
 
-        # Set model to training mode
-        model.train()
+def create_generation_test_for_wandb(model, triplet_creator, epoch):
+    """
+    Create generation test plot for wandb logging - testing disentanglement
+    Shows how the model can swap number and filter components
+    """
+    model.eval()
 
-        # Training loop
-        epoch_losses = []
-        epoch_recon_losses = []
-        epoch_kl_losses = []
-        epoch_metrics = []
+    with torch.no_grad():
+        # Create a single triplet for the main example
+        (ground_truth, different_digit, same_digit, original_label, different_label,
+         ground_truth_rotation, ground_truth_scale, same_digit_rotation, same_digit_scale) = \
+            triplet_creator.create_triplet(dataset='test')
 
-        # Calculate number of batches needed to cover the training dataset
-        # MNIST has ~60,000 training samples
-        total_train_samples = 60000  # Approximate MNIST training set size
-        num_batches = total_train_samples // batch_size
-        print(f"Epoch {epoch+1}/{start_epoch + num_epochs}: Processing {num_batches} batches ({total_train_samples} samples)")
+        # Create a random image for swapping
+        (random_gt, random_diff, random_same, random_label, _, _, _, _, _) = \
+            triplet_creator.create_triplet(dataset='test')
 
-        for batch_idx in range(num_batches):
-            # Create triplet batch
-            (ground_truth, different_digit, same_digit, original_labels, different_labels,
-             ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
-                triplet_creator.create_batch_triplets(batch_size, dataset='train')
+        # Move to device
+        ground_truth = ground_truth.unsqueeze(0).to(device)  # Add batch dimension
+        different_digit = different_digit.unsqueeze(0).to(device)
+        same_digit = same_digit.unsqueeze(0).to(device)
+        random_gt = random_gt.unsqueeze(0).to(device)
 
-            # Move to device
-            ground_truth = ground_truth.to(device)
-            different_digit = different_digit.to(device)
-            same_digit = same_digit.to(device)
-            original_labels = original_labels.to(device)
-            different_labels = different_labels.to(device)
-            ground_truth_rotations = ground_truth_rotations.to(device)
-            ground_truth_scales = ground_truth_scales.to(device)
-            same_digit_rotations = same_digit_rotations.to(device)
-            same_digit_scales = same_digit_scales.to(device)
+        # 1. Normal reconstruction (baseline)
+        (reconstruction, number_z, filter_z, _, _, _, _) = model(same_digit, different_digit)
 
-            # Forward pass
-            optimizer.zero_grad()
+        # 2. Test 1: Same number encoder input, different filter encoder input
+        # Use same_digit for number encoder, random_gt for filter encoder
+        (reconstruction_test1, _, _, _, _, _, _) = model(same_digit, random_gt)
 
-            (reconstruction, number_z, filter_z,
-             number_mu, number_logvar, filter_mu, filter_logvar) = model(same_digit, different_digit)
+        # 3. Test 2: Different number encoder input, same filter encoder input
+        # Use random_gt for number encoder, different_digit for filter encoder
+        (reconstruction_test2, _, _, _, _, _, _) = model(random_gt, different_digit)
 
-            # Compute loss
-            total_loss, recon_loss, kl_loss = compute_total_loss(
-                reconstruction, ground_truth,
-                number_mu, number_logvar, filter_mu, filter_logvar
-            )
+    # Create visualization
+    fig, axes = plt.subplots(1, 5, figsize=(20, 4))
 
-            # Backward pass
-            total_loss.backward()
-            optimizer.step()
+    # 1. Ground truth (target)
+    axes[0].imshow(ground_truth[0, 0].cpu(), cmap='gray')
+    axes[0].set_title(f'1. Ground Truth\nTarget for reconstruction\nLabel: {triplet_creator.class_names[original_label]}')
+    axes[0].axis('off')
 
-            # Store losses
-            epoch_losses.append(total_loss.item())
-            epoch_recon_losses.append(recon_loss.item())
-            epoch_kl_losses.append(kl_loss.item())
+    # 2. Normal reconstruction
+    axes[1].imshow(reconstruction[0, 0].cpu(), cmap='gray')
+    axes[1].set_title(f'2. Normal Reconstruction\nNumber: {triplet_creator.class_names[original_label]}\nFilter: {triplet_creator.class_names[different_label]}')
+    axes[1].axis('off')
 
-            # Compute metrics
-            metrics = compute_metrics(reconstruction, ground_truth, number_z, filter_z)
-            epoch_metrics.append(metrics)
+    # 3. Random image (for swapping)
+    axes[2].imshow(random_gt[0, 0].cpu(), cmap='gray')
+    axes[2].set_title(f'3. Random Image\nFor swapping components\nLabel: {triplet_creator.class_names[random_label]}')
+    axes[2].axis('off')
 
-            # Print progress every 50 batches
-            if batch_idx % 50 == 0:
-                avg_loss = np.mean(epoch_losses[-10:]) if len(epoch_losses) >= 10 else np.mean(epoch_losses)
-                print(f"Epoch {epoch+1}/{start_epoch + num_epochs}, Batch {batch_idx}/{num_batches}, "
-                      f"Avg Loss: {avg_loss:.4f}")
+    # 4. Test 1: Same number, different filter
+    axes[3].imshow(reconstruction_test1[0, 0].cpu(), cmap='gray')
+    axes[3].set_title(f'4. Same Number, Different Filter\nNumber: {triplet_creator.class_names[original_label]}\nFilter: {triplet_creator.class_names[random_label]}')
+    axes[3].axis('off')
 
-        # Compute training epoch averages
-        avg_epoch_loss = np.mean(epoch_losses)
-        avg_epoch_recon_loss = np.mean(epoch_recon_losses)
-        avg_epoch_kl_loss = np.mean(epoch_kl_losses)
+    # 5. Test 2: Different number, same filter
+    axes[4].imshow(reconstruction_test2[0, 0].cpu(), cmap='gray')
+    axes[4].set_title(f'5. Different Number, Same Filter\nNumber: {triplet_creator.class_names[random_label]}\nFilter: {triplet_creator.class_names[different_label]}')
+    axes[4].axis('off')
 
-        # Average training metrics across epoch
-        avg_train_metrics = {}
-        for key in epoch_metrics[0].keys():
-            avg_train_metrics[key] = np.mean([m[key] for m in epoch_metrics])
+    plt.suptitle(f'Disentanglement Test: Swapping Number and Filter Components (Epoch {epoch})', fontsize=14)
+    plt.tight_layout()
 
-        # Validation - use proper validation set size
-        model.eval()
-        val_losses_epoch = []
-        val_recon_losses_epoch = []
-        val_kl_losses_epoch = []
-        val_metrics_epoch = []
+    return fig
 
-        with torch.no_grad():
-            # Calculate number of validation batches
-            total_val_samples = 10000  # Approximate MNIST test set size
-            num_val_batches = total_val_samples // batch_size
-            print(f"Validation: Processing {num_val_batches} batches ({total_val_samples} samples)")
 
-            for batch_idx in range(num_val_batches):
-                # Create triplet batch for validation
-                (ground_truth, different_digit, same_digit, original_labels, different_labels,
-                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
-                    triplet_creator.create_batch_triplets(batch_size, dataset='test')
+def create_final_training_curves_plot(train_losses, train_recon_losses, train_kl_losses, train_metrics,
+                                    val_losses, val_recon_losses, val_kl_losses, val_metrics):
+    """
+    Create final training curves plot for wandb logging
+    """
+    epochs = range(1, len(train_losses) + 1)
 
-                # Move to device
-                ground_truth = ground_truth.to(device)
-                different_digit = different_digit.to(device)
-                same_digit = same_digit.to(device)
-                original_labels = original_labels.to(device)
-                different_labels = different_labels.to(device)
-                ground_truth_rotations = ground_truth_rotations.to(device)
-                ground_truth_scales = ground_truth_scales.to(device)
-                same_digit_rotations = same_digit_rotations.to(device)
-                same_digit_scales = same_digit_scales.to(device)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-                # Forward pass (no gradients)
-                (reconstruction, number_z, filter_z,
-                 number_mu, number_logvar, filter_mu, filter_logvar) = model(same_digit, different_digit)
+    # Plot losses with distinct colors (log scale for better visualization)
+    # Primary y-axis for reconstruction and total losses
+    ax1 = axes[0, 0]
+    ax1.plot(epochs, train_losses, 'b-', label='Train Total Loss', linewidth=2)
+    ax1.plot(epochs, train_recon_losses, 'g-', label='Train Recon Loss', linewidth=2)
+    ax1.plot(epochs, val_losses, 'r-', label='Val Total Loss', linewidth=2)
+    ax1.plot(epochs, val_recon_losses, 'purple', label='Val Recon Loss', linewidth=2)
+    ax1.set_title('Training and Validation Losses (Log Scale)')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss (log scale)')
+    ax1.set_yscale('log')
+    ax1.grid(True)
+    ax1.legend(loc='upper left')
 
-                # Compute loss
-                total_loss, recon_loss, kl_loss = compute_total_loss(
-                    reconstruction, ground_truth,
-                    number_mu, number_logvar, filter_mu, filter_logvar
-                )
+    # Secondary y-axis for KL losses
+    ax2 = ax1.twinx()
+    ax2.plot(epochs, train_kl_losses, 'orange', label='Train KL Loss', linewidth=2, linestyle='--')
+    ax2.plot(epochs, val_kl_losses, 'brown', label='Val KL Loss', linewidth=2, linestyle='--')
+    ax2.set_ylabel('KL Loss (log scale)', color='orange')
+    ax2.set_yscale('log')
+    ax2.tick_params(axis='y', labelcolor='orange')
+    ax2.legend(loc='upper right')
 
-                # Store validation losses
-                val_losses_epoch.append(total_loss.item())
-                val_recon_losses_epoch.append(recon_loss.item())
-                val_kl_losses_epoch.append(kl_loss.item())
+    # Plot MSE (linear scale is fine for MSE)
+    train_mse = [m['mse'] for m in train_metrics]
+    val_mse = [m['mse'] for m in val_metrics]
+    axes[0, 1].plot(epochs, train_mse, 'b-', label='Train MSE', linewidth=2)
+    axes[0, 1].plot(epochs, val_mse, 'r-', label='Val MSE', linewidth=2)
+    axes[0, 1].set_title('Mean Squared Error')
+    axes[0, 1].set_xlabel('Epoch')
+    axes[0, 1].set_ylabel('MSE')
+    axes[0, 1].legend()
+    axes[0, 1].grid(True)
 
-                # Compute validation metrics
-                metrics = compute_metrics(reconstruction, ground_truth, number_z, filter_z)
-                val_metrics_epoch.append(metrics)
+    # Plot PSNR (linear scale is fine for PSNR)
+    train_psnr = [m['psnr'] for m in train_metrics if not np.isinf(m['psnr'])]
+    val_psnr = [m['psnr'] for m in val_metrics if not np.isinf(m['psnr'])]
+    if train_psnr and val_psnr:
+        axes[1, 0].plot(epochs[:len(train_psnr)], train_psnr, 'b-', label='Train PSNR', linewidth=2)
+        axes[1, 0].plot(epochs[:len(val_psnr)], val_psnr, 'r-', label='Val PSNR', linewidth=2)
+        axes[1, 0].set_title('Peak Signal-to-Noise Ratio')
+        axes[1, 0].set_xlabel('Epoch')
+        axes[1, 0].set_ylabel('PSNR (dB)')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True)
 
-        # Compute validation epoch averages
-        avg_val_loss = np.mean(val_losses_epoch)
-        avg_val_recon_loss = np.mean(val_recon_losses_epoch)
-        avg_val_kl_loss = np.mean(val_kl_losses_epoch)
+    # Plot latent space std (linear scale is fine)
+    train_number_z_std = [m['number_z_std'] for m in train_metrics]
+    train_filter_z_std = [m['filter_z_std'] for m in train_metrics]
+    val_number_z_std = [m['number_z_std'] for m in val_metrics]
+    val_filter_z_std = [m['filter_z_std'] for m in val_metrics]
 
-        # Average validation metrics across epoch
-        avg_val_metrics = {}
-        for key in val_metrics_epoch[0].keys():
-            avg_val_metrics[key] = np.mean([m[key] for m in val_metrics_epoch])
+    axes[1, 1].plot(epochs, train_number_z_std, 'b-', label='Train Number Z std', linewidth=2)
+    axes[1, 1].plot(epochs, train_filter_z_std, 'g-', label='Train Filter Z std', linewidth=2)
+    axes[1, 1].plot(epochs, val_number_z_std, 'r-', label='Val Number Z std', linewidth=2)
+    axes[1, 1].plot(epochs, val_filter_z_std, 'purple', label='Val Filter Z std', linewidth=2)
+    axes[1, 1].set_title('Latent Space Standard Deviation')
+    axes[1, 1].set_xlabel('Epoch')
+    axes[1, 1].set_ylabel('Standard Deviation')
+    axes[1, 1].legend()
+    axes[1, 1].grid(True)
 
-        # Store in history
-        train_losses.append(avg_epoch_loss)
-        train_recon_losses.append(avg_epoch_recon_loss)
-        train_kl_losses.append(avg_epoch_kl_loss)
-        train_metrics.append(avg_train_metrics)
-
-        val_losses.append(avg_val_loss)
-        val_recon_losses.append(avg_val_recon_loss)
-        val_kl_losses.append(avg_val_kl_loss)
-        val_metrics.append(avg_val_metrics)
-
-        # Calculate timing
-        epoch_time = time.time() - epoch_start
-        epoch_times.append(epoch_time)
-        total_time = time.time() - start_time
-
-        # Estimate remaining time
-        avg_epoch_time = sum(epoch_times) / len(epoch_times)
-        remaining_epochs = (start_epoch + num_epochs) - (epoch + 1)
-        estimated_remaining = avg_epoch_time * remaining_epochs
-
-        # Format time strings
-        elapsed_str = str(timedelta(seconds=int(total_time)))
-        remaining_str = str(timedelta(seconds=int(estimated_remaining)))
-
-        # Print epoch summary
-        print(f"\nEpoch {epoch+1}/{start_epoch + num_epochs} Summary:")
-        print(f"  Training - Total Loss: {avg_epoch_loss:.4f}, Recon Loss: {avg_epoch_recon_loss:.4f}, KL Loss: {avg_epoch_kl_loss:.4f}")
-        print(f"  Validation - Total Loss: {avg_val_loss:.4f}, Recon Loss: {avg_val_recon_loss:.4f}, KL Loss: {avg_val_kl_loss:.4f}")
-        print_metrics(avg_train_metrics, epoch+1, "  Train ")
-        print_metrics(avg_val_metrics, epoch+1, "  Val  ")
-        print(f"  Time: {epoch_time:.1f}s, Elapsed: {elapsed_str}, ETA: {remaining_str}")
-        print("-" * 60)
-
-        # Save model
-        if (epoch + 1) % save_interval == 0:
-            save_model(model, optimizer, epoch + 1, avg_val_loss, timestamp=timestamp)  # Save based on validation loss
-
-        # Create visualizations
-        if (epoch + 1) % vis_interval == 0:
-            print("Creating visualizations...")
-
-            # Set model to eval mode for visualization
-            model.eval()
-            with torch.no_grad():
-                # Create a small batch for reconstruction visualization
-                vis_batch_size = 4
-                (ground_truth, different_digit, same_digit, original_labels, different_labels,
-                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
-                    triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
-
-                ground_truth = ground_truth.to(device)
-                different_digit = different_digit.to(device)
-                same_digit = same_digit.to(device)
-                original_labels = original_labels.to(device)
-
-                (reconstruction, number_z, filter_z,
-                 number_mu, number_logvar, filter_mu, filter_logvar) = model(same_digit, different_digit)
-
-                # Visualize triplet reconstruction
-                visualize_triplet_reconstruction(
-                    ground_truth, different_digit, same_digit, reconstruction, epoch + 1, model_folder
-                )
-
-                # Create larger batch for latent space visualization
-                latent_batch_size = 4096  # Much larger for better latent space visualization
-                (ground_truth_latent, different_digit_latent, same_digit_latent, original_labels_latent, different_labels_latent,
-                 ground_truth_rotations_latent, ground_truth_scales_latent, same_digit_rotations_latent, same_digit_scales_latent) = \
-                    triplet_creator.create_batch_triplets(latent_batch_size, dataset='train')
-
-                ground_truth_latent = ground_truth_latent.to(device)
-                different_digit_latent = different_digit_latent.to(device)
-                same_digit_latent = same_digit_latent.to(device)
-                original_labels_latent = original_labels_latent.to(device)
-                same_digit_rotations_latent = same_digit_rotations_latent.to(device)
-
-                (reconstruction_latent, number_z_latent, filter_z_latent,
-                 number_mu_latent, number_logvar_latent, filter_mu_latent, filter_logvar_latent) = model(same_digit_latent, different_digit_latent)
-
-                # Visualize latent space with larger dataset, including rotation labels
-                visualize_latent_space(number_z_latent, filter_z_latent, original_labels_latent, epoch + 1, model_folder, same_digit_rotations_latent)
-
-            # Set back to training mode
-            model.train()
-
-    # Training completed
-    total_training_time = time.time() - start_time
-    print(f"\nTraining completed in {str(timedelta(seconds=int(total_training_time)))}")
-    print(f"Average epoch time: {sum(epoch_times)/len(epoch_times):.1f} seconds")
-
-    # Save final model
-    save_model(model, optimizer, start_epoch + num_epochs, val_losses[-1], model_name="double_encoder_final", timestamp=timestamp)
-
-    # Plot training curves
-    plot_training_curves(train_losses, train_recon_losses, train_kl_losses, train_metrics,
-                        val_losses, val_recon_losses, val_kl_losses, val_metrics, model_folder)
-
-    return train_losses, train_recon_losses, train_kl_losses, train_metrics, val_losses, val_recon_losses, val_kl_losses, val_metrics, model_folder
+    plt.tight_layout()
+    return fig
 
 
 def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, train_metrics,
@@ -425,8 +319,38 @@ def main():
     # Print model summary
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
 
+    # Initialize wandb
+    wandb.init(
+        project="double-encoder-model",
+        name=f"double-encoder-{DATASET_TYPE}-{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        config={
+            "model_type": "DoubleEncoderDecoder",
+            "dataset_type": DATASET_TYPE,
+            "latent_dim": LATENT_DIM,
+            "number_encoder_latent_dim": NUMBER_ENCODER_LATENT_DIM,
+            "filter_encoder_latent_dim": FILTER_ENCODER_LATENT_DIM,
+            "batch_size": BATCH_SIZE,
+            "num_epochs": NUM_EPOCHS,
+            "learning_rate": LEARNING_RATE,
+            "beta_kl": BETA_KL,
+            "reconstruction_weight": RECONSTRUCTION_WEIGHT,
+            "rotation_degrees": ROTATION_DEGREES,
+            "rotation_step": ROTATION_STEP,
+            "scale_range": SCALE_RANGE,
+            "min_rotation_diff": MIN_ROTATION_DIFF,
+            "max_rotation_diff": MAX_ROTATION_DIFF,
+            "min_scale_diff": MIN_SCALE_DIFF,
+            "save_interval": SAVE_INTERVAL,
+            "visualization_interval": VISUALIZATION_INTERVAL,
+            "device": device
+        }
+    )
+
+    # Log model architecture to wandb
+    wandb.watch(model, log="all")
+
     # Check if we should load a pre-trained model
-    load_pretrained = True  # Set to True to continue training
+    load_pretrained = False  # Set to True to continue training
     start_epoch = 0  # Default starting epoch
 
     if load_pretrained:
@@ -454,6 +378,17 @@ def main():
     # Test the trained model
     print("\nTesting trained model...")
     test_trained_model(model, triplet_creator, model_folder)
+
+    # Log final training curves to wandb
+    final_curves_fig = create_final_training_curves_plot(
+        train_losses, train_recon_losses, train_kl_losses, train_metrics,
+        val_losses, val_recon_losses, val_kl_losses, val_metrics
+    )
+    wandb.log({"final_training_curves": wandb.Image(final_curves_fig)}, step=NUM_EPOCHS)
+    plt.close(final_curves_fig)
+
+    # Finish wandb run
+    wandb.finish()
 
 
 def test_trained_model(model, triplet_creator, model_folder):
