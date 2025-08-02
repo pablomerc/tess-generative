@@ -571,7 +571,10 @@ def main():
     # Specify the path to your pretrained model
     # pretrained_path = "../models/double_encoder_model_20250729_134537/double_encoder_epoch_40.pth"
     # pretrained_path="../models/double_encoder_model_mnist_20250801_170446/double_encoder_epoch_20.pth"
-    pretrained_path="../models/double_encoder_model_mnist_20250801_171627/double_encoder_epoch_40.pth"
+    # pretrained_path="../models/double_encoder_model_mnist_20250801_171627/double_encoder_epoch_40.pth"
+    # pretrained_path = '../models/mnist/double_encoder_model_mnist_20250801_182124/double_encoder_epoch_40.pth'
+    pretrained_path = '../models/fashion_mnist/double_encoder_model_fashion_mnist_20250801_185645/double_encoder_epoch_40.pth'
+
 
     if os.path.exists(pretrained_path):
         start_epoch, _ = load_model(model, optimizer, pretrained_path)
