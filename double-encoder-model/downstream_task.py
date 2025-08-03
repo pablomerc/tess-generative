@@ -34,6 +34,9 @@ from triplet_creation import TripletCreator
 from decoder import DoubleEncoderDecoder
 from utils import load_model
 
+# Downstream task configuration
+extra_tests = True  # Whether to run additional tests for different digit prediction
+
 
 class LatentClassifier(nn.Module):
     """
@@ -73,7 +76,8 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
         dataset: Dataset to use ('train' or 'test')
 
     Returns:
-        tuple: (z_number, z_filter, digit_labels, rotation_labels)
+        tuple: (z_number, z_filter, digit_labels, rotation_labels, different_digit_labels, same_digit_rotations) if extra_tests=True
+               (z_number, z_filter, digit_labels, rotation_labels) if extra_tests=False
     """
     model.eval()
     device = next(model.parameters()).device
@@ -82,6 +86,8 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
     z_filter_list = []
     digit_labels_list = []
     rotation_labels_list = []
+    different_digit_labels_list = [] if extra_tests else None
+    same_digit_rotations_list = [] if extra_tests else None
 
     batch_size = 256  # Process in batches for efficiency
     num_batches = (num_samples + batch_size - 1) // batch_size
@@ -104,6 +110,7 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
             same_digit = same_digit.to(device)
             original_labels = original_labels.to(device)
             ground_truth_rotations = ground_truth_rotations.to(device)
+            different_labels = different_labels.to(device)
 
             # Extract latent representations
             number_z, filter_z, _, _, _, _ = model.encode_only(same_digit, different_digit)
@@ -113,12 +120,18 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
             z_filter_list.append(filter_z.cpu())
             digit_labels_list.append(original_labels.cpu())
             rotation_labels_list.append(ground_truth_rotations.cpu())
+            if extra_tests:
+                different_digit_labels_list.append(different_labels.cpu())
+                same_digit_rotations_list.append(same_digit_rotations.cpu())
 
     # Concatenate all batches
     z_number = torch.cat(z_number_list, dim=0)[:num_samples]
     z_filter = torch.cat(z_filter_list, dim=0)[:num_samples]
     digit_labels = torch.cat(digit_labels_list, dim=0)[:num_samples]
     rotation_labels = torch.cat(rotation_labels_list, dim=0)[:num_samples]
+    if extra_tests:
+        different_digit_labels = torch.cat(different_digit_labels_list, dim=0)[:num_samples]
+        same_digit_rotations = torch.cat(same_digit_rotations_list, dim=0)[:num_samples]
 
     print(f"Extracted {z_number.shape[0]} samples")
     print(f"z_number shape: {z_number.shape}")
@@ -126,8 +139,13 @@ def extract_latent_representations(model, triplet_creator, num_samples=10000, da
     print(f"Note: z_number comes from 'same_digit_different_rotation' (number encoder input)")
     print(f"Note: z_filter comes from 'different_digit_same_rotation' (filter encoder input)")
     print(f"Note: rotation_labels correspond to the rotation of 'different_digit_same_rotation'")
+    if extra_tests:
+        print(f"Note: different_digit_labels correspond to the digit of 'different_digit_same_rotation'")
 
-    return z_number, z_filter, digit_labels, rotation_labels
+    if extra_tests:
+        return z_number, z_filter, digit_labels, rotation_labels, different_digit_labels, same_digit_rotations
+    else:
+        return z_number, z_filter, digit_labels, rotation_labels
 
 
 def prepare_rotation_labels(rotation_angles):
@@ -573,8 +591,8 @@ def main():
     # pretrained_path="../models/double_encoder_model_mnist_20250801_170446/double_encoder_epoch_20.pth"
     # pretrained_path="../models/double_encoder_model_mnist_20250801_171627/double_encoder_epoch_40.pth"
     # pretrained_path = '../models/mnist/double_encoder_model_mnist_20250801_182124/double_encoder_epoch_40.pth'
-    pretrained_path = '../models/fashion_mnist/double_encoder_model_fashion_mnist_20250801_185645/double_encoder_epoch_40.pth'
-
+    # pretrained_path = '../models/fashion_mnist/double_encoder_model_fashion_mnist_20250801_185645/double_encoder_epoch_200.pth'
+    pretrained_path = '../models/fashion_mnist/double_encoder_model_fashion_mnist_20250801_232650/double_encoder_epoch_30.pth'
 
     if os.path.exists(pretrained_path):
         start_epoch, _ = load_model(model, optimizer, pretrained_path)
@@ -595,9 +613,14 @@ def main():
 
     # Extract latent representations
     print("\nExtracting latent representations...")
-    z_number, z_filter, digit_labels, rotation_angles = extract_latent_representations(
-        model, triplet_creator, num_samples=10000, dataset='test'
-    )
+    if extra_tests:
+        z_number, z_filter, digit_labels, rotation_angles, different_digit_labels, same_digit_rotations = extract_latent_representations(
+            model, triplet_creator, num_samples=10000, dataset='test'
+        )
+    else:
+        z_number, z_filter, digit_labels, rotation_angles = extract_latent_representations(
+            model, triplet_creator, num_samples=10000, dataset='test'
+        )
 
     # Prepare rotation labels (convert to discrete classes)
     rotation_labels = prepare_rotation_labels(rotation_angles)
@@ -718,6 +741,39 @@ def main():
         'predictions': pred_6, 'true_labels': true_6
     }
 
+    # Extra Test: Train number classifier on z_filter to predict different digit (if enabled)
+    if extra_tests:
+        print("\n" + "="*50)
+        print("EXTRA TEST: Number classifier on z_filter (predicting different digit)")
+        print("="*50)
+        print("Testing if z_filter (from 'different_digit_same_rotation') captures the different digit identity")
+        model_extra, train_acc_extra, val_acc_extra, test_acc_extra, pred_extra, true_extra = train_downstream_classifier(
+            z_filter, different_digit_labels, num_classes=len(triplet_creator.class_names),
+            model_name="Different_Number_on_z_filter", learning_rate=0.001, num_epochs=50
+        )
+        all_results['different_number_on_z_filter'] = {
+            'train_acc': train_acc_extra, 'val_acc': val_acc_extra, 'test_acc': test_acc_extra,
+            'predictions': pred_extra, 'true_labels': true_extra
+        }
+
+        # Second Extra Test: Train rotation classifier on z_number to predict same digit rotation
+        print("\n" + "="*50)
+        print("SECOND EXTRA TEST: Rotation classifier on z_number (predicting same digit rotation)")
+        print("="*50)
+        print("Testing if z_number (from 'same_digit_different_rotation') captures the same digit rotation")
+
+        # Prepare same digit rotation labels (convert to discrete classes)
+        same_digit_rotation_labels = prepare_rotation_labels(same_digit_rotations)
+
+        model_extra2, train_acc_extra2, val_acc_extra2, test_acc_extra2, pred_extra2, true_extra2 = train_downstream_classifier(
+            z_number, same_digit_rotation_labels, num_classes=len(torch.unique(same_digit_rotation_labels)),
+            model_name="Same_Digit_Rotation_on_z_number", learning_rate=0.001, num_epochs=50
+        )
+        all_results['same_digit_rotation_on_z_number'] = {
+            'train_acc': train_acc_extra2, 'val_acc': val_acc_extra2, 'test_acc': test_acc_extra2,
+            'predictions': pred_extra2, 'true_labels': true_extra2
+        }
+
     # Plot training curves for all tests
     print("\nCreating visualizations...")
     for test_name, results in all_results.items():
@@ -747,8 +803,11 @@ def main():
     print("Expected good disentanglement pattern:")
     print("✓ number_on_z_number: HIGH (z_number from 'same_digit_different_rotation' captures digit identity)")
     print("✓ filter_on_z_filter: HIGH (z_filter from 'different_digit_same_rotation' captures rotation style)")
-    print("✗ number_on_z_filter: LOW (z_filter from 'different_digit_same_rotation' should NOT capture digit identity)")
+    print("✗ number_on_z_filter: LOW (z_filter from 'different_digit_same_rotation' should NOT capture ground truth digit identity)")
     print("✗ filter_on_z_number: LOW (z_number from 'same_digit_different_rotation' should NOT capture rotation style)")
+    if extra_tests:
+        print("✓ different_number_on_z_filter: HIGH (z_filter from 'different_digit_same_rotation' should capture different digit identity)")
+        print("✓ same_digit_rotation_on_z_number: HIGH (z_number from 'same_digit_different_rotation' should capture same digit rotation)")
     print(f"✗ number_on_z_random: LOW (random baseline)")
     print(f"✗ filter_on_z_random: LOW (random baseline)")
 
@@ -763,8 +822,13 @@ def main():
     print(f"\nDisentanglement Analysis:")
     print(f"✓ z_number captures digit identity: {number_on_number:.4f} (should be > 0.8)")
     print(f"✓ z_filter captures rotation style: {filter_on_filter:.4f} (should be > 0.8)")
-    print(f"✗ z_filter does NOT capture digit identity: {number_on_filter:.4f} (should be < 0.3)")
+    print(f"✗ z_filter does NOT capture ground truth digit identity: {number_on_filter:.4f} (should be < 0.3)")
     print(f"✗ z_number does NOT capture rotation style: {filter_on_number:.4f} (should be < 0.3)")
+    if extra_tests:
+        different_number_on_filter = all_results['different_number_on_z_filter']['test_acc']
+        same_digit_rotation_on_number = all_results['same_digit_rotation_on_z_number']['test_acc']
+        print(f"✓ z_filter captures different digit identity: {different_number_on_filter:.4f} (should be > 0.8)")
+        print(f"✓ z_number captures same digit rotation: {same_digit_rotation_on_number:.4f} (should be > 0.8)")
     print(f"✗ Random baseline for digit: {number_on_random:.4f} (should be ~{digit_baseline:.3f})")
     print(f"✗ Random baseline for rotation: {filter_on_random:.4f} (should be ~{rotation_baseline:.3f})")
 

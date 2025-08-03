@@ -12,13 +12,13 @@ device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is
 DATASET_TYPE = 'fashion_mnist'
 
 # Model hyperparameters
-LATENT_DIM = 32
+LATENT_DIM = 16
 NUMBER_ENCODER_LATENT_DIM = LATENT_DIM
 FILTER_ENCODER_LATENT_DIM = LATENT_DIM
 
 # Training hyperparameters
 BATCH_SIZE = 256  # Reduced for quick test, use 128
-NUM_EPOCHS = 200   # Just 1 epoch for quick test, use 50
+NUM_EPOCHS = 50   # Just 1 epoch for quick test, use 50
 LEARNING_RATE = 5e-4
 BETA_KL = 0.01  # KL divergence weight
 RECONSTRUCTION_WEIGHT = 1.0  # Reconstruction loss weight

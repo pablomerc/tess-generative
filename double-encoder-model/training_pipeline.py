@@ -325,18 +325,6 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     val_kl_losses = []
     val_metrics = []
 
-    # Initialize learning rate scheduler (only for MNIST)
-    scheduler = None
-    if DATASET_TYPE == 'mnist':
-        # Simple step scheduler: reduce LR by 0.5 every 20 epochs
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
-        current_lr = optimizer.param_groups[0]['lr']
-        print(f"Using StepLR scheduler for MNIST: step_size=20, gamma=0.5")
-        print(f"Initial learning rate: {current_lr}")
-        print(f"LR will be reduced to {current_lr * 0.5} at epoch 20, {current_lr * 0.25} at epoch 40, etc.")
-    else:
-        print(f"No learning rate scheduler for {DATASET_TYPE}")
-
     # Timing setup
     start_time = time.time()
     epoch_times = []
@@ -519,10 +507,6 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             "learning_rate": optimizer.param_groups[0]['lr']
         }, step=epoch + 1)
 
-        # Update learning rate if scheduler exists
-        if scheduler:
-            scheduler.step()
-
         # Calculate timing
         epoch_time = time.time() - epoch_start
         epoch_times.append(epoch_time)
@@ -659,17 +643,7 @@ def main():
 
     # Print model summary
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
-
-    # Adjust learning rate for MNIST
-    if DATASET_TYPE == 'mnist':
-        # Use 5x higher learning rate for MNIST
-        lr_multiplier = 5
-        mnist_lr = LEARNING_RATE * lr_multiplier
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = mnist_lr
-        print(f"Using {lr_multiplier}x higher learning rate for MNIST: {mnist_lr} (original: {LEARNING_RATE})")
-    else:
-        print(f"Using standard learning rate for {DATASET_TYPE}: {LEARNING_RATE}")
+    print(f"Using learning rate: {LEARNING_RATE}")
 
     # Initialize wandb
     wandb.init(
