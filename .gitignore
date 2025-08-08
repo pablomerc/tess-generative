@@ -182,9 +182,9 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
@@ -205,3 +205,17 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+#the folders that start with flow_decoder/reconstruction
+flow_decoder/reconstruction*
+flow_decoder/old_reconstruction*
+#the folder data/augmented
+data/augmented/
+flow_decoder/VAE_Flow.py
+flow_decoder/VAE_Flow_v2.py
+flow_decoder/wandb/
+
+
+#the folder data/augmented/rotation_v2_augmented_mnist_train_images.npy
+data/augmented/rotation_v2_augmented_mnist_train_images.npy
