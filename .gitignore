@@ -1,6 +1,12 @@
-# Models folder
+# Models folder, data folder, wandb folder and figures
 models/
 data/
+wandb/
+figures/
+double-encoder-model/wandb/
+double-encoder-model/.DS_Store
+flow_decoder/.DS_Store
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
