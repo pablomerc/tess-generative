@@ -18,7 +18,7 @@ FILTER_ENCODER_LATENT_DIM = LATENT_DIM
 
 # Training hyperparameters
 BATCH_SIZE = 256  # Reduced for quick test, use 128
-NUM_EPOCHS = 50   # Just 1 epoch for quick test, use 50
+NUM_EPOCHS = 150   # Just 1 epoch for quick test, use 50
 LEARNING_RATE = 5e-4
 BETA_KL = 0.01  # KL divergence weight
 RECONSTRUCTION_WEIGHT = 1.0  # Reconstruction loss weight
@@ -40,8 +40,12 @@ MAX_ROTATION_DIFF = 180  # Maximum rotation difference between same digit sample
 MIN_SCALE_DIFF = 0.1  # Minimum scale difference between same digit samples
 
 # Model save settings
-SAVE_INTERVAL = 10  # Save model every N epochs
-VISUALIZATION_INTERVAL = 10  # Show visualizations every N epochs
+SAVE_INTERVAL = 10  # Save model every N epochsc - 10
+VISUALIZATION_INTERVAL = 10  # Show visualizations every N epochs - 10
 
 # Training settings
 GRADIENT_CLIPPING = False  # Whether to use gradient clipping during training
+
+# Early stopping configuration
+EARLY_STOPPING_PATIENCE = 10  # Set to None to disable
+EARLY_STOPPING_MIN_DELTA = 10 # Minimum improvement in val loss to reset patience

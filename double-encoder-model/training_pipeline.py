@@ -290,7 +290,8 @@ def plot_training_curves(train_losses, train_recon_losses, train_kl_losses, trai
 
 def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
                 batch_size=BATCH_SIZE, save_interval=SAVE_INTERVAL,
-                vis_interval=VISUALIZATION_INTERVAL, device=device, start_epoch=0):
+                vis_interval=VISUALIZATION_INTERVAL, device=device, start_epoch=0,
+                early_stopping_patience=None, early_stopping_min_delta=0.0):
     """
     Main training loop
 
@@ -304,6 +305,8 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         vis_interval: Create visualizations every N epochs
         device: Device to train on
         start_epoch: Starting epoch (for continuing training)
+        early_stopping_patience: Stop if no val improvement for this many epochs (None disables)
+        early_stopping_min_delta: Minimum improvement in val loss to reset patience
     """
 
     # Create model-specific folder for all outputs with consistent timestamp
@@ -325,6 +328,10 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     val_kl_losses = []
     val_metrics = []
 
+    # Early stopping state
+    best_val_loss = float('inf')
+    epochs_without_improvement = 0
+
     # Timing setup
     start_time = time.time()
     epoch_times = []
@@ -334,6 +341,8 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     print(f"Starting from epoch: {start_epoch}")
     print(f"Number of epochs: {num_epochs}")
     print(f"Batch size: {batch_size}")
+    if early_stopping_patience is not None:
+        print(f"Early stopping enabled: patience={early_stopping_patience}, min_delta={early_stopping_min_delta}")
     print("="*60)
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
@@ -507,6 +516,14 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
             "learning_rate": optimizer.param_groups[0]['lr']
         }, step=epoch + 1)
 
+        # Update early stopping tracking (saving still happens only on save_interval)
+        if avg_val_loss < best_val_loss - early_stopping_min_delta:
+            best_val_loss = avg_val_loss
+            epochs_without_improvement = 0
+            wandb.log({"early_stop/best_val_loss": best_val_loss}, step=epoch + 1)
+        else:
+            epochs_without_improvement += 1
+
         # Calculate timing
         epoch_time = time.time() - epoch_start
         epoch_times.append(epoch_time)
@@ -528,11 +545,19 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
         print_metrics(avg_train_metrics, epoch+1, "  Train ")
         print_metrics(avg_val_metrics, epoch+1, "  Val  ")
         print(f"  Time: {epoch_time:.1f}s, Elapsed: {elapsed_str}, ETA: {remaining_str}")
+        if early_stopping_patience is not None:
+            print(f"  EarlyStopping: best_val_loss={best_val_loss:.4f}, no_improve={epochs_without_improvement}/{early_stopping_patience}")
         print("-" * 60)
 
-        # Save model
+        # Early stopping check
+        if early_stopping_patience is not None and epochs_without_improvement >= early_stopping_patience:
+            print("Early stopping triggered. No improvement in validation loss.")
+            wandb.log({"early_stop/triggered": 1, "early_stop/epoch": epoch + 1}, step=epoch + 1)
+            break
+
+        # Save model only every save_interval
         if (epoch + 1) % save_interval == 0:
-            save_model(model, optimizer, epoch + 1, avg_val_loss, timestamp=timestamp)  # Save based on validation loss
+            save_model(model, optimizer, epoch + 1, avg_val_loss, model_name="double_encoder", timestamp=timestamp)
 
         # Create visualizations and log to wandb
         if (epoch + 1) % vis_interval == 0:
@@ -575,6 +600,11 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
                 wandb.log({"generation_test": wandb.Image(generation_fig)}, step=epoch + 1)
                 plt.close(generation_fig)
 
+                # NEW: Unaugmented vs Augmented swap visualization
+                swap_fig = create_unaug_vs_aug_swap_for_wandb(model, triplet_creator, epoch + 1, num_examples=4, dataset='test')
+                wandb.log({"unaug_vs_aug_swap": wandb.Image(swap_fig)}, step=epoch + 1)
+                plt.close(swap_fig)
+
                 # Create larger batch for latent space visualization
                 latent_batch_size = 4096  # Much larger for better latent space visualization
                 (ground_truth_latent, different_digit_latent, same_digit_latent, original_labels_latent, different_labels_latent,
@@ -602,7 +632,7 @@ def train_model(model, triplet_creator, optimizer, num_epochs=NUM_EPOCHS,
     print(f"Average epoch time: {sum(epoch_times)/len(epoch_times):.1f} seconds")
 
     # Save final model
-    save_model(model, optimizer, start_epoch + num_epochs, val_losses[-1], model_name="double_encoder_final", timestamp=timestamp)
+    save_model(model, optimizer, start_epoch + len(train_losses), val_losses[-1], model_name="double_encoder_final", timestamp=timestamp)
 
     # Plot training curves
     plot_training_curves(train_losses, train_recon_losses, train_kl_losses, train_metrics,
@@ -677,14 +707,14 @@ def main():
     wandb.watch(model, log="all")
 
     # Check if we should load a pre-trained model
-    load_pretrained = False  # Set to True to continue training
+    load_pretrained = True  # Set to True to continue training
     start_epoch = 0  # Default starting epoch
 
     if load_pretrained:
         # Specify the path to your pre-trained model
         # /Users/pablom.perez/Desktop/MIT-PhD-macbook/AstroAI-Code/tess-generative/models/double_encoder_model_fashion_mnist_20250729_163634/double_encoder_epoch_30.pth
         # pretrained_path = "../models/double_encoder_model_fashion_mnist_20250729_165755/double_encoder_epoch_60.pth"
-        pretrained_path = "../models/double_encoder_model_mnist_20250801_172221/double_encoder_final_epoch_50.pth"
+        pretrained_path = "../models/fashion_mnist/double_encoder_model_fashion_mnist_20250824_140030/double_encoder_final_epoch_150.pth"
         if os.path.exists(pretrained_path):
             start_epoch, _ = load_model(model, optimizer, pretrained_path)
             print(f"Loaded pre-trained model, starting from epoch {start_epoch}")
@@ -697,7 +727,7 @@ def main():
     # Train the model
     print("\nStarting training...")
     train_losses, train_recon_losses, train_kl_losses, train_metrics, val_losses, val_recon_losses, val_kl_losses, val_metrics, model_folder = train_model(
-        model, triplet_creator, optimizer, start_epoch=start_epoch
+        model, triplet_creator, optimizer, start_epoch=start_epoch, early_stopping_patience=EARLY_STOPPING_PATIENCE, early_stopping_min_delta=EARLY_STOPPING_MIN_DELTA
     )
 
     print("\nTraining completed successfully!")
@@ -807,6 +837,86 @@ def test_generation(model, triplet_creator, model_folder):
         plt.show()
 
         print(f"Generation test saved to: {filepath}")
+
+
+def create_unaug_vs_aug_swap_for_wandb(model, triplet_creator, epoch, num_examples=4, dataset='test'):
+    """
+    Create a plot showing swaps between unaugmented and augmented samples.
+
+    - Scenario A (columns 0-3):
+      sample 1 (unaugmented) → number encoder, sample 2 (augmented) → filter encoder
+    - Scenario B (columns 4-7):
+      sample 1 (augmented) → filter encoder, sample 2 (unaugmented) → number encoder
+    Shows num_examples pairs for each scenario.
+    """
+    import torchvision.transforms as T
+    model.eval()
+
+    # Prepare transforms
+    to_tensor = T.ToTensor()
+
+    # Build figure: 3 rows x (num_examples * 2 scenarios) columns
+    cols = num_examples * 2
+    fig, axes = plt.subplots(3, cols, figsize=(3 * cols, 8))
+
+    for i in range(num_examples):
+        with torch.no_grad():
+            # Pick two random samples from selected dataset (no augmentation)
+            base_dataset = triplet_creator.test_dataset if dataset == 'test' else triplet_creator.train_dataset
+            idx1 = np.random.randint(0, len(base_dataset))
+            idx2 = np.random.randint(0, len(base_dataset))
+            img1_pil, label1 = base_dataset[idx1]
+            img2_pil, label2 = base_dataset[idx2]
+
+            # Create augmented version for whichever needs augmentation using TripletCreator's transforms
+            angle, scale = triplet_creator.get_random_transform_params()
+            aug_transform = triplet_creator.augmentation_transforms[(angle, scale)]
+
+            # Scenario A: number = unaugmented img1, filter = augmented img2
+            img1_unaug = to_tensor(img1_pil).unsqueeze(0).to(device)  # [1,1,28,28]
+            img2_aug = aug_transform(img2_pil).unsqueeze(0).to(device)
+            recon_A, _, _, _, _, _, _ = model(img1_unaug, img2_aug)
+
+            # Scenario B: number = unaugmented img2, filter = augmented img1 (different random aug)
+            angle_b, scale_b = triplet_creator.get_random_transform_params()
+            aug_transform_b = triplet_creator.augmentation_transforms[(angle_b, scale_b)]
+            img2_unaug = to_tensor(img2_pil).unsqueeze(0).to(device)
+            img1_aug = aug_transform_b(img1_pil).unsqueeze(0).to(device)
+            recon_B, _, _, _, _, _, _ = model(img2_unaug, img1_aug)
+
+        # Column positions
+        col_A = i
+        col_B = i + num_examples
+
+        # Row 0: inputs overview
+        axes[0, col_A].imshow(img1_unaug[0, 0].cpu(), cmap='gray')
+        axes[0, col_A].set_title(f'A: Class = {triplet_creator.class_names[label1]}')
+        axes[0, col_A].axis('off')
+        # Scenario B: first row shows augmented Sample A
+        axes[0, col_B].imshow(img1_aug[0, 0].cpu(), cmap='gray')
+        axes[0, col_B].set_title(f'A: Filter = (rot {angle_b}°, scale {scale_b:.1f})')
+        axes[0, col_B].axis('off')
+
+        # Row 1: filter inputs
+        axes[1, col_A].imshow(img2_aug[0, 0].cpu(), cmap='gray')
+        axes[1, col_A].set_title(f'B: Filter = (rot {angle}°, scale {scale:.1f})')
+        axes[1, col_A].axis('off')
+        # Scenario B: second row shows unaugmented Sample B
+        axes[1, col_B].imshow(img2_unaug[0, 0].cpu(), cmap='gray')
+        axes[1, col_B].set_title(f'B: Class = {triplet_creator.class_names[label2]}')
+        axes[1, col_B].axis('off')
+
+        # Row 2: reconstructions
+        axes[2, col_A].imshow(recon_A[0, 0].cpu(), cmap='gray')
+        axes[2, col_A].set_title('A: Reconstruction')
+        axes[2, col_A].axis('off')
+        axes[2, col_B].imshow(recon_B[0, 0].cpu(), cmap='gray')
+        axes[2, col_B].set_title('B: Reconstruction')
+        axes[2, col_B].axis('off')
+
+    plt.suptitle(f'Unaug vs Aug Swap Scenarios (Epoch {epoch})', fontsize=14)
+    plt.tight_layout()
+    return fig
 
 
 if __name__ == "__main__":
