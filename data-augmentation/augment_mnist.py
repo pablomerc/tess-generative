@@ -5,12 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Control variables
-save_dataset = False
+save_dataset = True
 visualize_augmentations = True
+download_mnist = False
+# Added debug flag to control min/max computation and printing
+debug = False
 
 # Augmentation parameters
 rotation_degrees = 90
-scale_range = (0.5, 1.1)  # Increased scale range for more variation
+scale_range = (0.5, 1)  # Increased scale range for more variation
 translate_range = (0, 0)
 
 augment = transforms.Compose([
@@ -30,15 +33,40 @@ mnist_train = datasets.MNIST(
     root=data_dir,
     train=True,
     transform=augment,
-    download=False
+    download=download_mnist
 )
 
 mnist_test = datasets.MNIST(
     root=data_dir,
     train=False,
     transform=augment,
-    download=False
+    download=download_mnist
 )
+
+# Only compute and print value ranges when debugging
+if debug:
+    # Compute and print value ranges for transformed datasets
+    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=512, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=512, shuffle=False)
+
+    train_min, train_max = None, None
+    test_min, test_max = None, None
+
+    with torch.no_grad():
+        for images, _ in train_loader:
+            batch_min = images.amin().item()
+            batch_max = images.amax().item()
+            train_min = batch_min if train_min is None else min(train_min, batch_min)
+            train_max = batch_max if train_max is None else max(train_max, batch_max)
+
+        for images, _ in test_loader:
+            batch_min = images.amin().item()
+            batch_max = images.amax().item()
+            test_min = batch_min if test_min is None else min(test_min, batch_min)
+            test_max = batch_max if test_max is None else max(test_max, batch_max)
+
+    print(f"Transformed train value range: min={train_min:.6f}, max={train_max:.6f}")
+    print(f"Transformed test value range:  min={test_min:.6f}, max={test_max:.6f}")
 
 
 if visualize_augmentations:
