@@ -350,7 +350,7 @@ def train_autoencoder_unet_flow(model, train_loader, test_loader, num_epochs=30,
         }, step=epoch + 1)
 
         # Generate and log reconstruction plots every 2 epochs
-        if (epoch + 1) % 2 == 0:
+        if (epoch + 1) % 5 == 0:
             print(f"Creating reconstruction plot for epoch {epoch + 1}...")
             try:
                 reconstruction_plot = create_reconstruction_plot(model, test_loader, num_examples=8)
@@ -373,10 +373,10 @@ def train_autoencoder_unet_flow(model, train_loader, test_loader, num_epochs=30,
                 traceback.print_exc()
 
         # Generate and log uncertainty analysis every 10 epochs (less frequent due to computational cost)
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % 10 == 0:
             print(f"Creating uncertainty analysis for epoch {epoch + 1}...")
             try:
-                uncertainty_plot = generate_uncertainty_analysis(model, test_loader, num_samples=50, num_examples=2, show_plot=False)
+                uncertainty_plot = generate_uncertainty_analysis(model, test_loader, num_samples=50, num_examples=5, show_plot=False)
                 print(f"Uncertainty plot created, attempting to log to wandb...")
 
                 # Log to wandb
