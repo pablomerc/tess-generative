@@ -82,11 +82,11 @@ def load_dataset(dataset_type='mnist', batch_size=128):
     elif dataset_type == 'augmented_mnist':
         print("Loading augmented MNIST data...")
 
-        # Load augmented data
-        train_images = np.load('../data/augmented/rotation_v2_augmented_mnist_train_images.npy')
-        train_labels = np.load('../data/augmented/rotation_v2_augmented_mnist_train_labels.npy')
-        test_images = np.load('../data/augmented/rotation_v2_augmented_mnist_test_images.npy')
-        test_labels = np.load('../data/augmented/rotation_v2_augmented_mnist_test_labels.npy')
+        # Load augmented
+        train_images = np.load('../data/augmented/rotation_zoom_augmented_mnist_train_images.npy')
+        train_labels = np.load('../data/augmented/rotation_zoom_augmented_mnist_train_labels.npy')
+        test_images = np.load('../data/augmented/rotation_zoom_augmented_mnist_test_images.npy')
+        test_labels = np.load('../data/augmented/rotation_zoom_augmented_mnist_test_labels.npy')
 
         print(f"Augmented training images shape: {train_images.shape}")
         print(f"Augmented training labels shape: {train_labels.shape}")
@@ -94,8 +94,9 @@ def load_dataset(dataset_type='mnist', batch_size=128):
         print(f"Augmented test labels shape: {test_labels.shape}")
 
         # Convert to torch tensors and normalize to [-1, 1]
-        train_images = torch.from_numpy(train_images).float() / 255.0 * 2.0 - 1.0
-        test_images = torch.from_numpy(test_images).float() / 255.0 * 2.0 - 1.0
+        # Since augmented data is already in [0,1], we just need to scale to [-1,1]
+        train_images = torch.from_numpy(train_images).float() * 2.0 - 1.0
+        test_images = torch.from_numpy(test_images).float() * 2.0 - 1.0
         train_labels = torch.from_numpy(train_labels).long()
         test_labels = torch.from_numpy(test_labels).long()
 
@@ -570,8 +571,8 @@ if __name__ == "__main__":
     # Model parameters
     latent_dim = 32
     num_classes = 10
-    num_epochs = 300
-    learning_rate = 1e-4  # Reduced from 1e-3
+    num_epochs = 100
+    learning_rate = 1e-3  # Reduced from 1e-3 to 1e-4 for augmented mnist
     dataset_type = 'augmented_mnist'  # Change to 'augmented_mnist' to use augmented data
     batch_size = 128
 
