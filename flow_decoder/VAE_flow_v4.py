@@ -123,9 +123,6 @@ def load_dataset(dataset_type='mnist', batch_size=128):
     else:
         raise ValueError(f"Unknown dataset_type: {dataset_type}. Supported: 'mnist', 'augmented_mnist'")
 
-# Load dataset based on configuration
-dataset_type = 'mnist'  # Change this to 'augmented_mnist' to use augmented data
-train_loader, test_loader = load_dataset(dataset_type=dataset_type, batch_size=128)
 
 
 def one_hot(labels, num_classes=10):
@@ -375,6 +372,29 @@ def train_autoencoder_unet_flow(model, train_loader, test_loader, num_epochs=30,
                 import traceback
                 traceback.print_exc()
 
+        # Generate and log uncertainty analysis every 10 epochs (less frequent due to computational cost)
+        if (epoch + 1) % 5 == 0:
+            print(f"Creating uncertainty analysis for epoch {epoch + 1}...")
+            try:
+                uncertainty_plot = generate_uncertainty_analysis(model, test_loader, num_samples=50, num_examples=2, show_plot=False)
+                print(f"Uncertainty plot created, attempting to log to wandb...")
+
+                # Log to wandb
+                wandb.log({"uncertainty_analysis": wandb.Image(uncertainty_plot)}, step=epoch + 1)
+
+                # Also save as file
+                uncertainty_filename = os.path.join(plots_dir, f"uncertainty_epoch_{epoch+1:03d}.png")
+                uncertainty_plot.savefig(uncertainty_filename, dpi=150, bbox_inches='tight')
+                wandb.log({"uncertainty_analysis_file": wandb.Image(uncertainty_filename)}, step=epoch + 1)
+                print(f"Saved uncertainty plot to: {uncertainty_filename}")
+
+                print(f"Successfully logged uncertainty analysis for epoch {epoch + 1}")
+                plt.close(uncertainty_plot)  # Close to free memory
+            except Exception as e:
+                print(f"Error creating uncertainty analysis: {e}")
+                import traceback
+                traceback.print_exc()
+
         # Timing
         epoch_time = time.time() - epoch_start
         total_time = time.time() - start_time
@@ -423,20 +443,16 @@ def create_reconstruction_plot(model, test_loader, num_examples=8):
         reconstructions = model.reconstruct(examples, labels)
         print(f"Reconstructions shape: {reconstructions.shape}")
 
-        # Generated samples (conditioned on the same labels)
-        print("Creating generated samples...")
-        generated = model.sample(labels, num_samples=1)
-        print(f"Generated samples shape: {generated.shape}")
+        # Removed generated samples section - not needed for reconstruction evaluation
 
     # Convert to numpy for plotting
     examples = examples.cpu().numpy()
     reconstructions = reconstructions.cpu().numpy()
-    generated = generated.cpu().numpy()
     labels = labels.cpu().numpy()
-    print(f"Converted to numpy - examples: {examples.shape}, reconstructions: {reconstructions.shape}, generated: {generated.shape}")
+    print(f"Converted to numpy - examples: {examples.shape}, reconstructions: {reconstructions.shape}")
 
-    # Create visualization
-    fig, axes = plt.subplots(3, num_examples, figsize=(2*num_examples, 6))
+    # Create visualization with only 2 rows (original and reconstruction)
+    fig, axes = plt.subplots(2, num_examples, figsize=(2*num_examples, 4))
 
     for i in range(num_examples):
         # Original
@@ -448,11 +464,6 @@ def create_reconstruction_plot(model, test_loader, num_examples=8):
         axes[1, i].imshow(reconstructions[i, 0], cmap='gray')
         axes[1, i].set_title(f'Reconstruction {labels[i]}')
         axes[1, i].axis('off')
-
-        # Generated
-        axes[2, i].imshow(generated[i, 0], cmap='gray')
-        axes[2, i].set_title(f'Generated {labels[i]}')
-        axes[2, i].axis('off')
 
     plt.tight_layout()
     print("Reconstruction plot created successfully!")
@@ -565,6 +576,110 @@ def generate_conditioned_samples(model, num_samples_per_digit=5):
 
     plt.tight_layout()
     plt.show()
+
+
+def generate_uncertainty_analysis(model, test_loader, num_samples=100, num_examples=4, show_plot=True):
+    """Analyze uncertainty in flow matching generation by sampling multiple times
+
+    Args:
+        model: The trained flow matching model
+        test_loader: Test data loader
+        num_samples: Number of samples to generate for uncertainty analysis
+        num_examples: Number of test examples to analyze
+        show_plot: Whether to display the plot (False for wandb logging)
+    """
+
+    model.eval()
+
+    # Get some test examples
+    examples, labels = next(iter(test_loader))
+    examples = examples[:num_examples].to(device)
+    labels = labels[:num_examples].to(device)
+
+    print(f"Analyzing uncertainty for {num_examples} examples with {num_samples} samples each...")
+
+    # Create figure with subplots for each example
+    fig, axes = plt.subplots(num_examples, 4, figsize=(16, 4*num_examples))
+    if num_examples == 1:
+        axes = axes.reshape(1, -1)
+
+    all_uncertainties = []
+
+    with torch.no_grad():
+        for example_idx in range(num_examples):
+            print(f"Processing example {example_idx + 1}/{num_examples}...")
+
+            # Get the conditioning for this example
+            label = labels[example_idx:example_idx+1]  # Keep batch dimension
+            z = model.encoder(examples[example_idx:example_idx+1])
+
+            # Create conditioning vector
+            labels_onehot = one_hot(label, model.num_classes).to(device)
+            condition = torch.cat([z, labels_onehot], dim=1)
+
+            # Generate multiple samples
+            all_samples = []
+            for sample_idx in range(num_samples):
+                # Sample from flow matching decoder
+                sample_flat = model.decoder.sample(condition, 1)
+                sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
+                all_samples.append(sample_img.cpu().numpy())
+
+            # Stack all samples: (num_samples, 1, 1, 28, 28)
+            all_samples = np.stack(all_samples, axis=0)
+
+            # Calculate statistics
+            mean_img = np.mean(all_samples, axis=0)[0, 0]  # (28, 28)
+            std_img = np.std(all_samples, axis=0)[0, 0]    # (28, 28)
+            all_uncertainties.append(np.mean(std_img))
+
+            # Original image
+            original_img = examples[example_idx, 0].cpu().numpy()
+
+            # Plot results
+            # Original
+            im1 = axes[example_idx, 0].imshow(original_img, cmap='gray', vmin=-1, vmax=1)
+            axes[example_idx, 0].set_title(f'Original (Digit {labels[example_idx].item()})')
+            axes[example_idx, 0].axis('off')
+
+            # Mean of generated samples
+            im2 = axes[example_idx, 1].imshow(mean_img, cmap='gray', vmin=-1, vmax=1)
+            axes[example_idx, 1].set_title(f'Mean of {num_samples} samples')
+            axes[example_idx, 1].axis('off')
+
+            # Standard deviation (uncertainty)
+            im3 = axes[example_idx, 2].imshow(std_img, cmap='hot', vmin=0, vmax=np.max(std_img))
+            axes[example_idx, 2].set_title(f'Uncertainty (Std Dev)')
+            axes[example_idx, 2].axis('off')
+
+            # Difference between original and mean
+            diff_img = np.abs(original_img - mean_img)
+            im4 = axes[example_idx, 3].imshow(diff_img, cmap='Reds', vmin=0, vmax=np.max(diff_img))
+            axes[example_idx, 3].set_title(f'|Original - Mean|')
+            axes[example_idx, 3].axis('off')
+
+            # Add colorbars
+            plt.colorbar(im2, ax=axes[example_idx, 1], fraction=0.046, pad=0.04)
+            plt.colorbar(im3, ax=axes[example_idx, 2], fraction=0.046, pad=0.04)
+            plt.colorbar(im4, ax=axes[example_idx, 3], fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.suptitle(f'Flow Matching Uncertainty Analysis ({num_samples} samples per example)',
+                 fontsize=16, y=0.98)
+
+    # Only show plot if requested (for interactive use)
+    if show_plot:
+        plt.show()
+
+    # Print some statistics
+    print(f"\nUncertainty Analysis Summary:")
+    print(f"- Analyzed {num_examples} examples with {num_samples} samples each")
+    print(f"- Average pixel uncertainty (std dev): {np.mean(all_uncertainties):.4f}")
+    print(f"- Uncertainty range: {np.min(all_uncertainties):.4f} - {np.max(all_uncertainties):.4f}")
+
+    return fig
+
+
 
 
 if __name__ == "__main__":
