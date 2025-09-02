@@ -41,11 +41,11 @@ MIN_SCALE_DIFF = 0.1  # Minimum scale difference between same digit samples
 
 # Model save settings
 SAVE_INTERVAL = 10  # Save model every N epochsc - 10
-VISUALIZATION_INTERVAL = 10  # Show visualizations every N epochs - 10
+VISUALIZATION_INTERVAL = 1  # Show visualizations every N epochs - 10
 
 # Training settings
-GRADIENT_CLIPPING = False  # Whether to use gradient clipping during training
+GRADIENT_CLIPPING = True  # Whether to use gradient clipping during training
 
 # Early stopping configuration
-EARLY_STOPPING_PATIENCE = 10  # Set to None to disable
-EARLY_STOPPING_MIN_DELTA = 10 # Minimum improvement in val loss to reset patience
+EARLY_STOPPING_PATIENCE = 15  # Set to None to disable
+EARLY_STOPPING_MIN_DELTA = 5 # Minimum improvement in val loss to reset patience

@@ -714,7 +714,7 @@ def main():
         # Specify the path to your pre-trained model
         # /Users/pablom.perez/Desktop/MIT-PhD-macbook/AstroAI-Code/tess-generative/models/double_encoder_model_fashion_mnist_20250729_163634/double_encoder_epoch_30.pth
         # pretrained_path = "../models/double_encoder_model_fashion_mnist_20250729_165755/double_encoder_epoch_60.pth"
-        pretrained_path = "../models/fashion_mnist/double_encoder_model_fashion_mnist_20250824_140030/double_encoder_final_epoch_150.pth"
+        pretrained_path = "../models/fashion_mnist/double_encoder_model_fashion_mnist_20250825_033652/double_encoder_final_epoch_200.pth"
         if os.path.exists(pretrained_path):
             start_epoch, _ = load_model(model, optimizer, pretrained_path)
             print(f"Loaded pre-trained model, starting from epoch {start_epoch}")
@@ -908,10 +908,10 @@ def create_unaug_vs_aug_swap_for_wandb(model, triplet_creator, epoch, num_exampl
 
         # Row 2: reconstructions
         axes[2, col_A].imshow(recon_A[0, 0].cpu(), cmap='gray')
-        axes[2, col_A].set_title('A: Reconstruction')
+        axes[2, col_A].set_title('C: Reconstruction (Class A + Filter B)')
         axes[2, col_A].axis('off')
         axes[2, col_B].imshow(recon_B[0, 0].cpu(), cmap='gray')
-        axes[2, col_B].set_title('B: Reconstruction')
+        axes[2, col_B].set_title('C: Reconstruction (Filter A + Class B)')
         axes[2, col_B].axis('off')
 
     plt.suptitle(f'Unaug vs Aug Swap Scenarios (Epoch {epoch})', fontsize=14)
