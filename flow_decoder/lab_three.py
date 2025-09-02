@@ -23,6 +23,7 @@ from matplotlib import pyplot as plt
 from matplotlib.axes._axes import Axes
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.distributions as D
 from torch.func import vmap, jacrev
 from tqdm import tqdm
@@ -81,9 +82,9 @@ class IsotropicGaussian(nn.Module, Sampleable):
         super().__init__()
         self.shape = shape
         self.std = std
-        self.dummy = nn.Buffer(torch.zeros(1)) # Will automatically be moved when self.to(...) is called...
+        self.register_buffer('dummy', torch.zeros(1))  # Will automatically be moved when self.to(...) is called...
 
-    def sample(self, num_samples) -> Tuple[torch.Tensor, torch.Tensor]:
+    def sample(self, num_samples) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         return self.std * torch.randn(num_samples, *self.shape).to(self.dummy.device), None
 
 """Next, we make two updates in adding `ConditionalProbabilityPath` (and `GaussianConditionalProbabilityPath`):
@@ -290,7 +291,7 @@ class GaussianConditionalProbabilityPath(ConditionalProbabilityPath):
         self.alpha = alpha
         self.beta = beta
 
-    def sample_conditioning_variable(self, num_samples: int) -> torch.Tensor:
+    def sample_conditioning_variable(self, num_samples: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Samples the conditioning variable z and label y
         Args:
@@ -536,7 +537,7 @@ class MNISTSampler(nn.Module, Sampleable):
                 transforms.Normalize((0.5,), (0.5,)),
             ])
         )
-        self.dummy = nn.Buffer(torch.zeros(1)) # Will automatically be moved when self.to(...) is called...
+        self.register_buffer('dummy', torch.zeros(1))  # Will automatically be moved when self.to(...) is called...
 
     def sample(self, num_samples: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
@@ -680,16 +681,25 @@ class CFGTrainer(Trainer):
 
     def get_train_loss(self, batch_size: int) -> torch.Tensor:
         # Step 1: Sample z,y from p_data
-        pass
+        z, y = self.path.p_data.sample(batch_size)
+        z = z.to(next(self.model.parameters()).device)
+        y = y.to(z.device)
 
         # Step 2: Set each label to 10 (i.e., null) with probability eta
-        pass
+        mask = (torch.rand(y.shape[0], device=y.device) < self.eta)
+        y_cfg = y.clone()
+        y_cfg[mask] = 10
 
         # Step 3: Sample t and x
-        pass
+        t = torch.rand(batch_size, 1, 1, 1, device=z.device)
+        x = self.path.sample_conditional_path(z, t)
 
         # Step 4: Regress and output loss
-        pass
+        with torch.no_grad():
+            u_ref = self.path.conditional_vector_field(x, z, t)
+        u_pred = self.model(x, t, y_cfg)
+        loss = F.mse_loss(u_pred, u_ref)
+        return loss
 
         raise NotImplementedError("Implement me in Question 2.2!")
 
