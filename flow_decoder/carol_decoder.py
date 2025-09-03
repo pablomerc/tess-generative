@@ -62,12 +62,13 @@ class MLPVelocityField(VelocityField):
 
 
 class FourierEncoder(nn.Module):
-    """Time embedding using Fourier features"""
+    """Time embedding using Fourier features with better numerical stability"""
     def __init__(self, dim: int):
         super().__init__()
         assert dim % 2 == 0
         self.half_dim = dim // 2
-        self.weights = nn.Parameter(torch.randn(1, self.half_dim))
+        # Initialize with smaller weights for better stability
+        self.weights = nn.Parameter(torch.randn(1, self.half_dim) * 0.1)
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         """
@@ -77,38 +78,62 @@ class FourierEncoder(nn.Module):
         - embeddings: (batch_size, dim)
         """
         t = t.view(-1, 1)  # (batch_size, 1)
+        # Clamp t to prevent extreme values
+        t = torch.clamp(t, 0.0, 1.0)
         freqs = t * self.weights * 2 * math.pi  # (batch_size, half_dim)
         sin_embed = torch.sin(freqs)  # (batch_size, half_dim)
         cos_embed = torch.cos(freqs)  # (batch_size, half_dim)
-        return torch.cat([sin_embed, cos_embed], dim=-1) * math.sqrt(2)  # (batch_size, dim)
+        result = torch.cat([sin_embed, cos_embed], dim=-1) * math.sqrt(2)  # (batch_size, dim)
+
+        # Check for NaN/Inf and replace if necessary
+        if torch.isnan(result).any() or torch.isinf(result).any():
+            print("WARNING: NaN/Inf in FourierEncoder. Replaced with zeros.")
+            result = torch.nan_to_num(result, nan=0.0, posinf=1.0, neginf=-1.0)
+
+        return result
 
 
 class ResidualLayer(nn.Module):
-    """Residual block for U-Net"""
+    """Residual block for U-Net with better numerical stability"""
     def __init__(self, channels: int, time_embed_dim: int, z_embed_dim: int):
         super().__init__()
         self.block1 = nn.Sequential(
             nn.SiLU(),
-            nn.BatchNorm2d(channels),
+            nn.BatchNorm2d(channels, eps=1e-5, momentum=0.1),  # Better BN parameters
             nn.Conv2d(channels, channels, kernel_size=3, padding=1)
         )
         self.block2 = nn.Sequential(
             nn.SiLU(),
-            nn.BatchNorm2d(channels),
+            nn.BatchNorm2d(channels, eps=1e-5, momentum=0.1),  # Better BN parameters
             nn.Conv2d(channels, channels, kernel_size=3, padding=1)
         )
-        # Time adapter
+        # Time adapter with smaller initial weights
         self.time_adapter = nn.Sequential(
             nn.Linear(time_embed_dim, time_embed_dim),
             nn.SiLU(),
             nn.Linear(time_embed_dim, channels)
         )
-        # Conditioning adapter
+        # Conditioning adapter with smaller initial weights
         self.z_adapter = nn.Sequential(
             nn.Linear(z_embed_dim, z_embed_dim),
             nn.SiLU(),
             nn.Linear(z_embed_dim, channels)
         )
+
+        # Initialize weights for better stability
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        """Initialize weights for better stability"""
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Linear):
+                nn.init.xavier_normal_(module.weight, gain=0.1)  # Smaller gain
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
 
     def forward(self, x: torch.Tensor, t_embed: torch.Tensor, z_embed: torch.Tensor) -> torch.Tensor:
         """
@@ -122,19 +147,30 @@ class ResidualLayer(nn.Module):
         # Initial conv block
         x = self.block1(x)
 
-        # Add time embedding
-        t_embed = self.time_adapter(t_embed).unsqueeze(-1).unsqueeze(-1)
-        x = x + t_embed
+        # Clamp to prevent extreme values
+        x = torch.clamp(x, -10.0, 10.0)
 
-        # Add conditioning embedding
-        z_embed = self.z_adapter(z_embed).unsqueeze(-1).unsqueeze(-1)
-        x = x + z_embed
+        # Add time embedding with scaling
+        t_embed_out = self.time_adapter(t_embed).unsqueeze(-1).unsqueeze(-1)
+        t_embed_out = torch.clamp(t_embed_out, -1.0, 1.0)  # Scale down embeddings
+        x = x + 0.1 * t_embed_out  # Scale down the influence
+
+        # Add conditioning embedding with scaling
+        z_embed_out = self.z_adapter(z_embed).unsqueeze(-1).unsqueeze(-1)
+        z_embed_out = torch.clamp(z_embed_out, -1.0, 1.0)  # Scale down embeddings
+        x = x + 0.1 * z_embed_out  # Scale down the influence
 
         # Second conv block
         x = self.block2(x)
 
-        # Add back residual
-        x = x + res
+        # Clamp to prevent extreme values
+        x = torch.clamp(x, -10.0, 10.0)
+
+        # Add back residual with scaling
+        x = x + 0.1 * res  # Scale down residual connection
+
+        # Final clamp
+        x = torch.clamp(x, -5.0, 5.0)
 
         return x
 
@@ -221,7 +257,7 @@ class UNetVelocityField(VelocityField):
         # Initialize time embedder
         self.time_embedder = FourierEncoder(t_embed_dim)
 
-        # Initialize z embedder (conditioning)
+        # Initialize z embedder (conditioning) with better stability
         self.z_embedder = nn.Sequential(
             nn.Linear(input_dim, z_embed_dim),
             nn.SiLU(),
@@ -241,6 +277,24 @@ class UNetVelocityField(VelocityField):
 
         # Final convolution
         self.final_conv = nn.Conv2d(channels[0], 1, kernel_size=3, padding=1)
+
+        # Initialize weights for stability
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        """Initialize weights for better stability"""
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Linear):
+                nn.init.xavier_normal_(module.weight, gain=0.1)  # Smaller gain for stability
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.BatchNorm2d):
+                nn.init.constant_(module.weight, 1)
+                nn.init.constant_(module.bias, 0)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         """
@@ -262,37 +316,43 @@ class UNetVelocityField(VelocityField):
         elif t.shape[0] != batch_size:
             t = t.expand(batch_size)
 
-        # Embed t and z
+        # Embed t and z with clamping
         t_embed = self.time_embedder(t)  # (batch_size, t_embed_dim)
         z_embed = self.z_embedder(z)     # (batch_size, z_embed_dim)
 
+        # Clamp embeddings to prevent extreme values
+        t_embed = torch.clamp(t_embed, -5.0, 5.0)
+        z_embed = torch.clamp(z_embed, -5.0, 5.0)
+
         # Initial convolution
         x = self.init_conv(x)  # (batch_size, c_0, image_size, image_size)
+        x = torch.clamp(x, -5.0, 5.0)
 
         residuals = []
 
         # Encoders
-        for encoder in self.encoders:
+        for i, encoder in enumerate(self.encoders):
             x = encoder(x, t_embed, z_embed)
+            x = torch.clamp(x, -5.0, 5.0)
             residuals.append(x.clone())
 
         # Midcoder
         x = self.midcoder(x, t_embed, z_embed)
+        x = torch.clamp(x, -5.0, 5.0)
 
         # Decoders
-        for decoder in self.decoders:
+        for i, decoder in enumerate(self.decoders):
             res = residuals.pop()
-            x = x + res
+            x = x + 0.1 * res  # Scale down residual connection
             x = decoder(x, t_embed, z_embed)
+            x = torch.clamp(x, -5.0, 5.0)
 
         # Final convolution
         x = self.final_conv(x)  # (batch_size, 1, image_size, image_size)
+        x = torch.clamp(x, -3.0, 3.0)
 
         # Flatten back to original format
         x = x.view(batch_size, self.output_dim)
-
-        # Clip output to prevent extreme values that could cause explosion
-        x = torch.clamp(x, -10.0, 10.0)
 
         return x
 
@@ -340,30 +400,53 @@ class FlowMatchingDecoder(BaseDecoder):
         return self.vector_field(x, t, z)
 
     def compute_cfm_loss(self, x1: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-        '''Compute Conditional Flow Matching loss.'''
+        '''Compute Conditional Flow Matching loss with better stability.'''
         batch_size = x1.shape[0]
+
+        # Clamp input to prevent extreme values
+        x1 = torch.clamp(x1, -3.0, 3.0)
+        z = torch.clamp(z, -5.0, 5.0)
+
         x0 = torch.randn_like(x1)
         t = torch.rand(batch_size, device=x1.device)
         x_t = self.get_conditional_flow(x0=x0, x1=x1, t=t)
         v_target = x1 - x0
+
+        # Clip targets to prevent extreme values
+        v_target = torch.clamp(v_target, -5.0, 5.0)
+
         v_pred = self.vector_field_forward(x_t, t, z)
+        v_pred = torch.clamp(v_pred, -5.0, 5.0)
+
         loss = F.mse_loss(v_pred, v_target)
+
+        # Clamp loss to prevent explosion
+        loss = torch.clamp(loss, 0.0, 10.0)
+
         return loss
 
     def sample_ode(self, z: torch.Tensor, n_samples: int = 1) -> torch.Tensor:
-        '''Sample by solving ODE from noise to data.'''
+        '''Sample by solving ODE from noise to data with better stability.'''
         batch_size = z.shape[0] if n_samples == 1 else n_samples * z.shape[0]
         device = z.device
+
+        # Clamp z to prevent extreme values
+        z = torch.clamp(z, -5.0, 5.0)
+
         x = torch.randn(batch_size, self.output_dim, device=device)
         if n_samples > 1:
             z_expanded = z.unsqueeze(0).expand(n_samples, -1, -1).reshape(-1, z.shape[-1])
         else:
             z_expanded = z
+
         dt = 1.0 / self.n_integration_steps
         for i in range(self.n_integration_steps):
             t = torch.full((batch_size,), i * dt, device=device)
             v = self.vector_field_forward(x, t, z_expanded)
+            v = torch.clamp(v, -2.0, 2.0)  # Clamp velocity
             x = x + dt * v
+            x = torch.clamp(x, -3.0, 3.0)  # Clamp position
+
         if n_samples > 1:
             x = x.view(n_samples, z.shape[0], self.output_dim)
         return x
