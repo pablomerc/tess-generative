@@ -422,9 +422,6 @@ class FlowMatchingDecoder(BaseDecoder):
         batch_size = z.shape[0] if n_samples == 1 else n_samples * z.shape[0]
         device = z.device
 
-        # Clamp z to prevent extreme values
-        # z = torch.clamp(z, -5.0, 5.0)
-
         x = torch.randn(batch_size, self.output_dim, device=device)
         if n_samples > 1:
             z_expanded = z.unsqueeze(0).expand(n_samples, -1, -1).reshape(-1, z.shape[-1])
@@ -435,7 +432,9 @@ class FlowMatchingDecoder(BaseDecoder):
         for i in range(self.n_integration_steps):
             t = torch.full((batch_size,), i * dt, device=device)
             v = self.vector_field_forward(x, t, z_expanded)
+            v = torch.clamp(v, -10.0, 10.0) # Clamp velocity
             x = x + dt * v
+            x = torch.clamp(x, -3.0, 3.0) # Clamp position
 
         if n_samples > 1:
             x = x.view(n_samples, z.shape[0], self.output_dim)
