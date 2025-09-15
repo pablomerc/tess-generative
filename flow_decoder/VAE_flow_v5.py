@@ -114,9 +114,10 @@ def create_reconstruction_plot_for_wandb(ground_truth, different_digit, same_dig
     """
     Create reconstruction plot for wandb logging
     """
-    fig, axes = plt.subplots(4, 4, figsize=(12, 12))
+    num_examples = ground_truth.shape[0]
+    fig, axes = plt.subplots(4, num_examples, figsize=(2*num_examples + 4, 12))
 
-    for i in range(4):
+    for i in range(num_examples):
         # Ground truth (target)
         axes[0, i].imshow(to_visualization_range(ground_truth[i, 0]).cpu(), cmap='gray')
         axes[0, i].set_title(f'Ground Truth\nLabel: {class_names[original_labels[i]]}')
@@ -205,6 +206,76 @@ def create_generation_test_for_wandb(model, triplet_creator, epoch):
     plt.suptitle(f'Disentanglement Test: Swapping Number and Filter Components (Epoch {epoch})', fontsize=16)
     plt.tight_layout()
 
+    return fig
+
+
+def generate_uncertainty_analysis_v5(model, triplet_creator, num_samples=50, num_examples=8):
+    """Analyze uncertainty by sampling multiple reconstructions per example.
+
+    For each example, keep the encodings fixed and draw multiple samples from the
+    flow decoder, then compute per-pixel mean/std and difference to ground truth.
+    """
+    model.eval()
+
+    # Create a small test batch
+    (ground_truth, different_digit, same_digit, original_labels, different_labels,
+     ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+        triplet_creator.create_batch_triplets(num_examples, dataset='test')
+
+    ground_truth = normalize_to_flow_range(ground_truth.to(device))
+    different_digit = normalize_to_flow_range(different_digit.to(device))
+    same_digit = normalize_to_flow_range(same_digit.to(device))
+
+    fig, axes = plt.subplots(num_examples, 4, figsize=(16, 4*num_examples))
+    if num_examples == 1:
+        axes = axes.reshape(1, -1)
+
+    with torch.no_grad():
+        for idx in range(num_examples):
+            # Slice single example and expand to batch of 1
+            gt = ground_truth[idx:idx+1]
+            sd = same_digit[idx:idx+1]
+            dd = different_digit[idx:idx+1]
+
+            # Get combined latent for this example
+            combined_z, _, _, _, _, _, _ = model.forward(sd, dd)
+
+            # Draw multiple samples
+            samples = []
+            for _ in range(num_samples):
+                sample_flat = model.decoder.sample(combined_z, 1)  # (1, 784)
+                sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
+                samples.append(sample_img.cpu().numpy())
+
+            samples = np.stack(samples, axis=0)  # (num_samples, 1, 1, H, W)
+            mean_img = samples.mean(axis=0)[0, 0]
+            std_img = samples.std(axis=0)[0, 0]
+
+            original_img = gt[0, 0].cpu().numpy()
+            diff_img = np.abs(original_img - mean_img)
+
+            im0 = axes[idx, 0].imshow(to_visualization_range(torch.from_numpy(original_img)).numpy(), cmap='gray', vmin=0, vmax=1)
+            axes[idx, 0].set_title('Ground Truth')
+            axes[idx, 0].axis('off')
+
+            im1 = axes[idx, 1].imshow(to_visualization_range(torch.from_numpy(mean_img)).numpy(), cmap='gray', vmin=0, vmax=1)
+            axes[idx, 1].set_title(f'Mean of {num_samples} samples')
+            axes[idx, 1].axis('off')
+
+            im2 = axes[idx, 2].imshow(std_img, cmap='hot', vmin=0, vmax=np.max(std_img) if np.max(std_img) > 0 else 1)
+            axes[idx, 2].set_title('Uncertainty (Std Dev)')
+            axes[idx, 2].axis('off')
+
+            im3 = axes[idx, 3].imshow(diff_img, cmap='Reds', vmin=0, vmax=np.max(diff_img) if np.max(diff_img) > 0 else 1)
+            axes[idx, 3].set_title('|Original - Mean|')
+            axes[idx, 3].axis('off')
+
+            plt.colorbar(im1, ax=axes[idx, 1], fraction=0.046, pad=0.04)
+            plt.colorbar(im2, ax=axes[idx, 2], fraction=0.046, pad=0.04)
+            plt.colorbar(im3, ax=axes[idx, 3], fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.suptitle(f'Flow Matching Uncertainty Analysis ({num_samples} samples per example)', fontsize=16, y=1.02)
     return fig
 
 
@@ -394,14 +465,14 @@ def train_double_encoder_flow(model, triplet_creator, num_epochs=1, lr=1e-4, plo
         }, step=epoch + 1)
 
         # Generate and log reconstruction plots every 2 epochs
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % 2 == 0:
             print(f"Creating reconstruction plot for epoch {epoch + 1}...")
             try:
                 # Set model to eval mode for visualization
                 model.eval()
                 with torch.no_grad():
                     # Create a small batch for reconstruction visualization
-                    vis_batch_size = 4
+                    vis_batch_size = 8
                     (ground_truth, different_digit, same_digit, original_labels, different_labels,
                      ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
                         triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
@@ -425,16 +496,28 @@ def train_double_encoder_flow(model, triplet_creator, num_epochs=1, lr=1e-4, plo
                     wandb.log({"reconstructions": wandb.Image(reconstruction_fig)}, step=epoch + 1)
                     plt.close(reconstruction_fig)
 
-                    # Create generation test and log to wandb
-                    generation_fig = create_generation_test_for_wandb(
-                        model, triplet_creator, epoch + 1
-                    )
-                    wandb.log({"generation_test": wandb.Image(generation_fig)}, step=epoch + 1)
-                    plt.close(generation_fig)
+                    # Removed generation test logging
 
                 print(f"Successfully logged reconstruction plot for epoch {epoch + 1}")
             except Exception as e:
                 print(f"Error creating reconstruction plot: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Generate and log uncertainty analysis every 2 epochs
+        if (epoch + 1) % 2 == 0:
+            print(f"Creating uncertainty analysis for epoch {epoch + 1}...")
+            try:
+                uncertainty_fig = generate_uncertainty_analysis_v5(model, triplet_creator, num_samples=50, num_examples=8)
+                wandb.log({"uncertainty_analysis": wandb.Image(uncertainty_fig)}, step=epoch + 1)
+                # Also save to disk
+                uncertainty_filename = os.path.join(plots_dir, f"uncertainty_epoch_{epoch+1:03d}.png")
+                uncertainty_fig.savefig(uncertainty_filename, dpi=150, bbox_inches='tight')
+                wandb.log({"uncertainty_analysis_file": wandb.Image(uncertainty_filename)}, step=epoch + 1)
+                plt.close(uncertainty_fig)
+                print(f"Saved uncertainty plot to: {uncertainty_filename}")
+            except Exception as e:
+                print(f"Error creating uncertainty analysis: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -532,7 +615,7 @@ if __name__ == "__main__":
     # Model parameters - more conservative for stability
     number_latent_dim = NUMBER_ENCODER_LATENT_DIM
     filter_latent_dim = FILTER_ENCODER_LATENT_DIM
-    num_epochs = 1
+    num_epochs = 50
     learning_rate = 2e-4
     batch_size = 128
 
