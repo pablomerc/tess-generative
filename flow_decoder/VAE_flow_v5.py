@@ -450,8 +450,9 @@ def train_double_encoder_flow(model, triplet_creator, num_epochs=1, lr=1e-4, plo
 
     print(f"Training completed in {str(timedelta(seconds=int(time.time() - start_time)))}")
 
-    # Save the trained model
-    model_save_path = os.path.join(plots_dir, f"double_encoder_flow_model_{DATASET_TYPE}.pth")
+    # Save the trained model (timestamped filename)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    model_save_path = os.path.join(plots_dir, f"double_encoder_flow_model_{DATASET_TYPE}_epoch_{num_epochs}_{timestamp}.pth")
     torch.save({
         'model_state_dict': model.state_dict(),
         'train_losses': train_losses,
@@ -531,9 +532,13 @@ if __name__ == "__main__":
     # Model parameters - more conservative for stability
     number_latent_dim = NUMBER_ENCODER_LATENT_DIM
     filter_latent_dim = FILTER_ENCODER_LATENT_DIM
-    num_epochs = 200
-    learning_rate = 1e-4  # Reduced learning rate
-    batch_size = 256  # Smaller batch size for stability
+    num_epochs = 1
+    learning_rate = 2e-4
+    batch_size = 128
+
+    # Pretrained model options
+    load_pretrain = True
+    path_pretrain = "reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
 
     # Override the global BATCH_SIZE with our local batch_size
     BATCH_SIZE = batch_size
@@ -593,6 +598,17 @@ if __name__ == "__main__":
         t_embed_dim=40,  # Back to original size
         z_embed_dim=40
     ).to(device)
+
+    # Optionally load pretrained weights
+    if load_pretrain:
+        try:
+            print(f"\nLoading pretrained weights from: {path_pretrain}")
+            checkpoint = torch.load(path_pretrain, map_location=device)
+            state_dict = checkpoint.get('model_state_dict', checkpoint)
+            missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+            print(f"Loaded pretrained weights. Missing keys: {len(missing_keys)}, Unexpected keys: {len(unexpected_keys)}")
+        except Exception as e:
+            print(f"WARNING: Failed to load pretrained weights from {path_pretrain}: {e}")
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
@@ -719,6 +735,8 @@ if __name__ == "__main__":
     plt.show()
 
     print("Training and evaluation completed!")
+
+    # Model is saved inside train_double_encoder_flow; no extra save here.
 
     # Finish wandb run
     wandb.finish()
