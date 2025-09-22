@@ -686,8 +686,8 @@ if __name__ == "__main__":
     # Model parameters
     latent_dim = 32
     num_classes = 10
-    num_epochs = 100
-    learning_rate = 1e-3  # Reduced from 1e-3 to 1e-4 for augmented mnist
+    num_epochs = 10
+    learning_rate = 1e-3
     dataset_type = 'augmented_mnist'  # Change to 'augmented_mnist' to use augmented data
     batch_size = 128
 
@@ -697,7 +697,7 @@ if __name__ == "__main__":
 
     # Create folder for reconstruction plots
     import os
-    plots_dir = f"reconstruction_plots_v4_{dataset_type}_rotonly"
+    plots_dir = f"reconstruction_plots_v4_{dataset_type}"
     os.makedirs(plots_dir, exist_ok=True)
     print(f"Created plots directory: {plots_dir}")
 
@@ -709,7 +709,7 @@ if __name__ == "__main__":
     wandb.init(
         project="tess-generative",
         # entity="pmercader",  # Comment out to use personal space
-        name=f"conditional-autoencoder-unet-flow-{dataset_type}-v4-rotonly-reduced-lr",
+        name=f"conditional-autoencoder-unet-flow-{dataset_type}-v4",
         config={
             "latent_dim": latent_dim,
             "num_classes": num_classes,
