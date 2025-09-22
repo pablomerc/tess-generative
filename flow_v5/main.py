@@ -22,8 +22,7 @@ def main():
     parser.add_argument("--lr", type=float, default=cfg.LEARNING_RATE, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE, help="Batch size")
     parser.add_argument("--no_pretrain", action="store_true", help="Do not load pretrained weights")
-    parser.add_argument("--pretrain_path", type=str,
-                        default="reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth",
+    parser.add_argument("--pretrain_path", type=str, default=None,
                         help="Path to pretrained checkpoint")
     parser.add_argument("--plots_dir", type=str, default=None, help="Directory to save plots and checkpoints")
 
@@ -37,15 +36,17 @@ def main():
     import torch
     import wandb
     from datetime import datetime
+    import re
 
     # Configure from args (which default to cfg)
     dataset_type = args.dataset
     num_epochs = args.epochs
     learning_rate = args.lr
     batch_size = args.batch_size
-    load_pretrain = not args.no_pretrain
-    path_pretrain = args.pretrain_path
-    plots_dir = args.plots_dir or f"reconstruction_plots_v5_{dataset_type}"
+    load_pretrain = (not args.no_pretrain) if args.no_pretrain is not None else cfg.load_pretrain
+    path_pretrain = args.pretrain_path or cfg.path_pretrain
+    # Default to top-level folder for artifacts
+    plots_dir = args.plots_dir or "flow_models"
 
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 
@@ -65,13 +66,39 @@ def main():
     model = build_model(device=device)
 
     # Optional pretrain
-    if load_pretrain and os.path.exists(path_pretrain):
-        try:
-            checkpoint = torch.load(path_pretrain, map_location=device)
-            state_dict = checkpoint.get('model_state_dict', checkpoint)
-            model.load_state_dict(state_dict, strict=False)
-        except Exception as e:
-            print(f"WARNING: failed to load pretrained weights: {e}")
+    start_epoch = 0
+    if load_pretrain:
+        if os.path.exists(path_pretrain):
+            try:
+                print(f"Loading pretrained weights from: {path_pretrain}")
+                checkpoint = torch.load(path_pretrain, map_location=device)
+                state_dict = checkpoint.get('model_state_dict', checkpoint)
+                missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+                print(f"Loaded pretrained weights. Missing keys: {len(missing_keys)}, Unexpected keys: {len(unexpected_keys)}")
+                # Determine how many epochs were previously trained
+                if isinstance(checkpoint, dict):
+                    if 'epochs_trained' in checkpoint:
+                        start_epoch = int(checkpoint['epochs_trained'])
+                    elif 'train_losses' in checkpoint and isinstance(checkpoint['train_losses'], list):
+                        # fall back to the length of losses
+                        start_epoch = len(checkpoint['train_losses'])
+                if start_epoch == 0:
+                    # Try parsing from filename pattern ..._epoch_{N}_...
+                    m = re.search(r"_epoch_(\d+)_", os.path.basename(path_pretrain) or "")
+                    if m:
+                        try:
+                            start_epoch = int(m.group(1))
+                        except Exception:
+                            pass
+                print(f"Resuming training with start_epoch={start_epoch} (cumulative epoch counter)")
+            except Exception as e:
+                print(f"WARNING: Failed to load pretrained weights from {path_pretrain}: {e}")
+                print("Proceeding with training from scratch.")
+        else:
+            print(f"WARNING: Pretrain requested but checkpoint not found: {path_pretrain}")
+            print("Proceeding with training from scratch.")
+    else:
+        print("Training from scratch (pretrain disabled).")
 
     # wandb init
     wandb.init(
@@ -83,12 +110,13 @@ def main():
             "learning_rate": learning_rate,
             "batch_size": batch_size,
             "device": device,
+            "start_epoch": start_epoch,
         }
     )
     wandb.watch(model, log="all")
 
     # Train
-    train_v5(model, triplet_creator, num_epochs=num_epochs, lr=learning_rate, plots_dir=plots_dir)
+    train_v5(model, triplet_creator, num_epochs=num_epochs, lr=learning_rate, plots_dir=plots_dir, start_epoch=start_epoch)
 
     wandb.finish()
 

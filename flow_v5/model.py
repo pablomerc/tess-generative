@@ -4,7 +4,7 @@ from flow_v5 import config as cfg
 
 def build_model(device: str = None):
     """Construct DoubleEncoderFlowMatching with v5 defaults from config."""
-    from flow_decoder.VAE_flow_v5 import DoubleEncoderFlowMatching
+    from flow_decoder.double_encoder_flow_architecture import DoubleEncoderFlowMatching
 
     number_latent_dim = cfg.NUMBER_ENCODER_LATENT_DIM
     filter_latent_dim = cfg.FILTER_ENCODER_LATENT_DIM
