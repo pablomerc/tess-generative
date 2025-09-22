@@ -16,8 +16,8 @@ import torch.nn.functional as F
 import numpy as np
 from typing import List, Tuple, Optional
 
-# Import the flow matching decoder
-from carol_decoder import FlowMatchingDecoder
+# Import the flow matching decoder (relative import inside package)
+from .carol_decoder import FlowMatchingDecoder
 
 # Import double encoder components
 import sys
@@ -35,7 +35,7 @@ class DoubleEncoderFlowMatching(nn.Module):
     1. NumberEncoder: Encodes digit identity from same digit with different augmentation
     2. FilterEncoder: Encodes augmentation style from different digit with same augmentation
     3. FlowMatchingDecoder: Generates images using flow matching conditioned on combined latents
-    
+
     SIMPLIFIED: Assumes input data is already in [-1,1] range
     """
 
@@ -179,7 +179,7 @@ class DoubleEncoderFlowMatching(nn.Module):
     def decode_only(self, number_z, filter_z):
         """
         Only perform decoding (useful for generation)
-        
+
         Returns:
             torch.Tensor: Generated images in [-1,1] range
         """
@@ -187,16 +187,16 @@ class DoubleEncoderFlowMatching(nn.Module):
         samples_flat = self.decoder.sample(combined_z, 1)
         # Clamp to reasonable range to prevent extreme values
         samples_flat = torch.clamp(samples_flat, -3.0, 3.0)
-        
+
         return samples_flat.view(-1, 1, self.image_size, self.image_size)
 
     def to_visualization_range(self, x):
         """
         Convert from [-1,1] to [0,1] range for visualization
-        
+
         Args:
             x: Tensor in [-1,1] range
-            
+
         Returns:
             x: Tensor in [0,1] range
         """
@@ -223,7 +223,7 @@ def test_double_encoder_flow():
     print(f"  same_digit: {same_digit.shape}")
     print(f"  different_digit: {different_digit.shape}")
     print(f"  ground_truth: {ground_truth.shape}")
-    
+
     print(f"Input ranges:")
     print(f"  same_digit: [{same_digit.min().item():.3f}, {same_digit.max().item():.3f}]")
     print(f"  different_digit: [{different_digit.min().item():.3f}, {different_digit.max().item():.3f}]")
