@@ -1,0 +1,186 @@
+from typing import Tuple
+import time
+from datetime import datetime, timedelta
+import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+import wandb
+
+from flow_v5.utils import normalize_to_flow_range
+from flow_v5.viz import create_recon_figure, uncertainty_figure
+
+
+def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str) -> Tuple[list, list]:
+    """Training loop migrated for v5 modules."""
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+    max_grad_norm = 0.1
+
+    train_losses, test_losses = [], []
+    start_time = time.time()
+
+    device = next(model.parameters()).device
+    BATCH_SIZE = wandb.config.get("batch_size", 128)
+
+    for epoch in range(num_epochs):
+        epoch_start = time.time()
+        model.train()
+        train_loss = 0
+        num_batches = 0
+
+        total_train_samples = 60000
+        num_batches_epoch = total_train_samples // BATCH_SIZE
+        print(f"Epoch {epoch+1}/{num_epochs}: Processing {num_batches_epoch} batches ({total_train_samples} samples)")
+
+        for batch_idx in range(num_batches_epoch):
+            (ground_truth, different_digit, same_digit, original_labels, different_labels,
+             ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                triplet_creator.create_batch_triplets(BATCH_SIZE, dataset='train')
+
+            ground_truth = normalize_to_flow_range(ground_truth.to(device))
+            different_digit = normalize_to_flow_range(different_digit.to(device))
+            same_digit = normalize_to_flow_range(same_digit.to(device))
+            original_labels = original_labels.to(device)
+            different_labels = different_labels.to(device)
+
+            optimizer.zero_grad()
+
+            flow_loss, number_z, filter_z, number_mu, number_logvar, filter_mu, filter_logvar = \
+                model.get_flow_loss(same_digit, different_digit, ground_truth)
+
+            if torch.isnan(flow_loss) or torch.isinf(flow_loss) or flow_loss > 1000:
+                print(f"WARNING: Loss explosion detected at batch index {batch_idx}. Loss: {flow_loss.item()}")
+                print("Skipping this batch and continuing...")
+                continue
+
+            flow_loss.backward()
+
+            total_grad_norm = 0
+            max_grad = 0
+            nan_grads = 0
+            inf_grads = 0
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    grad_norm = param.grad.data.norm(2)
+                    total_grad_norm += grad_norm.item() ** 2
+                    max_grad = max(max_grad, param.grad.data.abs().max().item())
+                    if torch.isnan(param.grad).any():
+                        nan_grads += 1
+                    if torch.isinf(param.grad).any():
+                        inf_grads += 1
+
+            total_grad_norm = total_grad_norm ** 0.5
+
+            if batch_idx % 50 == 0:
+                print(f"Batch {batch_idx}: Loss={flow_loss.item():.4f}, GradNorm={total_grad_norm:.4f}, MaxGrad={max_grad:.4f}, NaN grads: {nan_grads}, Inf grads: {inf_grads}")
+
+            if total_grad_norm > 100 or max_grad > 50 or nan_grads > 0 or inf_grads > 0:
+                print(f"WARNING: Gradient explosion at batch {batch_idx}!")
+                optimizer.zero_grad()
+                continue
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+            optimizer.step()
+
+            train_loss += flow_loss.item()
+            num_batches += 1
+
+        avg_train_loss = train_loss / num_batches if num_batches > 0 else float('inf')
+
+        model.eval()
+        test_loss = 0
+        valid_test_batches = 0
+        with torch.no_grad():
+            total_val_samples = 10000
+            num_val_batches = total_val_samples // BATCH_SIZE
+            print(f"Validation: Processing {num_val_batches} batches ({total_val_samples} samples)")
+            for batch_idx in range(num_val_batches):
+                (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                    triplet_creator.create_batch_triplets(BATCH_SIZE, dataset='test')
+
+                ground_truth = normalize_to_flow_range(ground_truth.to(device))
+                different_digit = normalize_to_flow_range(different_digit.to(device))
+                same_digit = normalize_to_flow_range(same_digit.to(device))
+                original_labels = original_labels.to(device)
+                different_labels = different_labels.to(device)
+
+                flow_loss, _, _, _, _, _, _ = model.get_flow_loss(same_digit, different_digit, ground_truth)
+                if not (torch.isnan(flow_loss) or torch.isinf(flow_loss) or flow_loss > 1000):
+                    test_loss += flow_loss.item()
+                    valid_test_batches += 1
+
+        avg_test_loss = test_loss / valid_test_batches if valid_test_batches > 0 else float('inf')
+
+        train_losses.append(avg_train_loss)
+        test_losses.append(avg_test_loss)
+        scheduler.step(avg_train_loss)
+
+        wandb.log({
+            "epoch": epoch + 1,
+            "train_loss": avg_train_loss,
+            "test_loss": avg_test_loss,
+            "learning_rate": lr,
+        }, step=epoch + 1)
+
+        if (epoch + 1) % 2 == 0:
+            print(f"Creating reconstruction plot for epoch {epoch + 1}...")
+            try:
+                model.eval()
+                with torch.no_grad():
+                    vis_batch_size = 8
+                    (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                     ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                        triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
+
+                    ground_truth = normalize_to_flow_range(ground_truth.to(device))
+                    different_digit = normalize_to_flow_range(different_digit.to(device))
+                    same_digit = normalize_to_flow_range(same_digit.to(device))
+                    original_labels = original_labels.to(device)
+
+                    reconstruction = model.reconstruct(same_digit, different_digit)
+
+                    reconstruction_fig = create_recon_figure(
+                        ground_truth, different_digit, same_digit, reconstruction,
+                        original_labels, triplet_creator.class_names, epoch + 1
+                    )
+                    wandb.log({"reconstructions": wandb.Image(reconstruction_fig)}, step=epoch + 1)
+                    plt.close(reconstruction_fig)
+            except Exception as e:
+                print(f"Error creating reconstruction plot: {e}")
+
+        if (epoch + 1) % 2 == 0:
+            print(f"Creating uncertainty analysis for epoch {epoch + 1}...")
+            try:
+                fig = uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8)
+                wandb.log({"uncertainty_analysis": wandb.Image(fig)}, step=epoch + 1)
+                uncertainty_filename = os.path.join(plots_dir, f"uncertainty_epoch_{epoch+1:03d}.png")
+                fig.savefig(uncertainty_filename, dpi=150, bbox_inches='tight')
+                wandb.log({"uncertainty_analysis_file": wandb.Image(uncertainty_filename)}, step=epoch + 1)
+                plt.close(fig)
+                print(f"Saved uncertainty plot to: {uncertainty_filename}")
+            except Exception as e:
+                print(f"Error creating uncertainty analysis: {e}")
+
+        epoch_time = time.time() - epoch_start
+        total_time = time.time() - start_time
+        print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {avg_train_loss:.4f}, Test Loss: {avg_test_loss:.4f}, Time: {epoch_time:.1f}s, Total: {str(timedelta(seconds=int(total_time)))}')
+
+    print(f"Training completed in {str(timedelta(seconds=int(time.time() - start_time)))}")
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    model_save_path = os.path.join(plots_dir, f"double_encoder_flow_model_epoch_{num_epochs}_{timestamp}.pth")
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'train_losses': train_losses,
+        'test_losses': test_losses,
+        'config': {
+            'number_latent_dim': model.number_latent_dim,
+            'filter_latent_dim': model.filter_latent_dim,
+            'image_size': model.image_size,
+        }
+    }, model_save_path)
+    print(f"Model saved to: {model_save_path}")
+
+    return train_losses, test_losses
