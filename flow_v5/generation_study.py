@@ -32,18 +32,18 @@ from flow_v5.utils import normalize_to_flow_range, to_visualization_range
 
 # path_pretrain = "../flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
 # path_pretrain = "flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
-path_pretrain='flow_models/mnist/double-encoder-flow-mnist-v5-20250922_105826/double_encoder_flow_model_mnist_epoch_50_20250922_144024.pth'
+path_pretrain='flow_v5/flow_models/mnist/double-encoder-flow-mnist-v5-20250922_105826/double_encoder_flow_model_mnist_epoch_50_20250922_144024.pth'
 # generate_umaps = False
 
-n_examples = 10
-n_samples = 11
+n_examples = 100
+n_samples = 100
 n_umap = 100
 output_root='flow_models'
-random_seed=42
+random_seed=43
 dataset_type='mnist'
 train_or_test='test'
-fixed_encoding = True
-test_determinism = True
+fixed_encoding = False
+test_determinism = False
 plot_samples = False
 plot_umap = False
 

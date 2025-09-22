@@ -19,5 +19,17 @@ from config import *  # noqa: F401,F403
 # Example: Different default dataset for v5
 # DATASET_TYPE = os.environ.get('FLOW_V5_DATASET', DATASET_TYPE)
 
-# You can also override integration steps or architecture defaults here if needed
-# For now, we keep architecture choices in code to avoid duplicating too much config.
+DATASET_TYPE='mnist'
+# Training hyperparameters
+BATCH_SIZE = 128  # Reduced for quick test, use 128
+NUM_EPOCHS = 50   # Just 1 epoch for quick test, use 50
+LEARNING_RATE = 2e-4
+
+
+# Pretrained model options
+load_pretrain = True
+path_pretrain = "../flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
+
+# Model save settings
+SAVE_INTERVAL = 5  # Save model every N epochsc - 10
+VISUALIZATION_INTERVAL = 2  # Show visualizations every N epochs - 10

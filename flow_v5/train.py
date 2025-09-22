@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import wandb
 
 from flow_v5.utils import normalize_to_flow_range
-from flow_v5.viz import create_recon_figure, uncertainty_figure
+from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples
 
 
 def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0) -> Tuple[list, list]:
@@ -134,11 +134,22 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
         test_losses.append(avg_test_loss)
         scheduler.step(avg_train_loss)
 
+        # Compute uncertainty metric from sampling and log to wandb
+        try:
+            sample_std_mean, sample_std_std = calculate_mean_std_of_samples(
+                model, triplet_creator, num_samples=64, num_examples=16
+            )
+        except Exception as e:
+            print(f"Error computing sample std metrics: {e}")
+            sample_std_mean, sample_std_std = float('nan'), float('nan')
+
         wandb.log({
             "epoch": total_epoch,
             "train_loss": avg_train_loss,
             "test_loss": avg_test_loss,
             "learning_rate": lr,
+            "sample_std_mean": sample_std_mean,
+            "sample_std_std": sample_std_std,
         }, step=total_epoch)
 
         if (epoch + 1) % 2 == 0:

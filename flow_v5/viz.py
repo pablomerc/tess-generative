@@ -124,3 +124,39 @@ def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8):
     plt.tight_layout()
     plt.suptitle(f'Flow Matching Uncertainty Analysis ({num_samples} samples per example)', fontsize=16, y=1.02)
     return fig
+
+
+def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_examples=16):
+    """Calculate the mean and std of samples from the model.
+    Inputs:
+    - model: the model to use
+    - triplet_creator: the triplet creator to use
+    - num_samples: the number of samples to generate
+    - num_examples: the number of examples to process
+    Outputs:
+    - mean_std_mean: the mean of the mean stds
+    - mean_std_std: the std of the mean stds
+    """
+    model.eval()
+    device = next(model.parameters()).device
+    with torch.no_grad():
+        (
+        ground_truth_batch, different_digit_batch, same_digit_batch,
+        original_labels, different_labels, ground_truth_rotations,
+        ground_truth_scales, same_digit_rotations, same_digit_scales
+        ) = triplet_creator.create_batch_triplets(batch_size=num_examples, dataset='test')
+
+        ground_truth_batch = normalize_to_flow_range(ground_truth_batch.to(device))
+        different_digit_batch = normalize_to_flow_range(different_digit_batch.to(device))
+        same_digit_batch = normalize_to_flow_range(same_digit_batch.to(device))
+        mean_std_list = []
+
+        for idx in range(num_examples):
+            gt = ground_truth_batch[idx:idx+1]
+            sd = same_digit_batch[idx:idx+1]
+            dd = different_digit_batch[idx:idx+1]
+
+            samples = model.sample(sd, dd, num_samples=num_samples)
+            mean_std = samples.std(dim=0).mean()
+            mean_std_list.append(mean_std.item())
+    return float(np.mean(mean_std_list)), float(np.std(mean_std_list))
