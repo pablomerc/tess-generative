@@ -63,7 +63,7 @@ def create_recon_figure(ground_truth, different_digit, same_digit, reconstructio
     return fig
 
 
-def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8):
+def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, fixed_encoding=False):
     """Analyze uncertainty by sampling multiple reconstructions per example."""
     model.eval()
 
@@ -86,17 +86,19 @@ def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8):
             sd = same_digit[idx:idx+1]
             dd = different_digit[idx:idx+1]
 
-            combined_z, _, _, _, _, _, _ = model.forward(sd, dd)
+            if fixed_encoding:
+                combined_z, _, _, _, _, _, _ = model.forward(sd, dd)
+                samples_list = []
+                for _ in range(num_samples):
+                    sample_flat = model.decoder.sample(combined_z, 1)
+                    sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
+                    samples_list.append(sample_img)
+                samples = torch.stack(samples_list, dim=0)  # [N,1,1,H,W]
+            else:
+                samples = model.sample(sd, dd, num_samples=num_samples)  # [N,1,1,H,W]
 
-            samples = []
-            for _ in range(num_samples):
-                sample_flat = model.decoder.sample(combined_z, 1)
-                sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
-                samples.append(sample_img.cpu().numpy())
-
-            samples = np.stack(samples, axis=0)
-            mean_img = samples.mean(axis=0)[0, 0]
-            std_img = samples.std(axis=0)[0, 0]
+            mean_img = samples.mean(dim=0)[0, 0].cpu().numpy()
+            std_img = samples.std(dim=0)[0, 0].cpu().numpy()
 
             original_img = gt[0, 0].cpu().numpy()
             diff_img = np.abs(original_img - mean_img)
