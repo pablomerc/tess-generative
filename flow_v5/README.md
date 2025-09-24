@@ -17,7 +17,7 @@ python -m flow_v5.main --dataset mnist --epochs 50 --lr 2e-4 --batch_size 128
 - `--batch_size`: batch size (default: 128)
 - `--no_pretrain`: do not load pretrained weights
 - `--pretrain_path`: path to checkpoint to load (default matches existing script)
-- `--plots_dir`: directory for plots/checkpoints (default: `reconstruction_plots_v5_<dataset>`)
+- `--plots_dir`: directory for plots/checkpoints (default: top-level `flow_models/`)
 
 ## Notes
 - This is a thin wrapper around your current training flow. All original files remain intact.
