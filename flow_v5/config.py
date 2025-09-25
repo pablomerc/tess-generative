@@ -22,14 +22,17 @@ from config import *  # noqa: F401,F403
 DATASET_TYPE='mnist'
 # Training hyperparameters
 BATCH_SIZE = 128  # Reduced for quick test, use 128
-NUM_EPOCHS = 50   # Just 1 epoch for quick test, use 50
+NUM_EPOCHS = 250   # Just 1 epoch for quick test, use 50
 LEARNING_RATE = 2e-4
 
 
 # Pretrained model options
-load_pretrain = True
-path_pretrain = "../flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
+load_pretrain = False
+# path_pretrain = "../flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
 
 # Model save settings
-SAVE_INTERVAL = 5  # Save model every N epochsc - 10
-VISUALIZATION_INTERVAL = 2  # Show visualizations every N epochs - 10
+SAVE_INTERVAL = 50  # Save model every N epochsc - 10
+VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs - 10
+
+# Model options
+USE_FILM = True

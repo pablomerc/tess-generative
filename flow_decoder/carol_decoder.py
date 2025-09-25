@@ -95,8 +95,9 @@ class FourierEncoder(nn.Module):
 
 class ResidualLayer(nn.Module):
     """Residual block for U-Net"""
-    def __init__(self, channels: int, time_embed_dim: int, z_embed_dim: int):
+    def __init__(self, channels: int, time_embed_dim: int, z_embed_dim: int, film: bool = True):
         super().__init__()
+        self.film_bool = film
         self.block1 = nn.Sequential(
             nn.SiLU(),
             nn.BatchNorm2d(channels),
@@ -107,18 +108,21 @@ class ResidualLayer(nn.Module):
             nn.BatchNorm2d(channels),
             nn.Conv2d(channels, channels, kernel_size=3, padding=1)
         )
-        # Time adapter
-        self.time_adapter = nn.Sequential(
-            nn.Linear(time_embed_dim, time_embed_dim),
-            nn.SiLU(),
-            nn.Linear(time_embed_dim, channels)
-        )
-        # Conditioning adapter
-        self.z_adapter = nn.Sequential(
-            nn.Linear(z_embed_dim, z_embed_dim),
-            nn.SiLU(),
-            nn.Linear(z_embed_dim, channels)
-        )
+        if self.film_bool:
+            self.film_layer = FiLMLayer(channels, time_embed_dim + z_embed_dim)
+        else:
+            # Time adapter
+            self.time_adapter = nn.Sequential(
+                nn.Linear(time_embed_dim, time_embed_dim),
+                nn.SiLU(),
+                nn.Linear(time_embed_dim, channels)
+            )
+            # Conditioning adapter
+            self.z_adapter = nn.Sequential(
+                nn.Linear(z_embed_dim, z_embed_dim),
+                nn.SiLU(),
+                nn.Linear(z_embed_dim, channels)
+            )
 
     #     # Initialize weights for better stability
     #     self._initialize_weights()
@@ -150,35 +154,35 @@ class ResidualLayer(nn.Module):
         # # Clamp to prevent extreme values
         # x = torch.clamp(x, -10.0, 10.0)
 
-        # Add time embedding with scaling
-        t_embed_out = self.time_adapter(t_embed).unsqueeze(-1).unsqueeze(-1)
-        x = x + t_embed_out
+        if self.film_bool:
+            condition = torch.cat([t_embed, z_embed], dim=1)
+            x = self.film_layer(x, condition)
+        else:
+            # Add time embedding with scaling
+            t_embed_out = self.time_adapter(t_embed).unsqueeze(-1).unsqueeze(-1)
+            x = x + t_embed_out
 
-        # Add conditioning embedding with scaling
-        z_embed_out = self.z_adapter(z_embed).unsqueeze(-1).unsqueeze(-1)
-        x = x + z_embed_out
+            # Add conditioning embedding with scaling
+            z_embed_out = self.z_adapter(z_embed).unsqueeze(-1).unsqueeze(-1)
+            x = x + z_embed_out
 
         # Second conv block
         x = self.block2(x)
 
-        # Clamp to prevent extreme values
-        # x = torch.clamp(x, -10.0, 10.0)
-
         # Add back residual
         x = x + res
-
-        # Final clamp
-        # x = torch.clamp(x, -5.0, 5.0)
 
         return x
 
 
 class Encoder(nn.Module):
     """U-Net encoder block"""
-    def __init__(self, channels_in: int, channels_out: int, num_residual_layers: int, t_embed_dim: int, z_embed_dim: int):
+    def __init__(self, channels_in: int, channels_out: int, num_residual_layers: int,
+                 t_embed_dim: int, z_embed_dim: int, use_film: bool = True):
         super().__init__()
         self.res_blocks = nn.ModuleList([
-            ResidualLayer(channels_in, t_embed_dim, z_embed_dim) for _ in range(num_residual_layers)
+            ResidualLayer(channels_in, t_embed_dim, z_embed_dim, film=use_film)
+            for _ in range(num_residual_layers)
         ])
         self.downsample = nn.Conv2d(channels_in, channels_out, kernel_size=3, stride=2, padding=1)
 
@@ -194,10 +198,12 @@ class Encoder(nn.Module):
 
 class Midcoder(nn.Module):
     """U-Net middle block"""
-    def __init__(self, channels: int, num_residual_layers: int, t_embed_dim: int, z_embed_dim: int):
+    def __init__(self, channels: int, num_residual_layers: int, t_embed_dim: int,
+                 z_embed_dim: int, use_film: bool = True):
         super().__init__()
         self.res_blocks = nn.ModuleList([
-            ResidualLayer(channels, t_embed_dim, z_embed_dim) for _ in range(num_residual_layers)
+            ResidualLayer(channels, t_embed_dim, z_embed_dim, film=use_film)
+            for _ in range(num_residual_layers)
         ])
 
     def forward(self, x: torch.Tensor, t_embed: torch.Tensor, z_embed: torch.Tensor) -> torch.Tensor:
@@ -208,14 +214,16 @@ class Midcoder(nn.Module):
 
 class Decoder(nn.Module):
     """U-Net decoder block"""
-    def __init__(self, channels_in: int, channels_out: int, num_residual_layers: int, t_embed_dim: int, z_embed_dim: int):
+    def __init__(self, channels_in: int, channels_out: int, num_residual_layers: int,
+                 t_embed_dim: int, z_embed_dim: int, use_film: bool = True):
         super().__init__()
         self.upsample = nn.Sequential(
             nn.Upsample(scale_factor=2, mode='bilinear'),
             nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1)
         )
         self.res_blocks = nn.ModuleList([
-            ResidualLayer(channels_out, t_embed_dim, z_embed_dim) for _ in range(num_residual_layers)
+            ResidualLayer(channels_out, t_embed_dim, z_embed_dim, film=use_film)
+            for _ in range(num_residual_layers)
         ])
 
     def forward(self, x: torch.Tensor, t_embed: torch.Tensor, z_embed: torch.Tensor) -> torch.Tensor:
@@ -234,11 +242,12 @@ class UNetVelocityField(VelocityField):
 
     def __init__(self, input_dim: int, output_dim: int, image_size: int = 28,
                  channels: List[int] = [32, 64, 128], num_residual_layers: int = 2,
-                 t_embed_dim: int = 40, z_embed_dim: int = 40):
+                 t_embed_dim: int = 40, z_embed_dim: int = 40, use_film: bool = True):
         super().__init__()
 
         self.image_size = image_size
         self.output_dim = output_dim
+        self.use_film = use_film
 
         # Verify output_dim matches image dimensions
         expected_dim = image_size * image_size
@@ -266,12 +275,15 @@ class UNetVelocityField(VelocityField):
         encoders = []
         decoders = []
         for (curr_c, next_c) in zip(channels[:-1], channels[1:]):
-            encoders.append(Encoder(curr_c, next_c, num_residual_layers, t_embed_dim, z_embed_dim))
-            decoders.append(Decoder(next_c, curr_c, num_residual_layers, t_embed_dim, z_embed_dim))
+            encoders.append(Encoder(curr_c, next_c, num_residual_layers, t_embed_dim, z_embed_dim,
+                                    use_film=use_film))
+            decoders.append(Decoder(next_c, curr_c, num_residual_layers, t_embed_dim, z_embed_dim,
+                                    use_film=use_film))
         self.encoders = nn.ModuleList(encoders)
         self.decoders = nn.ModuleList(reversed(decoders))
 
-        self.midcoder = Midcoder(channels[-1], num_residual_layers, t_embed_dim, z_embed_dim)
+        self.midcoder = Midcoder(channels[-1], num_residual_layers, t_embed_dim, z_embed_dim,
+                                 use_film=use_film)
 
         # Final convolution
         self.final_conv = nn.Conv2d(channels[0], 1, kernel_size=3, padding=1)
@@ -368,10 +380,12 @@ class FlowMatchingDecoder(BaseDecoder):
         unet_channels: List[int] = [32, 64, 128],
         num_residual_layers: int = 2,
         t_embed_dim: int = 40,
-        z_embed_dim: int = 40
+        z_embed_dim: int = 40,
+        use_film: bool = True
     ):
         super().__init__(input_dim, output_dim)
         self.n_integration_steps = n_integration_steps
+        self.use_film = use_film
 
         # Initialize velocity field based on type
         if velocity_field_type == "mlp":
@@ -379,7 +393,8 @@ class FlowMatchingDecoder(BaseDecoder):
         elif velocity_field_type == "unet":
             self.vector_field = UNetVelocityField(
                 input_dim, output_dim, image_size, unet_channels,
-                num_residual_layers, t_embed_dim, z_embed_dim
+                num_residual_layers, t_embed_dim, z_embed_dim,
+                use_film=use_film
             )
         else:
             raise ValueError(f"Unknown velocity_field_type: {velocity_field_type}. Supported: 'mlp', 'unet'")
@@ -487,3 +502,27 @@ class NormalizingFlowDecoder(BaseDecoder):
         return dist.log_prob(x)
     def get_loss(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         return -self.log_prob(x=x, z=z).mean()
+
+
+
+class FiLMLayer(nn.Module):
+    "Feature-wise Linear Modulation layer"
+    def __init__(self,num_channels,condition_dim):
+        super().__init__()
+        self.scale_shift=nn.Linear(condition_dim, num_channels*2)
+
+    def forward(self, x, condition):
+        scale_shift=self.scale_shift(condition)
+        scale,shift=scale_shift.chunk(2,dim=-1)
+
+        expand_dims = x.dim() - scale.dim()
+        if expand_dims < 0:
+            raise ValueError(
+                f"Condition tensor has higher rank than input (x.dim()={x.dim()}, condition.dim()={scale.dim()})"
+            )
+        if expand_dims > 0:
+            view_shape = scale.shape + (1,) * expand_dims
+            scale = scale.view(*view_shape)
+            shift = shift.view(*view_shape)
+
+        return x*(1+scale)+shift

@@ -21,12 +21,16 @@ def main():
     parser.add_argument("--epochs", type=int, default=cfg.NUM_EPOCHS, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=cfg.LEARNING_RATE, help="Learning rate")
     parser.add_argument("--batch_size", type=int, default=cfg.BATCH_SIZE, help="Batch size")
-    parser.add_argument("--no_pretrain", action="store_true", help="Do not load pretrained weights")
     parser.add_argument("--pretrain_path", type=str, default=None,
                         help="Path to pretrained checkpoint")
     parser.add_argument("--plots_dir", type=str, default=None, help="Directory to save plots and checkpoints")
-
+    parser.add_argument("--film", dest="use_film", action="store_true",
+                        help="Enable FiLM layers in the decoder")
+    parser.add_argument("--no_film", dest="use_film", action="store_false",
+                        help="Disable FiLM layers in the decoder")
+    parser.set_defaults(use_film=cfg.USE_FILM)
     args = parser.parse_args()
+
 
     # Import helpers
     from flow_v5.data import make_triplet_creator
@@ -43,10 +47,12 @@ def main():
     num_epochs = args.epochs
     learning_rate = args.lr
     batch_size = args.batch_size
-    load_pretrain = (not args.no_pretrain) if args.no_pretrain is not None else cfg.load_pretrain
-    path_pretrain = args.pretrain_path or cfg.path_pretrain
+    load_pretrain = cfg.load_pretrain
+    if load_pretrain:
+        path_pretrain = args.pretrain_path or cfg.path_pretrain
     # Default to top-level folder for artifacts
     plots_dir = args.plots_dir or "flow_models"
+    use_film = args.use_film
 
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 
@@ -63,7 +69,13 @@ def main():
     number_latent_dim = cfg.NUMBER_ENCODER_LATENT_DIM
     filter_latent_dim = cfg.FILTER_ENCODER_LATENT_DIM
 
-    model = build_model(device=device)
+    model = build_model(device=device, use_film=use_film)
+
+    # Print number of parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Model parameters: total={total_params:,} trainable={trainable_params:,}")
+
 
     # Optional pretrain
     start_epoch = 0
@@ -111,6 +123,7 @@ def main():
             "batch_size": batch_size,
             "device": device,
             "start_epoch": start_epoch,
+            "use_film": use_film,
         }
     )
     wandb.watch(model, log="all")

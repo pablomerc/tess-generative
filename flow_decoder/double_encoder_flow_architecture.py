@@ -49,7 +49,8 @@ class DoubleEncoderFlowMatching(nn.Module):
                  unet_channels=[32, 64, 128],
                  num_residual_layers=2,
                  t_embed_dim=40,
-                 z_embed_dim=40):
+                 z_embed_dim=40,
+                 use_film: bool = True):
         super().__init__()
 
         self.number_latent_dim = number_latent_dim
@@ -57,6 +58,7 @@ class DoubleEncoderFlowMatching(nn.Module):
         self.combined_latent_dim = number_latent_dim + filter_latent_dim
         self.image_size = image_size
         self.image_dim = image_size * image_size
+        self.use_film = use_film
 
         # Double encoder components
         self.number_encoder = NumberEncoder(number_latent_dim)
@@ -75,7 +77,8 @@ class DoubleEncoderFlowMatching(nn.Module):
             unet_channels=unet_channels,
             num_residual_layers=num_residual_layers,
             t_embed_dim=t_embed_dim,
-            z_embed_dim=z_embed_dim
+            z_embed_dim=z_embed_dim,
+            use_film=use_film
         )
 
     def forward(self, same_digit, different_digit):
