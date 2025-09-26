@@ -281,6 +281,123 @@ class TripletCreator:
         return (ground_truth_batch, different_digit_batch, same_digit_batch,
                 original_labels, different_labels, ground_truth_rotations,
                 ground_truth_scales, same_digit_rotations, same_digit_scales)
+#
+    def create_multi_triplet(
+            self,
+            dataset: str = 'train',
+            num_filter_augs: int = 2,
+            num_number_augs: int = 2,
+                             ):
+        """ Produce one anchor plus multiple augmentations for the filter and number encoders respectively.
+        Returns a dict so downstream callers can inspect metadata without
+        positional juggling.
+
+        Current version will be limited to 1<=N<=5
+        TODO: Make it return a random number of augmentations for each encoder, between 1 and N
+        """
+
+        if not (1 <= num_filter_augs <= 5 and 1 <= num_number_augs <= 5):
+            raise ValueError('num_filter_augs and num_number_augs mut be in [1,5]')
+
+        # Select dataset
+        mnist_dataset = self.train_dataset if dataset == 'train' else self.test_dataset
+
+        # Sample original digit
+        original_idx = random.randint(0, len(mnist_dataset) - 1)
+        original_image, original_label = mnist_dataset[original_idx]
+
+
+
+        # Choose rotation angles and scale factors
+        ground_truth_angle, ground_truth_scale = self.get_random_transform_params()
+
+
+        # Create the augmentations
+        ground_truth_transform = self.augmentation_transforms[(ground_truth_angle, ground_truth_scale)]
+        # Create the images
+
+        anchor = ground_truth_transform(original_image)
+
+        # Augmentations with same filter
+        same_filter_augs, same_filter_params, filter_labels = [],[],[]
+        for _ in range(num_filter_augs):
+            # Sample different digit (different label)
+            different_idx = random.randint(0, len(mnist_dataset) - 1)
+            different_image, different_label = mnist_dataset[different_idx]
+
+            # Keep sampling until we get a different label
+            while different_label == original_label:
+                different_idx = random.randint(0, len(mnist_dataset) - 1)
+                different_image, different_label = mnist_dataset[different_idx]
+
+            same_filter_augs.append(ground_truth_transform(different_image))
+            same_filter_params.append((ground_truth_angle, ground_truth_scale))
+            filter_labels.append(different_label)
+
+        # Augmentations wtih same digit
+        same_num_augs, same_num_params = [],[]
+        for _ in range(num_number_augs):
+            #Sample a new angle and scale
+            different_rotation_angle = self.get_different_rotation_angle(ground_truth_angle)
+            different_scale_factor = self.get_different_scale_factor(ground_truth_scale)
+            different_rotation_transform = self.augmentation_transforms[(different_rotation_angle, different_scale_factor)]
+
+            same_num_augs.append(different_rotation_transform(original_image))
+            same_num_params.append((different_rotation_angle, different_scale_factor))
+
+
+        return {
+            "anchor": anchor,
+            "same_filter_augments": torch.stack(same_filter_augs),
+            "same_number_augments": torch.stack(same_num_augs),
+            "anchor_label": original_label,
+            "filter_labels": filter_labels,
+            "anchor_params": (ground_truth_angle, ground_truth_scale),
+            "filter_params": same_filter_params,
+            "number_params": same_num_params,
+        }
+
+    def create_batch_multi_triplets(self, batch_size=BATCH_SIZE, dataset='train', num_filter_augs=2, num_number_augs=2):
+    """Create a batch of multi-triplets
+    Returns
+    Dictionary
+    """
+    batch_anchors = []
+    batch_same_filter_augments = []
+    batch_same_number_augments = []
+    batch_anchor_labels = []
+    batch_same_filter_labels = []
+    batch_anchor_params = []
+    batch_same_filter_params = []
+    batch_same_number_params = []
+
+    for _ in range(batch_size):
+        sample = self.create_multi_triplet(
+            dataset=dataset,
+            num_filter_augs=num_filter_augs,
+            num_number_augs=num_number_augs
+        )
+
+        batch_anchors.append(sample["anchor"])
+        batch_same_filter_augments.append(sample["same_filter_augments"])
+        batch_same_number_augments.append(sample["same_number_augments"])
+        batch_anchor_labels.append(sample["anchor_label"])
+        batch_filter_labels.append(sample["filter_labels"])
+        batch_anchor_params.append(sample["anchor_params"])
+        batch_filter_params.append(sample["filter_params"])
+        batch_number_params.append(sample["number_params"])
+
+    return {
+        "batch_anchors": torch.stack(batch_anchors), # [B, C, H, W]
+        "batch_same_filter_augments": torch.stack(batch_same_filter_augments), # [B, F, C, H, W]
+        "batch_same_number_augments": torch.stack(batch_same_number_augments), # [B, N, C, H, W]
+        "batch_anchor_labels": torch.tensor(batch_anchor_labels), # [B]
+        "batch_filter_labels": torch.tensor(batch_filter_labels), # [B, F]
+        "batch_anchor_params": torch.tensor(batch_anchor_params), # [B, 2]
+        "batch_filter_params": torch.tensor(batch_filter_params), # [B, N, 2]
+        "batch_number_params": torch.tensor(batch_number_params), # [B, N, 2]
+    }
+
 
     def get_dataset_info(self):
         """Get information about the loaded dataset"""
@@ -464,6 +581,135 @@ def test_scale_configurations():
     print("\nScale configuration tests completed successfully!")
 
 
+def test_multi_triplet_creation():
+    """Test function for create_multi_triplet with N=5 and visualization"""
+    import matplotlib.pyplot as plt
+
+    print("Testing create_multi_triplet function with N=5...")
+
+    # Create triplet creator
+    creator = TripletCreator(dataset_type='mnist')
+    creator.get_dataset_info()
+
+    # Test with N=2 for both filter and number augmentations
+    num_filter_augs = 5
+    num_number_augs = 5
+
+    print(f"\nCreating multi-triplet with {num_filter_augs} filter augmentations and {num_number_augs} number augmentations...")
+
+    # Create the multi-triplet
+    result = creator.create_multi_triplet(
+        dataset='train',
+        num_filter_augs=num_filter_augs,
+        num_number_augs=num_number_augs
+    )
+
+    # Print result structure
+    print("\nResult structure:")
+    for key, value in result.items():
+        if isinstance(value, torch.Tensor):
+            print(f"  {key}: tensor with shape {value.shape}")
+        else:
+            print(f"  {key}: {value}")
+
+    # Verify shapes
+    print(f"\nShape verification:")
+    print(f"  Anchor shape: {result['anchor'].shape}")
+    print(f"  Same filter augments shape: {result['same_filter_augments'].shape}")
+    print(f"  Same number augments shape: {result['same_number_augments'].shape}")
+    print(f"  Number of filter labels: {len(result['filter_labels'])}")
+    print(f"  Number of filter params: {len(result['filter_params'])}")
+    print(f"  Number of number params: {len(result['number_params'])}")
+
+    # Create visualization
+    # Use max + 1 to accommodate the anchor in the first row
+    max_cols = max(num_filter_augs, num_number_augs)
+    fig, axes = plt.subplots(3, max_cols, figsize=(15, 9))
+    fig.suptitle(f'Multi-Triplet Creation Test (N={num_filter_augs})', fontsize=16)
+
+    # Plot anchor (only in first column of first row)
+    axes[0, 0].imshow(result['anchor'].squeeze(), cmap='gray')
+    axes[0, 0].set_title(f'Anchor\nLabel: {creator.class_names[result["anchor_label"]]}\n'
+                        f'Rotation: {result["anchor_params"][0]}°, Scale: {result["anchor_params"][1]}')
+    axes[0, 0].axis('off')
+
+    # Hide unused columns in the first row (anchor row)
+    for i in range(1, max_cols):
+        axes[0, i].axis('off')
+
+    # Plot same filter augmentations (different digits, same transformation)
+    for i in range(num_filter_augs):
+        axes[1, i].imshow(result['same_filter_augments'][i].squeeze(), cmap='gray')
+        filter_label = result['filter_labels'][i]
+        filter_params = result['filter_params'][i]
+        axes[1, i].set_title(f'Same Filter Aug {i+1}\nLabel: {creator.class_names[filter_label]}\n'
+                            f'Rotation: {filter_params[0]}°, Scale: {filter_params[1]}')
+        axes[1, i].axis('off')
+
+    # Hide unused columns in the second row (filter augmentations)
+    for i in range(num_filter_augs, max_cols):
+        axes[1, i].axis('off')
+
+    # Plot same number augmentations (same digit, different transformations)
+    for i in range(num_number_augs):
+        axes[2, i].imshow(result['same_number_augments'][i].squeeze(), cmap='gray')
+        number_params = result['number_params'][i]
+        axes[2, i].set_title(f'Same Number Aug {i+1}\nLabel: {creator.class_names[result["anchor_label"]]}\n'
+                            f'Rotation: {number_params[0]}°, Scale: {number_params[1]}')
+        axes[2, i].axis('off')
+
+    # Hide unused columns in the third row (number augmentations)
+    for i in range(num_number_augs, max_cols):
+        axes[2, i].axis('off')
+
+    # Add row labels
+    axes[0, 0].text(-0.1, 0.5, 'Anchor', transform=axes[0, 0].transAxes,
+                    rotation=90, va='center', ha='center', fontsize=12, fontweight='bold')
+    axes[1, 0].text(-0.1, 0.5, 'Same Filter\n(Different Digits)', transform=axes[1, 0].transAxes,
+                    rotation=90, va='center', ha='center', fontsize=12, fontweight='bold')
+    axes[2, 0].text(-0.1, 0.5, 'Same Number\n(Different Transforms)', transform=axes[2, 0].transAxes,
+                    rotation=90, va='center', ha='center', fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Test multiple samples
+    print(f"\nTesting multiple samples...")
+    for i in range(3):
+        result = creator.create_multi_triplet(
+            dataset='train',
+            num_filter_augs=num_filter_augs,
+            num_number_augs=num_number_augs
+        )
+        print(f"Sample {i+1}: Anchor label {result['anchor_label']}, "
+              f"Filter labels {result['filter_labels']}, "
+              f"Anchor params {result['anchor_params']}")
+
+    # Test edge cases
+    print(f"\nTesting edge cases...")
+
+    # Test with N=1
+    result_n1 = creator.create_multi_triplet(
+        dataset='train',
+        num_filter_augs=1,
+        num_number_augs=1
+    )
+    print(f"N=1: Filter augs shape {result_n1['same_filter_augments'].shape}, "
+          f"Number augs shape {result_n1['same_number_augments'].shape}")
+
+    # Test with N=5 (maximum)
+    result_n5 = creator.create_multi_triplet(
+        dataset='train',
+        num_filter_augs=5,
+        num_number_augs=5
+    )
+    print(f"N=5: Filter augs shape {result_n5['same_filter_augments'].shape}, "
+          f"Number augs shape {result_n5['same_number_augments'].shape}")
+
+    print("\nMulti-triplet creation test completed successfully!")
+
+
 if __name__ == "__main__":
     test_triplet_creation()
     test_scale_configurations()
+    test_multi_triplet_creation()
