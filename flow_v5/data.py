@@ -10,3 +10,12 @@ def make_triplet_creator(dataset_type: str = None):
     from triplet_creation import TripletCreator
     ds = dataset_type or cfg.DATASET_TYPE
     return TripletCreator(dataset_type=ds)
+
+def make_multi_triplet_creator(dataset_type: str = None):
+    """Factory for MultiTripletCreator using v5 config defaults.
+
+    Imports the canonical MultiTripletCreator from the shared module.
+    """
+    from triplet_creation import MultiTripletCreator
+    ds = dataset_type or cfg.DATASET_TYPE
+    return MultiTripletCreator(dataset_type=ds)
