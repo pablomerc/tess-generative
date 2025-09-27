@@ -509,7 +509,14 @@ class FiLMLayer(nn.Module):
     "Feature-wise Linear Modulation layer"
     def __init__(self,num_channels,condition_dim):
         super().__init__()
-        self.scale_shift=nn.Linear(condition_dim, num_channels*2)
+        # self.scale_shift=nn.Linear(condition_dim, num_channels*2)
+        hidden=max(condition_dim,num_channels)
+        self.scale_shift = nn.Sequential(
+                nn.Linear(condition_dim, hidden),
+                nn.SiLU(),
+                nn.Linear(hidden, num_channels*2)
+            )
+
 
     def forward(self, x, condition):
         scale_shift=self.scale_shift(condition)
