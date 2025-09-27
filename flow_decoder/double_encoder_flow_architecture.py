@@ -17,7 +17,11 @@ import numpy as np
 from typing import List, Tuple, Optional
 
 # Import the flow matching decoder (relative import inside package)
-from .carol_decoder import FlowMatchingDecoder
+try:
+    from .carol_decoder import FlowMatchingDecoder
+except ImportError:  # script execution fallback
+    from carol_decoder import FlowMatchingDecoder
+
 
 # Import double encoder components
 import sys
@@ -50,7 +54,8 @@ class DoubleEncoderFlowMatching(nn.Module):
                  num_residual_layers=2,
                  t_embed_dim=40,
                  z_embed_dim=40,
-                 use_film: bool = True):
+                 use_film: bool = True,
+                 multi_samples: bool = False):
         super().__init__()
 
         self.number_latent_dim = number_latent_dim
@@ -80,6 +85,24 @@ class DoubleEncoderFlowMatching(nn.Module):
             z_embed_dim=z_embed_dim,
             use_film=use_film
         )
+
+        if multi_samples:
+            self.num_aggregator = DeepSets(
+                in_dim=number_latent_dim,
+                phi_hidden=128,
+                set_emb_dim=128,
+                rho_hidden=128,
+                out_dim=number_latent_dim,
+                pooling="sum")
+
+            self.filter_aggregator=DeepSets(
+                in_dim=filter_latent_dim,
+                phi_hidden=128,
+                set_emb_dim=128,
+                rho_hidden=128,
+                out_dim=filter_latent_dim,
+                pooling="sum")
+
 
     def forward(self, same_digit, different_digit):
         """
@@ -205,6 +228,133 @@ class DoubleEncoderFlowMatching(nn.Module):
         """
         return (x + 1.0) / 2.0
 
+    def multi_sample_encoding(
+        self,
+        same_number_augments: torch.Tensor,
+        same_filter_augments: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Encode augmentation sets, pool them, and concatenate the pooled latents.
+
+        Args:
+            same_number_augments: Tensor of shape [B, N, C, H, W] in [-1, 1]; each slice along N
+                is an augmentation of the same digit. Gradients should flow through all entries.
+            same_filter_augments: Tensor of shape [B, F, C, H, W] in [-1, 1]; each slice along F
+                shares the filter/augmentation but comes from a different digit.
+
+        Returns:
+            tuple: (combined_z, pooled_number_z, pooled_filter_z) where each pooled latent is
+            produced via sum-based DeepSets aggregation over its augmentations.
+
+        Notes:
+            This method reuses self.number_encoder and self.filter_encoder on each augmentation, then
+            applies the specified permutation-invariant pooling to obtain a single latent per set.
+        """
+
+        if not hasattr(self, "num_aggregator") or not hasattr(self, "filter_aggregator"):
+            raise RuntimeError(
+                "multi_sample_encoding requires constructing DoubleEncoderFlowMatching with "
+                "multi_samples=True."
+            )
+
+        B, N, C, H, W = same_number_augments.shape
+        _, F, _, _, _ = same_filter_augments.shape
+
+        number_flat = same_number_augments.view(B * N, C, H, W)
+        filter_flat = same_filter_augments.view(B * F, C, H, W)
+
+        number_z_flat, _, _ = self.number_encoder(number_flat)
+        filter_z_flat, _, _ = self.filter_encoder(filter_flat)
+
+        number_z = number_z_flat.view(B, N, -1)
+        filter_z = filter_z_flat.view(B, F, -1)
+
+        # TODO: Support variable augmentation counts by tracking lengths per example.
+        pooled_number_z = self.num_aggregator(number_z)
+        pooled_filter_z = self.filter_aggregator(filter_z)
+
+        combined_z = torch.cat([pooled_number_z, pooled_filter_z], dim=1)
+        return combined_z, pooled_number_z, pooled_filter_z
+
+    def get_flow_loss_multi(self, same_number_augments, same_filter_augments, ground_truth):
+        """
+        Get flow matching loss for multi-sample encoding
+        Args:
+            same_number_augments: Tensor of shape [B, N, C, H, W] in [-1, 1]; each slice along N
+            same_filter_augments: Tensor of shape [B, F, C, H, W] in [-1, 1]; each slice along F
+            ground_truth: Tensor of shape [B, C, H, W] in [-1, 1]
+
+        Returns:
+            flow_loss: Tensor of shape [B]
+        """
+        combined_z, number_combined_z, filter_combined_z = self.multi_sample_encoding(same_number_augments, same_filter_augments)
+
+        #Flatten ground truth images for flow matching
+        ground_truth_flat = ground_truth.view(ground_truth.size(0), -1)
+
+        flow_loss = self.decoder.get_loss(ground_truth_flat, combined_z)
+        return flow_loss
+
+
+
+
+
+class DeepSets(nn.Module):
+    def __init__(self, in_dim, phi_hidden=128, set_emb_dim=128, rho_hidden=128, out_dim=1,
+                 pooling="sum"):
+        super().__init__()
+        # φ: elementwise network (3 layers with ReLU)
+        self.phi = nn.Sequential(
+            nn.Linear(in_dim, phi_hidden), nn.ReLU(),
+            nn.Linear(phi_hidden, phi_hidden), nn.ReLU(),
+            nn.Linear(phi_hidden, set_emb_dim)  # this is φ(x) ∈ R^{set_emb_dim}
+        )
+        # ρ: post-pool network (3 layers with ReLU)
+        self.rho = nn.Sequential(
+            nn.Linear(set_emb_dim, rho_hidden), nn.ReLU(),
+            nn.Linear(rho_hidden, rho_hidden), nn.ReLU(),
+            nn.Linear(rho_hidden, out_dim)
+        )
+        assert pooling in {"sum", "mean", "max"}
+        self.pooling = pooling
+
+    def forward(self, x, lengths=None):
+        """
+        x: (B, N_max, d) padded batch of sets
+        lengths: (B,) number of valid elements in each set (no lengths => all N are valid)
+        """
+        B, N_max, d = x.shape
+
+        # Build mask for valid elements
+        if lengths is None:
+            mask = torch.ones(B, N_max, device=x.device, dtype=torch.bool)
+        else:
+            idx = torch.arange(N_max, device=x.device)[None, :].expand(B, N_max)
+            mask = idx < lengths[:, None]  # True where valid
+
+        # Apply φ elementwise
+        x_flat = x.view(B * N_max, d)
+        phi_flat = self.phi(x_flat)                        # (B*N_max, set_emb_dim)
+        phi = phi_flat.view(B, N_max, -1)                  # (B, N_max, set_emb_dim)
+
+        # Zero-out padded positions
+        phi = phi * mask.unsqueeze(-1)                     # broadcast over emb dim
+
+        # Pool across set elements (invariant)
+        if self.pooling == "sum":
+            set_emb = phi.sum(dim=1)                      # (B, set_emb_dim)
+        elif self.pooling == "mean":
+            denom = mask.sum(dim=1).clamp(min=1).unsqueeze(-1).to(phi.dtype)
+            set_emb = phi.sum(dim=1) / denom
+        else:  # max
+            # replace invalid with very negative before max
+            very_neg = torch.finfo(phi.dtype).min
+            phi_masked = phi.masked_fill(~mask.unsqueeze(-1), very_neg)
+            set_emb = phi_masked.max(dim=1).values
+
+        # Apply ρ
+        out = self.rho(set_emb)                            # (B, out_dim)
+        return out
+
 
 def test_double_encoder_flow():
     """Test function to verify the architecture works correctly"""
@@ -282,5 +432,32 @@ def test_double_encoder_flow():
     print("\nAll tests passed!")
 
 
+def test_multi_sample_encoding():
+    """Quick smoke test for multi-sample aggregation support."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
+
+    print(f"Testing multi-sample aggregation on {device}")
+
+    model = DoubleEncoderFlowMatching(multi_samples=True).to(device)
+
+    B, N, F = 2, 3, 4
+    same_number_augments = torch.rand(B, N, 1, 28, 28, device=device) * 2 - 1
+    same_filter_augments = torch.rand(B, F, 1, 28, 28, device=device) * 2 - 1
+    ground_truth = torch.rand(B, 1, 28, 28, device=device) * 2 - 1
+
+    combined_z, pooled_number_z, pooled_filter_z = model.multi_sample_encoding(
+        same_number_augments, same_filter_augments
+    )
+
+    assert combined_z.shape == (B, model.combined_latent_dim)
+    assert pooled_number_z.shape == (B, model.number_latent_dim)
+    assert pooled_filter_z.shape == (B, model.filter_latent_dim)
+
+    flow_loss = model.get_flow_loss_multi(same_number_augments, same_filter_augments, ground_truth)
+    assert torch.isfinite(flow_loss).all()
+    print(f"Multi-sample flow loss: {flow_loss.mean().item():.4f}")
+
+
 if __name__ == "__main__":
     test_double_encoder_flow()
+    test_multi_sample_encoding()
