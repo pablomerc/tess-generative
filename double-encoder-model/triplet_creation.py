@@ -358,45 +358,45 @@ class TripletCreator:
         }
 
     def create_batch_multi_triplets(self, batch_size=BATCH_SIZE, dataset='train', num_filter_augs=2, num_number_augs=2):
-    """Create a batch of multi-triplets
-    Returns
-    Dictionary
-    """
-    batch_anchors = []
-    batch_same_filter_augments = []
-    batch_same_number_augments = []
-    batch_anchor_labels = []
-    batch_same_filter_labels = []
-    batch_anchor_params = []
-    batch_same_filter_params = []
-    batch_same_number_params = []
+        """Create a batch of multi-triplets.
 
-    for _ in range(batch_size):
-        sample = self.create_multi_triplet(
-            dataset=dataset,
-            num_filter_augs=num_filter_augs,
-            num_number_augs=num_number_augs
-        )
+        Returns a dictionary with batched anchors, augmentations, labels, and transform metadata.
+        """
+        anchors = []
+        same_filter_augments = []
+        same_number_augments = []
+        anchor_labels = []
+        filter_labels = []
+        anchor_params = []
+        filter_params = []
+        number_params = []
 
-        batch_anchors.append(sample["anchor"])
-        batch_same_filter_augments.append(sample["same_filter_augments"])
-        batch_same_number_augments.append(sample["same_number_augments"])
-        batch_anchor_labels.append(sample["anchor_label"])
-        batch_filter_labels.append(sample["filter_labels"])
-        batch_anchor_params.append(sample["anchor_params"])
-        batch_filter_params.append(sample["filter_params"])
-        batch_number_params.append(sample["number_params"])
+        for _ in range(batch_size):
+            sample = self.create_multi_triplet(
+                dataset=dataset,
+                num_filter_augs=num_filter_augs,
+                num_number_augs=num_number_augs
+            )
 
-    return {
-        "batch_anchors": torch.stack(batch_anchors), # [B, C, H, W]
-        "batch_same_filter_augments": torch.stack(batch_same_filter_augments), # [B, F, C, H, W]
-        "batch_same_number_augments": torch.stack(batch_same_number_augments), # [B, N, C, H, W]
-        "batch_anchor_labels": torch.tensor(batch_anchor_labels), # [B]
-        "batch_filter_labels": torch.tensor(batch_filter_labels), # [B, F]
-        "batch_anchor_params": torch.tensor(batch_anchor_params), # [B, 2]
-        "batch_filter_params": torch.tensor(batch_filter_params), # [B, N, 2]
-        "batch_number_params": torch.tensor(batch_number_params), # [B, N, 2]
-    }
+            anchors.append(sample["anchor"])
+            same_filter_augments.append(sample["same_filter_augments"])
+            same_number_augments.append(sample["same_number_augments"])
+            anchor_labels.append(sample["anchor_label"])
+            filter_labels.append(sample["filter_labels"])
+            anchor_params.append(sample["anchor_params"])
+            filter_params.append(sample["filter_params"])
+            number_params.append(sample["number_params"])
+
+        return {
+            "anchor": torch.stack(anchors),  # [B, C, H, W]
+            "same_filter_augments": torch.stack(same_filter_augments),  # [B, F, C, H, W]
+            "same_number_augments": torch.stack(same_number_augments),  # [B, N, C, H, W]
+            "anchor_labels": torch.tensor(anchor_labels, dtype=torch.long),  # [B]
+            "filter_labels": torch.tensor(filter_labels, dtype=torch.long),  # [B, F]
+            "anchor_params": torch.tensor(anchor_params, dtype=torch.float32),  # [B, 2]
+            "filter_params": torch.tensor(filter_params, dtype=torch.float32),  # [B, F, 2]
+            "number_params": torch.tensor(number_params, dtype=torch.float32),  # [B, N, 2]
+        }
 
 
     def get_dataset_info(self):
