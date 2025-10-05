@@ -19,14 +19,14 @@ from config import *  # noqa: F401,F403
 # Example: Different default dataset for v5
 # DATASET_TYPE = os.environ.get('FLOW_V5_DATASET', DATASET_TYPE)
 
-DATASET_TYPE='fashion_mnist'
+DATASET_TYPE='mnist'
 # Training hyperparameters
 BATCH_SIZE = 128  # Reduced for quick test, use 128
 NUM_EPOCHS = 250   # Just 1 epoch for quick test, use 50
 LEARNING_RATE = 2e-4
 
 # Multi-sample batching
-USE_MULTI_SAMPLES = False
+USE_MULTI_SAMPLES = True
 MULTI_NUM_FILTER_AUGS = 5
 MULTI_NUM_NUMBER_AUGS = 5
 

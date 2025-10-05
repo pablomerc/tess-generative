@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import math
 from typing import List, Tuple, Optional
 
 # Import the flow matching decoder (relative import inside package)
@@ -87,21 +88,30 @@ class DoubleEncoderFlowMatching(nn.Module):
         )
 
         if multi_samples:
-            self.num_aggregator = DeepSets(
-                in_dim=number_latent_dim,
-                phi_hidden=128,
-                set_emb_dim=128,
-                rho_hidden=128,
-                out_dim=number_latent_dim,
-                pooling="sum")
+            use_attention = True
+            if use_attention:
 
-            self.filter_aggregator=DeepSets(
-                in_dim=filter_latent_dim,
-                phi_hidden=128,
-                set_emb_dim=128,
-                rho_hidden=128,
-                out_dim=filter_latent_dim,
-                pooling="sum")
+                self.num_aggregator = AttentionPooling(
+                    dim=number_latent_dim,
+                    n_hidden=128
+                )
+                self.filter_aggregator = AttentionPooling(
+                    dim=filter_latent_dim,
+                    n_hidden=128
+                )
+
+            else:
+                self.num_aggregator = DeepSets(
+                    in_dim=number_latent_dim,
+                    out_dim=number_latent_dim,
+                    pooling="sum")
+
+                self.filter_aggregator=DeepSets(
+                    in_dim=filter_latent_dim,
+                    rho_hidden=128,
+                    out_dim=filter_latent_dim,
+                    pooling="sum")
+
 
 
     def forward(self, same_digit, different_digit):
@@ -295,22 +305,95 @@ class DoubleEncoderFlowMatching(nn.Module):
         return flow_loss
 
 
+class AttentionHead(nn.Module):
+    """Single-head self-attention with a learnable CLS token."""
+    def __init__(self, dim: int, n_hidden: int) -> None:
+        """
+        Args:
+            dim: Feature width of each latent token.
+            n_hidden: Size of internal projections (Q/K/V) and the pooled output.
+        """
+
+        super().__init__()
+
+        self.W_K = nn.Linear(dim, n_hidden) # W_K weight matrix
+        self.W_Q = nn.Linear(dim, n_hidden) # W_Q weight matrix
+        self.W_V = nn.Linear(dim, n_hidden) # W_V weight matrix
+        self.n_hidden = n_hidden
+        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+        self.scale = math.sqrt(n_hidden)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Pools a latent sequence with attention.
+
+        Args:
+            x: Tensor shaped `[batch, num_tokens, dim]`.
+
+        Returns:
+            Pooled embedding `[batch, 1, n_hidden]`.
+        """
+        B,N,_ = x.shape
+        device=x.device
+
+        cls_token = self.cls_token.expand(B, -1, -1).to(device)
+
+        x = torch.cat([cls_token, x], dim=1)
+        x = x.to(device) # Ensure x is on the correct device
+
+        Q = self.W_Q(x)
+        K = self.W_K(x)
+        V = self.W_V(x)
+
+        QK = torch.matmul(Q,K.transpose(-2,-1))/self.scale
+
+        alpha = torch.nn.functional.softmax(QK, dim=-1)
+
+        out = torch.matmul(alpha, V)
+
+        pooled_output = out[:,:1]
+
+        return pooled_output
+
+class AttentionPooling(nn.Module):
+    """Attention-based set pooling followed by projection."""
+    def __init__(self, dim: int, n_hidden: int) -> None:
+        """
+        Args:
+            dim: Output embedding size (matches input token width).
+            n_hidden: Hidden size used inside the attention head.
+        """
+        super().__init__()
+
+        self.dim=dim
+        self.n_hidden=n_hidden
+        self.head = AttentionHead(dim=dim, n_hidden=n_hidden)
+        self.proj = nn.Linear(n_hidden,dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Compresses a token set to a single latent.
+
+        Args:
+            x: Tensor `[batch, num_tokens, dim]`.
+
+        Returns:
+            Tensor `[batch, 1, dim]` containing the pooled latent.
+        """
+
+        x_pooled = self.head(x)
+        x_pooled = self.proj(x_pooled)
+
+        return x_pooled.squeeze(1) # [batch,dim]
 
 
 
 class DeepSets(nn.Module):
-    def __init__(self, in_dim, phi_hidden=128, set_emb_dim=128, rho_hidden=128, out_dim=1,
+    def __init__(self, in_dim, rho_hidden=128, out_dim=1,
                  pooling="sum"):
         super().__init__()
-        # φ: elementwise network (3 layers with ReLU)
-        self.phi = nn.Sequential(
-            nn.Linear(in_dim, phi_hidden), nn.ReLU(),
-            nn.Linear(phi_hidden, phi_hidden), nn.ReLU(),
-            nn.Linear(phi_hidden, set_emb_dim)  # this is φ(x) ∈ R^{set_emb_dim}
-        )
+        self.phi = nn.Identity()
         # ρ: post-pool network (3 layers with ReLU)
         self.rho = nn.Sequential(
-            nn.Linear(set_emb_dim, rho_hidden), nn.ReLU(),
+            nn.Linear(in_dim, rho_hidden), nn.ReLU(),
             nn.Linear(rho_hidden, rho_hidden), nn.ReLU(),
             nn.Linear(rho_hidden, out_dim)
         )
