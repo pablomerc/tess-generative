@@ -88,7 +88,7 @@ class DoubleEncoderFlowMatching(nn.Module):
         )
 
         if multi_samples:
-            use_attention = True
+            use_attention = False
             if use_attention:
 
                 self.num_aggregator = AttentionPooling(
@@ -101,16 +101,17 @@ class DoubleEncoderFlowMatching(nn.Module):
                 )
 
             else:
+                print('DEBUG: Using DeepSets with MLP+Mean')
                 self.num_aggregator = DeepSets(
                     in_dim=number_latent_dim,
                     out_dim=number_latent_dim,
-                    pooling="sum")
+                    pooling="mean")
 
                 self.filter_aggregator=DeepSets(
                     in_dim=filter_latent_dim,
                     rho_hidden=128,
                     out_dim=filter_latent_dim,
-                    pooling="sum")
+                    pooling="mean")
 
 
 
@@ -387,18 +388,24 @@ class AttentionPooling(nn.Module):
 
 
 class DeepSets(nn.Module):
-    def __init__(self, in_dim, rho_hidden=128, out_dim=1,
+    def __init__(self, in_dim, phi_hidden=128, set_emb_dim=128, rho_hidden=128, out_dim=1,
                  pooling="sum"):
         super().__init__()
-        self.phi = nn.Identity()
+        # φ: elementwise network (3 layers with ReLU)
+        self.phi = nn.Sequential(
+            nn.Linear(in_dim, phi_hidden), nn.ReLU(),
+            nn.Linear(phi_hidden, phi_hidden), nn.ReLU(),
+            nn.Linear(phi_hidden, set_emb_dim)  # this is φ(x) ∈ R^{set_emb_dim}
+        )
         # ρ: post-pool network (3 layers with ReLU)
         self.rho = nn.Sequential(
-            nn.Linear(in_dim, rho_hidden), nn.ReLU(),
+            nn.Linear(set_emb_dim, rho_hidden), nn.ReLU(),
             nn.Linear(rho_hidden, rho_hidden), nn.ReLU(),
             nn.Linear(rho_hidden, out_dim)
         )
         assert pooling in {"sum", "mean", "max"}
         self.pooling = pooling
+
 
     def forward(self, x, lengths=None):
         """
