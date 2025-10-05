@@ -29,11 +29,17 @@ def main():
     parser.add_argument("--no_film", dest="use_film", action="store_false",
                         help="Disable FiLM layers in the decoder")
     parser.set_defaults(use_film=cfg.USE_FILM)
+    default_multi = getattr(cfg, "USE_MULTI_SAMPLES", False)
+    parser.add_argument("--multi_samples", dest="multi_samples", action="store_true",
+                        help="Enable multi-augmentation training batches")
+    parser.add_argument("--single_samples", dest="multi_samples", action="store_false",
+                        help="Use legacy single-augmentation training batches")
+    parser.set_defaults(multi_samples=default_multi)
     args = parser.parse_args()
 
 
     # Import helpers
-    from flow_v5.data import make_triplet_creator
+    from flow_v5.data import make_triplet_creator, make_multi_triplet_creator
     from flow_v5.model import build_model
     from flow_v5.train import train as train_v5
     from flow_v5.viz import debug_normalization
@@ -47,6 +53,7 @@ def main():
     num_epochs = args.epochs
     learning_rate = args.lr
     batch_size = args.batch_size
+    multi_samples = args.multi_samples
     load_pretrain = cfg.load_pretrain
     if load_pretrain:
         path_pretrain = args.pretrain_path or cfg.path_pretrain
@@ -57,7 +64,11 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 
     # Triplet creator
-    triplet_creator = make_triplet_creator(dataset_type=dataset_type)
+    triplet_creator = (
+        make_multi_triplet_creator(dataset_type=dataset_type)
+        if multi_samples
+        else make_triplet_creator(dataset_type=dataset_type)
+    )
     triplet_creator.get_dataset_info()
 
     # Debug normalization once
@@ -69,7 +80,7 @@ def main():
     number_latent_dim = cfg.NUMBER_ENCODER_LATENT_DIM
     filter_latent_dim = cfg.FILTER_ENCODER_LATENT_DIM
 
-    model = build_model(device=device, use_film=use_film)
+    model = build_model(device=device, use_film=use_film, multi_samples=multi_samples)
 
     # Print number of parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -124,12 +135,21 @@ def main():
             "device": device,
             "start_epoch": start_epoch,
             "use_film": use_film,
+            "multi_samples": multi_samples,
         }
     )
     wandb.watch(model, log="all")
 
     # Train
-    train_v5(model, triplet_creator, num_epochs=num_epochs, lr=learning_rate, plots_dir=plots_dir, start_epoch=start_epoch)
+    train_v5(
+        model,
+        triplet_creator,
+        num_epochs=num_epochs,
+        lr=learning_rate,
+        plots_dir=plots_dir,
+        start_epoch=start_epoch,
+        multi_samples=multi_samples,
+    )
 
     wandb.finish()
 

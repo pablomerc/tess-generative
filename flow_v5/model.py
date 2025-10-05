@@ -2,7 +2,7 @@ import torch
 from flow_v5 import config as cfg
 
 
-def build_model(device: str = None, use_film: bool = None):
+def build_model(device: str = None, use_film: bool = None, multi_samples: bool = False):
     """Construct DoubleEncoderFlowMatching with v5 defaults from config."""
     from flow_decoder.double_encoder_flow_architecture import DoubleEncoderFlowMatching
 
@@ -21,7 +21,8 @@ def build_model(device: str = None, use_film: bool = None):
         num_residual_layers=2,
         t_embed_dim=40,
         z_embed_dim=40,
-        use_film=use_film
+        use_film=use_film,
+        multi_samples=multi_samples
     )
 
     if device is not None:

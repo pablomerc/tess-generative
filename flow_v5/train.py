@@ -11,7 +11,7 @@ from flow_v5.utils import normalize_to_flow_range
 from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples
 
 
-def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0) -> Tuple[list, list]:
+def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0, multi_samples: bool = False) -> Tuple[list, list]:
     """Training loop migrated for v5 modules.
 
     start_epoch: number of epochs the loaded model has already been trained for.
@@ -51,20 +51,38 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
         print(f"Epoch {total_epoch} (this run {epoch+1}/{num_epochs}): Processing {num_batches_epoch} batches ({total_train_samples} samples)")
 
         for batch_idx in range(num_batches_epoch):
-            (ground_truth, different_digit, same_digit, original_labels, different_labels,
-             ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
-                triplet_creator.create_batch_triplets(BATCH_SIZE, dataset='train')
+            if multi_samples:
+                batch = triplet_creator.create_batch_multi_triplets(
+                    batch_size=BATCH_SIZE, dataset='train'
+                )
 
-            ground_truth = normalize_to_flow_range(ground_truth.to(device))
-            different_digit = normalize_to_flow_range(different_digit.to(device))
-            same_digit = normalize_to_flow_range(same_digit.to(device))
-            original_labels = original_labels.to(device)
-            different_labels = different_labels.to(device)
+                anchor = normalize_to_flow_range(batch["anchor"]).to(device)
+                same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
+                same_filter_augments = normalize_to_flow_range(batch["same_filter_augments"]).to(device)
+                anchor_labels = batch["anchor_labels"].to(device)
+                filter_labels = batch["filter_labels"].to(device)
+            else:
+                (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                    triplet_creator.create_batch_triplets(BATCH_SIZE, dataset='train')
+
+                ground_truth = normalize_to_flow_range(ground_truth.to(device))
+                different_digit = normalize_to_flow_range(different_digit.to(device))
+                same_digit = normalize_to_flow_range(same_digit.to(device))
+                original_labels = original_labels.to(device)
+                different_labels = different_labels.to(device)
 
             optimizer.zero_grad()
 
-            flow_loss, number_z, filter_z, number_mu, number_logvar, filter_mu, filter_logvar = \
-                model.get_flow_loss(same_digit, different_digit, ground_truth)
+            if multi_samples:
+                flow_loss = model.get_flow_loss_multi(
+                    same_number_augments,
+                    same_filter_augments,
+                    anchor,
+                )
+            else:
+                flow_loss, number_z, filter_z, number_mu, number_logvar, filter_mu, filter_logvar = \
+                    model.get_flow_loss(same_digit, different_digit, ground_truth)
 
             if torch.isnan(flow_loss) or torch.isinf(flow_loss) or flow_loss > 1000:
                 print(f"WARNING: Loss explosion detected at batch index {batch_idx}. Loss: {flow_loss.item()}")
@@ -113,17 +131,32 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             num_val_batches = total_val_samples // BATCH_SIZE
             print(f"Validation (after epoch {total_epoch}): Processing {num_val_batches} batches ({total_val_samples} samples)")
             for batch_idx in range(num_val_batches):
-                (ground_truth, different_digit, same_digit, original_labels, different_labels,
-                 ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
-                    triplet_creator.create_batch_triplets(BATCH_SIZE, dataset='test')
+                if multi_samples:
+                    batch = triplet_creator.create_batch_multi_triplets(
+                        batch_size=BATCH_SIZE, dataset='test'
+                    )
 
-                ground_truth = normalize_to_flow_range(ground_truth.to(device))
-                different_digit = normalize_to_flow_range(different_digit.to(device))
-                same_digit = normalize_to_flow_range(same_digit.to(device))
-                original_labels = original_labels.to(device)
-                different_labels = different_labels.to(device)
+                    anchor = normalize_to_flow_range(batch["anchor"]).to(device)
+                    same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
+                    same_filter_augments = normalize_to_flow_range(batch["same_filter_augments"]).to(device)
 
-                flow_loss, _, _, _, _, _, _ = model.get_flow_loss(same_digit, different_digit, ground_truth)
+                    flow_loss = model.get_flow_loss_multi(
+                        same_number_augments,
+                        same_filter_augments,
+                        anchor,
+                    )
+                else:
+                    (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                     ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                        triplet_creator.create_batch_triplets(BATCH_SIZE, dataset='test')
+
+                    ground_truth = normalize_to_flow_range(ground_truth.to(device))
+                    different_digit = normalize_to_flow_range(different_digit.to(device))
+                    same_digit = normalize_to_flow_range(same_digit.to(device))
+                    original_labels = original_labels.to(device)
+                    different_labels = different_labels.to(device)
+
+                    flow_loss, _, _, _, _, _, _ = model.get_flow_loss(same_digit, different_digit, ground_truth)
                 if not (torch.isnan(flow_loss) or torch.isinf(flow_loss) or flow_loss > 1000):
                     test_loss += flow_loss.item()
                     valid_test_batches += 1
@@ -158,16 +191,38 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
                 model.eval()
                 with torch.no_grad():
                     vis_batch_size = 8
-                    (ground_truth, different_digit, same_digit, original_labels, different_labels,
-                     ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
-                        triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
+                    if multi_samples:
+                        batch = triplet_creator.create_batch_multi_triplets(
+                            batch_size=vis_batch_size, dataset='train'
+                        )
 
-                    ground_truth = normalize_to_flow_range(ground_truth.to(device))
-                    different_digit = normalize_to_flow_range(different_digit.to(device))
-                    same_digit = normalize_to_flow_range(same_digit.to(device))
-                    original_labels = original_labels.to(device)
+                        ground_truth = normalize_to_flow_range(batch["anchor"]).to(device)
+                        same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
+                        same_filter_augments = normalize_to_flow_range(batch["same_filter_augments"]).to(device)
+                        original_labels = batch["anchor_labels"].to(device)
 
-                    reconstruction = model.reconstruct(same_digit, different_digit)
+                        combined_z, _, _ = model.multi_sample_encoding(
+                            same_number_augments,
+                            same_filter_augments,
+                        )
+                        reconstruction_flat = model.decoder.sample(combined_z, 1)
+                        reconstruction = reconstruction_flat.view(ground_truth.shape)
+
+                        # Use the first augmentation from each set for visualization inputs
+                        different_digit = same_filter_augments[:, 0]
+                        same_digit = same_number_augments[:, 0]
+                        #TODO: Instead of just passing on of the examples, make a custom visualizatoin function and show all of them?
+                    else:
+                        (ground_truth, different_digit, same_digit, original_labels, different_labels,
+                         ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
+                            triplet_creator.create_batch_triplets(vis_batch_size, dataset='train')
+
+                        ground_truth = normalize_to_flow_range(ground_truth.to(device))
+                        different_digit = normalize_to_flow_range(different_digit.to(device))
+                        same_digit = normalize_to_flow_range(same_digit.to(device))
+                        original_labels = original_labels.to(device)
+
+                        reconstruction = model.reconstruct(same_digit, different_digit)
 
                     reconstruction_fig = create_recon_figure(
                         ground_truth, different_digit, same_digit, reconstruction,
