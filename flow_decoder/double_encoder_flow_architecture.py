@@ -89,6 +89,7 @@ class DoubleEncoderFlowMatching(nn.Module):
 
         if multi_samples:
             use_attention = False
+            use_concatenation = False
             if use_attention:
 
                 self.num_aggregator = AttentionPooling(
@@ -100,6 +101,9 @@ class DoubleEncoderFlowMatching(nn.Module):
                     n_hidden=128
                 )
 
+            elif use_concatenation:
+                self.num_aggregator = Concatenator()
+                self.filter_aggregator = Concatenator()
             else:
                 print('DEBUG: Using DeepSets with MLP+Mean')
                 self.num_aggregator = DeepSets(
@@ -112,6 +116,7 @@ class DoubleEncoderFlowMatching(nn.Module):
                     rho_hidden=128,
                     out_dim=filter_latent_dim,
                     pooling="mean")
+
 
 
 
@@ -445,6 +450,30 @@ class DeepSets(nn.Module):
         out = self.rho(set_emb)                            # (B, out_dim)
         return out
 
+
+
+class Concatenator(nn.Module):
+    """Concatenate the per-latent vectors into a single vector per example.
+
+    Expects an input tensor shaped [B, N_latents, latent_dim] and returns
+    [B, N_latents * latent_dim]. Uses `.flatten(start_dim=1)` to safely handle
+    non-contiguous inputs.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor of shape [B, N_latents, latent_dim]
+        Returns:
+            Tensor of shape [B, N_latents * latent_dim]
+        """
+        if x.dim() != 3:
+            raise ValueError(
+                f"Concatenator expects a 3D tensor [B, N_latents, latent_dim], got {tuple(x.shape)}"
+            )
+        return x.flatten(start_dim=1)
 
 def test_double_encoder_flow():
     """Test function to verify the architecture works correctly"""
