@@ -27,8 +27,12 @@ LEARNING_RATE = 2e-4
 
 # Multi-sample batching
 USE_MULTI_SAMPLES = True
-MULTI_NUM_FILTER_AUGS = 5
-MULTI_NUM_NUMBER_AUGS = 5
+MULTI_NUM_FILTER_AUGS = 3
+MULTI_NUM_NUMBER_AUGS = 3
+
+# Concatenation options
+USE_CONCATENATION = True
+NUM_SAMPLES_CONCATENATION = 3  # Should match MULTI_NUM_FILTER_AUGS and MULTI_NUM_NUMBER_AUGS
 
 
 # Pretrained model options
@@ -36,8 +40,8 @@ load_pretrain = False
 # path_pretrain = "../flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
 
 # Model save settings
-SAVE_INTERVAL = 50  # Save model every N epochsc - 10
-VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs - 10
+SAVE_INTERVAL = 50 # Save model every N epochsc - 50
+VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs - 5
 
 # Model options
 USE_FILM = True

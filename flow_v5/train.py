@@ -52,8 +52,14 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
 
         for batch_idx in range(num_batches_epoch):
             if multi_samples:
+                # Get augmentation counts from config
+                from flow_v5 import config as cfg
+                num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
+                num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+
                 batch = triplet_creator.create_batch_multi_triplets(
-                    batch_size=BATCH_SIZE, dataset='train'
+                    batch_size=BATCH_SIZE, dataset='train',
+                    num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
                 )
 
                 anchor = normalize_to_flow_range(batch["anchor"]).to(device)
@@ -132,8 +138,14 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             print(f"Validation (after epoch {total_epoch}): Processing {num_val_batches} batches ({total_val_samples} samples)")
             for batch_idx in range(num_val_batches):
                 if multi_samples:
+                    # Get augmentation counts from config (same as training)
+                    from flow_v5 import config as cfg
+                    num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
+                    num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+
                     batch = triplet_creator.create_batch_multi_triplets(
-                        batch_size=BATCH_SIZE, dataset='test'
+                        batch_size=BATCH_SIZE, dataset='test',
+                        num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
                     )
 
                     anchor = normalize_to_flow_range(batch["anchor"]).to(device)

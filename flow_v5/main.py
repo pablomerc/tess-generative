@@ -35,6 +35,18 @@ def main():
     parser.add_argument("--single_samples", dest="multi_samples", action="store_false",
                         help="Use legacy single-augmentation training batches")
     parser.set_defaults(multi_samples=default_multi)
+
+    # Concatenation arguments
+    default_concat = getattr(cfg, "USE_CONCATENATION", False)
+    parser.add_argument("--concatenation", dest="use_concatenation", action="store_true",
+                        help="Enable concatenation of multi-sample latents")
+    parser.add_argument("--no_concatenation", dest="use_concatenation", action="store_false",
+                        help="Disable concatenation (use pooling instead)")
+    parser.set_defaults(use_concatenation=default_concat)
+
+    default_num_concat = getattr(cfg, "NUM_SAMPLES_CONCATENATION", 5)
+    parser.add_argument("--num_concat_samples", type=int, default=default_num_concat,
+                        help="Number of samples to concatenate (should match multi-sample counts)")
     args = parser.parse_args()
 
 
@@ -54,6 +66,8 @@ def main():
     learning_rate = args.lr
     batch_size = args.batch_size
     multi_samples = args.multi_samples
+    use_concatenation = args.use_concatenation
+    num_concat_samples = args.num_concat_samples
     load_pretrain = cfg.load_pretrain
     if load_pretrain:
         path_pretrain = args.pretrain_path or cfg.path_pretrain
@@ -80,7 +94,8 @@ def main():
     number_latent_dim = cfg.NUMBER_ENCODER_LATENT_DIM
     filter_latent_dim = cfg.FILTER_ENCODER_LATENT_DIM
 
-    model = build_model(device=device, use_film=use_film, multi_samples=multi_samples)
+    model = build_model(device=device, use_film=use_film, multi_samples=multi_samples,
+                       use_concatenation=use_concatenation, num_concat_samples=num_concat_samples)
 
     # Print number of parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -136,6 +151,8 @@ def main():
             "start_epoch": start_epoch,
             "use_film": use_film,
             "multi_samples": multi_samples,
+            "use_concatenation": use_concatenation,
+            "num_concat_samples": num_concat_samples,
         }
     )
     wandb.watch(model, log="all")

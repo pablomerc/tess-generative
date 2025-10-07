@@ -56,7 +56,10 @@ class DoubleEncoderFlowMatching(nn.Module):
                  t_embed_dim=40,
                  z_embed_dim=40,
                  use_film: bool = True,
-                 multi_samples: bool = False):
+                 multi_samples: bool = False,
+                 use_attention: bool = False,
+                 use_concatenation: bool = False,
+                 num_samples_concatenation: int = 5):
         super().__init__()
 
         self.number_latent_dim = number_latent_dim
@@ -65,6 +68,9 @@ class DoubleEncoderFlowMatching(nn.Module):
         self.image_size = image_size
         self.image_dim = image_size * image_size
         self.use_film = use_film
+        self.use_concatenation = use_concatenation
+        self.multi_samples = multi_samples
+        self.num_samples_concatenation = num_samples_concatenation
 
         # Double encoder components
         self.number_encoder = NumberEncoder(number_latent_dim)
@@ -73,8 +79,20 @@ class DoubleEncoderFlowMatching(nn.Module):
         # Flow matching decoder
         # Input: combined latent (number_z + filter_z)
         # Output: flattened image
+
+
+        if use_concatenation:
+            # For concatenation: we concatenate features for each sample
+            # Each sample gets (number_latent_dim + filter_latent_dim) features
+            # Total samples = num_samples_concatenation
+            decoder_input_dim = (self.combined_latent_dim) * num_samples_concatenation
+        else:
+            decoder_input_dim = self.combined_latent_dim
+
+
+
         self.decoder = FlowMatchingDecoder(
-            input_dim=self.combined_latent_dim,
+            input_dim=decoder_input_dim,
             output_dim=self.image_dim,
             velocity_field_type=velocity_field_type,
             n_integration_steps=n_integration_steps,
@@ -88,10 +106,8 @@ class DoubleEncoderFlowMatching(nn.Module):
         )
 
         if multi_samples:
-            use_attention = False
-            use_concatenation = False
             if use_attention:
-
+                use_concatenation = False  # Can't use both attention and concatenation
                 self.num_aggregator = AttentionPooling(
                     dim=number_latent_dim,
                     n_hidden=128
@@ -288,7 +304,24 @@ class DoubleEncoderFlowMatching(nn.Module):
         pooled_number_z = self.num_aggregator(number_z)
         pooled_filter_z = self.filter_aggregator(filter_z)
 
-        combined_z = torch.cat([pooled_number_z, pooled_filter_z], dim=1)
+        if self.use_concatenation:
+            # For concatenation: concatenate features for each sample
+            # number_z: [B, N, number_latent_dim], filter_z: [B, F, filter_latent_dim]
+            # We need to match the number of samples N and F, then concatenate features
+
+            # Ensure N == F for concatenation (or handle mismatch appropriately)
+            if N != F:
+                raise ValueError(f"For concatenation, number of number samples (N={N}) must equal number of filter samples (F={F})")
+
+
+            # Concatenate features for each sample: [B, N, number_latent_dim + filter_latent_dim]
+            combined_z = torch.cat([number_z, filter_z], dim=2)
+            # Flatten to [B, N * (number_latent_dim + filter_latent_dim)]
+            combined_z = combined_z.view(B, -1)
+
+        else:
+            combined_z = torch.cat([pooled_number_z, pooled_filter_z], dim=1)
+
         return combined_z, pooled_number_z, pooled_filter_z
 
     def get_flow_loss_multi(self, same_number_augments, same_filter_augments, ground_truth):
@@ -306,6 +339,7 @@ class DoubleEncoderFlowMatching(nn.Module):
 
         #Flatten ground truth images for flow matching
         ground_truth_flat = ground_truth.view(ground_truth.size(0), -1)
+
 
         flow_loss = self.decoder.get_loss(ground_truth_flat, combined_z)
         return flow_loss
@@ -577,6 +611,68 @@ def test_multi_sample_encoding():
     print(f"Multi-sample flow loss: {flow_loss.mean().item():.4f}")
 
 
+def test_concatenation_functionality():
+    """Test concatenation functionality with different configurations."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
+
+    print(f"Testing concatenation functionality on {device}")
+
+    # Test with concatenation enabled
+    model_concat = DoubleEncoderFlowMatching(
+        multi_samples=True,
+        use_concatenation=True,
+        num_samples_concatenation=3
+    ).to(device)
+
+    print(f"Model decoder input dim: {model_concat.decoder.input_dim}")
+    print(f"Number latent dim: {model_concat.number_latent_dim}")
+    print(f"Filter latent dim: {model_concat.filter_latent_dim}")
+
+    B, N, F = 2, 3, 3  # Use exactly 3 samples total (3 number + 3 filter = 6 total)
+    same_number_augments = torch.rand(B, N, 1, 28, 28, device=device) * 2 - 1
+    same_filter_augments = torch.rand(B, F, 1, 28, 28, device=device) * 2 - 1
+    ground_truth = torch.rand(B, 1, 28, 28, device=device) * 2 - 1
+
+    # Test multi-sample encoding with concatenation
+    combined_z, pooled_number_z, pooled_filter_z = model_concat.multi_sample_encoding(
+        same_number_augments, same_filter_augments
+    )
+
+    print(f"Combined z shape: {combined_z.shape}")
+    print(f"Pooled number z shape: {pooled_number_z.shape}")
+    print(f"Pooled filter z shape: {pooled_filter_z.shape}")
+
+    # Check that concatenation produces the expected output shape
+    # With concatenation: N * (number_latent_dim + filter_latent_dim) where N == F
+    expected_concat_dim = N * (model_concat.number_latent_dim + model_concat.filter_latent_dim)
+    print(f"Expected concat dim: {expected_concat_dim}")
+    print(f"Actual combined z dim: {combined_z.shape[1]}")
+    assert combined_z.shape == (B, expected_concat_dim), f"Expected shape {(B, expected_concat_dim)}, got {combined_z.shape}"
+
+    # Test flow loss computation
+    flow_loss = model_concat.get_flow_loss_multi(same_number_augments, same_filter_augments, ground_truth)
+    assert torch.isfinite(flow_loss).all()
+    print(f"Concatenation flow loss: {flow_loss.mean().item():.4f}")
+    print(f"Concatenation output shape: {combined_z.shape}")
+
+    # Test without concatenation for comparison
+    model_no_concat = DoubleEncoderFlowMatching(
+        multi_samples=True,
+        use_concatenation=False
+    ).to(device)
+
+    combined_z_no_concat, _, _ = model_no_concat.multi_sample_encoding(
+        same_number_augments, same_filter_augments
+    )
+
+    expected_no_concat_dim = model_no_concat.number_latent_dim + model_no_concat.filter_latent_dim
+    assert combined_z_no_concat.shape == (B, expected_no_concat_dim), f"Expected shape {(B, expected_no_concat_dim)}, got {combined_z_no_concat.shape}"
+
+    print(f"No concatenation output shape: {combined_z_no_concat.shape}")
+    print("✓ Concatenation functionality test passed!")
+
+
 if __name__ == "__main__":
     test_double_encoder_flow()
     test_multi_sample_encoding()
+    test_concatenation_functionality()
