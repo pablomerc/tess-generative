@@ -432,12 +432,12 @@ class FlowMatchingDecoder(BaseDecoder):
 
         return loss
 
-    def sample_ode(self, z: torch.Tensor, n_samples: int = 1) -> torch.Tensor:
+    def sample_ode(self, z: torch.Tensor, n_samples: int = 1, generator: Optional[torch.Generator] = None) -> torch.Tensor:
         '''Sample by solving ODE from noise to data.'''
         batch_size = z.shape[0] if n_samples == 1 else n_samples * z.shape[0]
         device = z.device
 
-        x = torch.randn(batch_size, self.output_dim, device=device)
+        x = torch.randn(batch_size, self.output_dim, device=device, generator=generator)
         if n_samples > 1:
             z_expanded = z.unsqueeze(0).expand(n_samples, -1, -1).reshape(-1, z.shape[-1])
         else:
@@ -455,8 +455,8 @@ class FlowMatchingDecoder(BaseDecoder):
             x = x.view(n_samples, z.shape[0], self.output_dim)
         return x
 
-    def sample(self, z: torch.Tensor, n_samples: int = 1) -> torch.Tensor:
-        return self.sample_ode(z, n_samples)
+    def sample(self, z: torch.Tensor, n_samples: int = 1, generator: Optional[torch.Generator] = None) -> torch.Tensor:
+        return self.sample_ode(z, n_samples, generator=generator)
 
     def get_loss(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         return self.compute_cfm_loss(x1=x, z=z)
