@@ -270,3 +270,60 @@ def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_ex
             mean_std = samples.std(dim=0).mean()
             mean_std_list.append(mean_std.item())
     return float(np.mean(mean_std_list)), float(np.std(mean_std_list))
+
+
+def calculate_reconstruction_error(model, ground_truth, different_digit, same_digit, is_multi: bool = False, num_samples: int = 10, same_number_augments=None, same_filter_augments=None):
+    """Calculate the reconstruction error of the model.
+
+    Note: In multi-sample mode, same_digit and different_digit are the first augmentations
+    from the sets (for visualization), while same_number_augments and same_filter_augments
+    are the full augmentation sets used for encoding.
+    """
+    model.eval()
+    device = next(model.parameters()).device
+    with torch.no_grad():
+        if is_multi:
+            if same_number_augments is None or same_filter_augments is None:
+                raise ValueError("For multi-sample mode, same_number_augments and same_filter_augments must be provided")
+            # Use the full augmentation sets for encoding
+            combined_z, _, _ = model.multi_sample_encoding(
+                same_number_augments,  # Full set of number augmentations
+                same_filter_augments   # Full set of filter augmentations
+            )
+            samples_flat = model.decoder.sample(combined_z, num_samples)
+            samples = samples_flat.view(num_samples, -1, 1, model.image_size, model.image_size)
+        else:
+            # In single-sample mode, same_digit and different_digit are used directly
+            samples = model.sample(same_digit, different_digit, num_samples=num_samples)
+
+        print('Start of debugging')
+        # Debugging the range with percentiles
+        def print_range_stats(tensor, name):
+            min_val = tensor.min().item()
+            max_val = tensor.max().item()
+            p10 = torch.quantile(tensor, 0.1).item()
+            p90 = torch.quantile(tensor, 0.9).item()
+            print(f"{name} range: [{min_val:.3f}, {max_val:.3f}], p10: {p10:.3f}, p90: {p90:.3f}")
+
+        print_range_stats(samples, "Samples")
+        print_range_stats(ground_truth, "Ground truth")
+        print_range_stats(different_digit, "Different digit")
+        print_range_stats(same_digit, "Same digit")
+
+        print('Shape of samples: ', samples.shape)
+        print('Shape of ground truth: ', ground_truth.shape)
+
+        # PyTorch will broadcast: [num_samples, batch_size, 1, 28, 28] - [batch_size, 1, 28, 28]
+        # Result: [num_samples, batch_size, 1, 28, 28]
+        differences = samples - ground_truth.unsqueeze(0)  # Explicitly add sample dimension
+        print('Shape of differences: ', differences.shape)
+
+        # Calculate reconstruction error for each sample (MSE)
+        reconstruction_errors = torch.mean(differences ** 2, dim=(2, 3, 4))  # [num_samples, batch_size]
+        print(f"Reconstruction errors per sample (MSE): {reconstruction_errors.mean(dim=1).tolist()}")
+
+        # Overall mean reconstruction error across all samples
+        overall_error = reconstruction_errors.mean()
+        print(f"Overall reconstruction error (MSE): {overall_error.item():.6f}")
+
+        return overall_error.item()

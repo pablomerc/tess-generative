@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import wandb
 
 from flow_v5.utils import normalize_to_flow_range
-from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples
+from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples, calculate_reconstruction_error
 
 
 def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0, multi_samples: bool = False) -> Tuple[list, list]:
@@ -26,6 +26,37 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
 
     device = next(model.parameters()).device
     BATCH_SIZE = wandb.config.get("batch_size", 128)
+
+    # Create a fixed validation batch for consistent reconstruction error calculation
+    print("Creating fixed validation batch for reconstruction error...")
+    if multi_samples:
+        try:
+            from flow_v5 import config as cfg
+            num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
+            num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+        except Exception:
+            num_filter_augs = 2
+            num_number_augs = 2
+
+        fixed_batch = triplet_creator.create_batch_multi_triplets(
+            batch_size=32, dataset='test',  # Use smaller batch for reconstruction error
+            num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
+        )
+        fixed_ground_truth = normalize_to_flow_range(fixed_batch["anchor"]).to(device)
+        fixed_same_number_augments = normalize_to_flow_range(fixed_batch["same_number_augments"]).to(device)
+        fixed_same_filter_augments = normalize_to_flow_range(fixed_batch["same_filter_augments"]).to(device)
+        # For visualization/debugging: use first augmentation from each set
+        fixed_different_digit = fixed_same_filter_augments[:, 0]  # First filter augmentation
+        fixed_same_digit = fixed_same_number_augments[:, 0]  # First number augmentation
+    else:
+        (fixed_ground_truth, fixed_different_digit, fixed_same_digit, _, _, _, _, _, _) = \
+            triplet_creator.create_batch_triplets(32, dataset='test')  # Use smaller batch for reconstruction error
+
+        fixed_ground_truth = normalize_to_flow_range(fixed_ground_truth.to(device))
+        fixed_different_digit = normalize_to_flow_range(fixed_different_digit.to(device))
+        fixed_same_digit = normalize_to_flow_range(fixed_same_digit.to(device))
+
+    print(f"Fixed validation batch created - Ground truth shape: {fixed_ground_truth.shape}")
 
     # Namespace plots/checkpoints by dataset and run
     dataset_dir = os.path.join(plots_dir, str(getattr(triplet_creator, 'dataset_type', 'unknown')))
@@ -179,13 +210,34 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
         test_losses.append(avg_test_loss)
         scheduler.step(avg_train_loss)
 
+
+        # Compute reconstruction error and log to wandb using fixed validation batch
+        try:
+            print(f"Computing reconstruction error for epoch {total_epoch}...")
+            if multi_samples:
+                reconstruction_error = calculate_reconstruction_error(
+                    model, fixed_ground_truth, fixed_different_digit, fixed_same_digit,
+                    is_multi=multi_samples, num_samples=10,
+                    same_number_augments=fixed_same_number_augments,
+                    same_filter_augments=fixed_same_filter_augments
+                )
+            else:
+                reconstruction_error = calculate_reconstruction_error(
+                    model, fixed_ground_truth, fixed_different_digit, fixed_same_digit,
+                    is_multi=multi_samples, num_samples=10
+                )
+            wandb.log({"reconstruction_error": reconstruction_error}, step=total_epoch)
+        except Exception as e:
+            print(f"Error computing reconstruction error: {e}")
+
+
+
+
         # Compute uncertainty metric from sampling and log to wandb
         try:
-            print(f"Computing sample std metrics for epoch {total_epoch}...")
             sample_std_mean, sample_std_std = calculate_mean_std_of_samples(
                 model, triplet_creator, num_samples=64, num_examples=16
             )
-            print(f'Done computing sample std metrics for epoch {total_epoch}')
         except Exception as e:
             print(f"Error computing sample std metrics: {e}")
             sample_std_mean, sample_std_std = float('nan'), float('nan')
