@@ -181,9 +181,11 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
 
         # Compute uncertainty metric from sampling and log to wandb
         try:
+            print(f"Computing sample std metrics for epoch {total_epoch}...")
             sample_std_mean, sample_std_std = calculate_mean_std_of_samples(
                 model, triplet_creator, num_samples=64, num_examples=16
             )
+            print(f'Done computing sample std metrics for epoch {total_epoch}')
         except Exception as e:
             print(f"Error computing sample std metrics: {e}")
             sample_std_mean, sample_std_std = float('nan'), float('nan')
@@ -197,7 +199,7 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             "sample_std_std": sample_std_std,
         }, step=total_epoch)
 
-        if (epoch + 1) % 2 == 0:
+        if (epoch + 1) % 5 == 0:
             print(f"Creating reconstruction plot for epoch {total_epoch}...")
             try:
                 model.eval()
@@ -245,7 +247,7 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             except Exception as e:
                 print(f"Error creating reconstruction plot: {e}")
 
-        if (epoch + 1) % 2 == 0:
+        if (epoch + 1) % 5 == 0:
             print(f"Creating uncertainty analysis for epoch {total_epoch}...")
             try:
                 fig = uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8)

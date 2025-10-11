@@ -64,13 +64,13 @@ def create_recon_figure(ground_truth, different_digit, same_digit, reconstructio
     return fig
 
 
-def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, fixed_encoding=False, data_seed: int | None = 1337, sample_seed: int | None = 7331):
+def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, fixed_encoding=False, data_seed: int | None = None, sample_seed: int | None = None):
     """Analyze uncertainty by sampling multiple reconstructions per example."""
     model.eval()
 
     device = next(model.parameters()).device
 
-    # Fix data selection RNGs by default to ensure the same triplets are drawn
+    # Fix data selection RNGs only if explicitly requested
     if data_seed is not None:
         random.seed(int(data_seed))
         np.random.seed(int(data_seed))
@@ -131,12 +131,9 @@ def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, f
                     gen = torch.Generator(device=device)
                     gen.manual_seed(int(sample_seed))
 
-                samples_list = []
-                for _ in range(num_samples):
-                    sample_flat = model.decoder.sample(combined_z, 1, generator=gen)
-                    sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
-                    samples_list.append(sample_img)
-                samples = torch.stack(samples_list, dim=0)  # [N,1,1,H,W]
+                # Batched sampling: returns [N, B=1, output_dim]
+                samples_flat = model.decoder.sample(combined_z, num_samples, generator=gen)
+                samples = samples_flat.view(num_samples, 1, 1, model.image_size, model.image_size)
             else:
                 gt = ground_truth[idx:idx+1]
                 sd = same_digit[idx:idx+1]
@@ -148,12 +145,8 @@ def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, f
                     if sample_seed is not None:
                         gen = torch.Generator(device=device)
                         gen.manual_seed(int(sample_seed))
-                    samples_list = []
-                    for _ in range(num_samples):
-                        sample_flat = model.decoder.sample(combined_z, 1, generator=gen)
-                        sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
-                        samples_list.append(sample_img)
-                    samples = torch.stack(samples_list, dim=0)  # [N,1,1,H,W]
+                    samples_flat = model.decoder.sample(combined_z, num_samples, generator=gen)
+                    samples = samples_flat.view(num_samples, 1, 1, model.image_size, model.image_size)
                 else:
                     # When letting the model re-encode each time internally, we cannot pass a generator
                     samples = model.sample(sd, dd, num_samples=num_samples)  # [N,1,1,H,W]
@@ -189,7 +182,7 @@ def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, f
     return fig
 
 
-def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_examples=16, data_seed: int | None = 1337, sample_seed: int | None = 7331):
+def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_examples=16, data_seed: int | None = None, sample_seed: int | None = None):
     """Calculate the mean and std of samples from the model.
     Inputs:
     - model: the model to use
@@ -205,7 +198,7 @@ def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_ex
     with torch.no_grad():
         is_multi = getattr(model, 'multi_samples', False)
 
-        # Fix data selection RNGs by default
+        # Fix data selection RNGs only if explicitly requested
         if data_seed is not None:
             random.seed(int(data_seed))
             np.random.seed(int(data_seed))
@@ -255,12 +248,8 @@ def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_ex
                 if sample_seed is not None:
                     gen = torch.Generator(device=device)
                     gen.manual_seed(int(sample_seed))
-                samples_list = []
-                for _ in range(num_samples):
-                    sample_flat = model.decoder.sample(combined_z, 1, generator=gen)
-                    sample_img = sample_flat.view(1, 1, model.image_size, model.image_size)
-                    samples_list.append(sample_img)
-                samples = torch.stack(samples_list, dim=0)  # [N,1,1,H,W]
+                samples_flat = model.decoder.sample(combined_z, num_samples, generator=gen)
+                samples = samples_flat.view(num_samples, 1, 1, model.image_size, model.image_size)
             else:
                 sd = same_digit_batch[idx:idx+1]
                 dd = different_digit_batch[idx:idx+1]
