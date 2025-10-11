@@ -296,34 +296,35 @@ def calculate_reconstruction_error(model, ground_truth, different_digit, same_di
             # In single-sample mode, same_digit and different_digit are used directly
             samples = model.sample(same_digit, different_digit, num_samples=num_samples)
 
-        print('Start of debugging')
-        # Debugging the range with percentiles
-        def print_range_stats(tensor, name):
-            min_val = tensor.min().item()
-            max_val = tensor.max().item()
-            p10 = torch.quantile(tensor, 0.1).item()
-            p90 = torch.quantile(tensor, 0.9).item()
-            print(f"{name} range: [{min_val:.3f}, {max_val:.3f}], p10: {p10:.3f}, p90: {p90:.3f}")
+        # print('Start of debugging')
+        # # Debugging the range with percentiles
+        # def print_range_stats(tensor, name):
+        #     min_val = tensor.min().item()
+        #     max_val = tensor.max().item()
+        #     p10 = torch.quantile(tensor, 0.1).item()
+        #     p90 = torch.quantile(tensor, 0.9).item()
+        #     print(f"{name} range: [{min_val:.3f}, {max_val:.3f}], p10: {p10:.3f}, p90: {p90:.3f}")
 
-        print_range_stats(samples, "Samples")
-        print_range_stats(ground_truth, "Ground truth")
-        print_range_stats(different_digit, "Different digit")
-        print_range_stats(same_digit, "Same digit")
+        # print_range_stats(samples, "Samples")
+        # print_range_stats(ground_truth, "Ground truth")
+        # print_range_stats(different_digit, "Different digit")
+        # print_range_stats(same_digit, "Same digit")
 
-        print('Shape of samples: ', samples.shape)
-        print('Shape of ground truth: ', ground_truth.shape)
+        # print('Shape of samples: ', samples.shape)
+        # print('Shape of ground truth: ', ground_truth.shape)
 
         # PyTorch will broadcast: [num_samples, batch_size, 1, 28, 28] - [batch_size, 1, 28, 28]
         # Result: [num_samples, batch_size, 1, 28, 28]
         differences = samples - ground_truth.unsqueeze(0)  # Explicitly add sample dimension
-        print('Shape of differences: ', differences.shape)
+        # print('Shape of differences: ', differences.shape)
 
         # Calculate reconstruction error for each sample (MSE)
         reconstruction_errors = torch.mean(differences ** 2, dim=(2, 3, 4))  # [num_samples, batch_size]
-        print(f"Reconstruction errors per sample (MSE): {reconstruction_errors.mean(dim=1).tolist()}")
+        # print(f"Reconstruction errors per sample (MSE): {reconstruction_errors.mean(dim=1).tolist()}")
 
         # Overall mean reconstruction error across all samples
         overall_error = reconstruction_errors.mean()
         print(f"Overall reconstruction error (MSE): {overall_error.item():.6f}")
+        print(f'(not used for training - just tracking as a metric)')
 
         return overall_error.item()
