@@ -23,6 +23,12 @@ try:
 except ImportError:  # script execution fallback
     from carol_decoder import FlowMatchingDecoder
 
+# Import the new transformer pooling
+try:
+    from .attention import TransformerPooling
+except ImportError:  # script execution fallback
+    from attention import TransformerPooling
+
 
 # Import double encoder components
 import sys
@@ -108,13 +114,19 @@ class DoubleEncoderFlowMatching(nn.Module):
         if multi_samples:
             if use_attention:
                 use_concatenation = False  # Can't use both attention and concatenation
-                self.num_aggregator = AttentionPooling(
+                self.num_aggregator = TransformerPooling(
                     dim=number_latent_dim,
-                    n_hidden=128
+                    attn_dim=128,
+                    mlp_dim=128,
+                    num_heads=4,
+                    num_layers=2
                 )
-                self.filter_aggregator = AttentionPooling(
+                self.filter_aggregator = TransformerPooling(
                     dim=filter_latent_dim,
-                    n_hidden=128
+                    attn_dim=128,
+                    mlp_dim=128,
+                    num_heads=4,
+                    num_layers=2
                 )
 
             elif use_concatenation:
@@ -394,6 +406,9 @@ class AttentionHead(nn.Module):
 
         return pooled_output
 
+
+
+
 class AttentionPooling(nn.Module):
     """Attention-based set pooling followed by projection."""
     def __init__(self, dim: int, n_hidden: int) -> None:
@@ -424,6 +439,56 @@ class AttentionPooling(nn.Module):
 
         return x_pooled.squeeze(1) # [batch,dim]
 
+
+class AttentionPooling2(nn.Module):
+    """Multi-layer transformer-based attention pooling with FFN and layer norm."""
+    def __init__(self, dim: int, n_hidden: int, num_layers: int = 2, nhead: int = 4) -> None:
+        super().__init__()
+        self.dim = dim
+        self.n_hidden = n_hidden
+
+        # Create multi-layer transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=dim,
+            nhead=nhead,
+            dim_feedforward=n_hidden,
+            dropout=0.1,
+            activation='relu',
+            batch_first=True,  # Input format: [batch, seq, feature]
+            norm_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Learnable CLS token
+        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+
+        # Output projection to match input dimension
+        self.proj = nn.Linear(dim, dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor `[batch, num_tokens, dim]`
+        Returns:
+            Tensor `[batch, dim]` containing the pooled latent
+        """
+        B, N, D = x.shape
+        device = x.device
+
+        # Add CLS token
+        cls_token = self.cls_token.expand(B, -1, -1).to(device)
+        x_with_cls = torch.cat([cls_token, x], dim=1)  # [B, N+1, D]
+
+        # Apply transformer encoder
+        encoded = self.transformer(x_with_cls)  # [B, N+1, D]
+
+        # Extract CLS token output (first token)
+        pooled = encoded[:, 0, :]  # [B, D]
+
+        # Project to output dimension
+        output = self.proj(pooled)  # [B, D]
+
+        return output
 
 
 class DeepSets(nn.Module):
@@ -672,7 +737,103 @@ def test_concatenation_functionality():
     print("✓ Concatenation functionality test passed!")
 
 
+def test_transformer_pooling():
+    """Test the new TransformerPooling attention pooling."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
+
+    print(f"Testing TransformerPooling on {device}")
+
+    # Test parameters
+    d_model = 64
+    nhead = 4
+    num_layers = 2
+    dim_feedforward = 128
+    batch_size = 4
+    num_tokens = 5
+
+    # Create the pooling layer
+    pooling = TransformerPooling(
+        dim=d_model,
+        attn_dim=dim_feedforward,
+        mlp_dim=dim_feedforward,
+        num_heads=nhead,
+        num_layers=num_layers
+    ).to(device)
+
+    # Create test input
+    x = torch.randn(batch_size, num_tokens, d_model, device=device)
+
+    print(f"Input shape: {x.shape}")
+
+    # Forward pass
+    output = pooling(x)
+
+    print(f"Output shape: {output.shape}")
+    print(f"Expected output shape: ({batch_size}, {d_model})")
+
+    # Verify output shape
+    assert output.shape == (batch_size, d_model), f"Expected shape ({batch_size}, {d_model}), got {output.shape}"
+
+    # Test with different number of tokens
+    x2 = torch.randn(batch_size, 3, d_model, device=device)
+    output2 = pooling(x2)
+    assert output2.shape == (batch_size, d_model), f"Expected shape ({batch_size}, {d_model}), got {output2.shape}"
+
+    # Test attention weight extraction
+    output3, attn_weights = pooling(x, return_attn=True)
+    print(f"Attention weights shape: {attn_weights.shape}")
+    print(f"Expected attention shape: ({batch_size}, {num_layers}, {nhead}, {num_tokens+1}, {num_tokens+1})")
+    assert attn_weights.shape == (batch_size, num_layers, nhead, num_tokens+1, num_tokens+1), f"Expected attention shape ({batch_size}, {num_layers}, {nhead}, {num_tokens+1}, {num_tokens+1}), got {attn_weights.shape}"
+
+    print("✓ TransformerPooling test passed!")
+
+
+def test_attention_functionality():
+    """Test attention pooling functionality in the full model."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
+
+    print(f"Testing attention functionality on {device}")
+
+    # Test with attention enabled
+    model_attention = DoubleEncoderFlowMatching(
+        multi_samples=True,
+        use_attention=True
+    ).to(device)
+
+    print(f"Model decoder input dim: {model_attention.decoder.input_dim}")
+    print(f"Number latent dim: {model_attention.number_latent_dim}")
+    print(f"Filter latent dim: {model_attention.filter_latent_dim}")
+
+    B, N, F = 2, 3, 3
+    same_number_augments = torch.rand(B, N, 1, 28, 28, device=device) * 2 - 1
+    same_filter_augments = torch.rand(B, F, 1, 28, 28, device=device) * 2 - 1
+    ground_truth = torch.rand(B, 1, 28, 28, device=device) * 2 - 1
+
+    # Test multi-sample encoding with attention
+    combined_z, pooled_number_z, pooled_filter_z = model_attention.multi_sample_encoding(
+        same_number_augments, same_filter_augments
+    )
+
+    print(f"Combined z shape: {combined_z.shape}")
+    print(f"Pooled number z shape: {pooled_number_z.shape}")
+    print(f"Pooled filter z shape: {pooled_filter_z.shape}")
+
+    # Check that attention produces the expected output shape
+    expected_attention_dim = model_attention.number_latent_dim + model_attention.filter_latent_dim
+    assert combined_z.shape == (B, expected_attention_dim), f"Expected shape {(B, expected_attention_dim)}, got {combined_z.shape}"
+
+    # Test flow loss computation
+    flow_loss = model_attention.get_flow_loss_multi(same_number_augments, same_filter_augments, ground_truth)
+    assert torch.isfinite(flow_loss).all()
+    print(f"Attention flow loss: {flow_loss.mean().item():.4f}")
+    print(f"Attention output shape: {combined_z.shape}")
+
+    print("✓ Attention functionality test passed!")
+
+
 if __name__ == "__main__":
     test_double_encoder_flow()
     test_multi_sample_encoding()
     test_concatenation_functionality()
+    test_transformer_pooling()
+    test_attention_functionality()

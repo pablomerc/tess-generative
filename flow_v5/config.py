@@ -26,13 +26,19 @@ NUM_EPOCHS = 250   # Just 1 epoch for quick test, use 50
 LEARNING_RATE = 2e-4
 
 # Multi-sample batching
-USE_MULTI_SAMPLES = False
-MULTI_NUM_FILTER_AUGS = 3
-MULTI_NUM_NUMBER_AUGS = 3
+USE_MULTI_SAMPLES = True
+MULTI_NUM_FILTER_AUGS = 5
+MULTI_NUM_NUMBER_AUGS = 5
 
 # Concatenation options
 USE_CONCATENATION = False
 NUM_SAMPLES_CONCATENATION = 3  # Should match MULTI_NUM_FILTER_AUGS and MULTI_NUM_NUMBER_AUGS
+
+# Attention pooling options
+USE_ATTENTION = True
+ATTENTION_NUM_LAYERS = 2
+ATTENTION_NUM_HEADS = 4
+ATTENTION_HIDDEN_DIM = 128
 
 
 # Pretrained model options

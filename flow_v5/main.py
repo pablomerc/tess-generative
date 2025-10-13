@@ -47,6 +47,26 @@ def main():
     default_num_concat = getattr(cfg, "NUM_SAMPLES_CONCATENATION", 5)
     parser.add_argument("--num_concat_samples", type=int, default=default_num_concat,
                         help="Number of samples to concatenate (should match multi-sample counts)")
+
+    # Attention pooling arguments
+    default_attention = getattr(cfg, "USE_ATTENTION", False)
+    parser.add_argument("--attention", dest="use_attention", action="store_true",
+                        help="Enable attention-based pooling for multi-sample aggregation")
+    parser.add_argument("--no_attention", dest="use_attention", action="store_false",
+                        help="Disable attention pooling (use DeepSets instead)")
+    parser.set_defaults(use_attention=default_attention)
+
+    default_attn_layers = getattr(cfg, "ATTENTION_NUM_LAYERS", 2)
+    parser.add_argument("--attn_layers", type=int, default=default_attn_layers,
+                        help="Number of transformer layers in attention pooling")
+
+    default_attn_heads = getattr(cfg, "ATTENTION_NUM_HEADS", 4)
+    parser.add_argument("--attn_heads", type=int, default=default_attn_heads,
+                        help="Number of attention heads in attention pooling")
+
+    default_attn_hidden = getattr(cfg, "ATTENTION_HIDDEN_DIM", 128)
+    parser.add_argument("--attn_hidden", type=int, default=default_attn_hidden,
+                        help="Hidden dimension for attention pooling")
     args = parser.parse_args()
 
 
@@ -68,6 +88,10 @@ def main():
     multi_samples = args.multi_samples
     use_concatenation = args.use_concatenation
     num_concat_samples = args.num_concat_samples
+    use_attention = args.use_attention
+    attn_layers = args.attn_layers
+    attn_heads = args.attn_heads
+    attn_hidden = args.attn_hidden
     load_pretrain = cfg.load_pretrain
     if load_pretrain:
         path_pretrain = args.pretrain_path or cfg.path_pretrain
@@ -95,7 +119,9 @@ def main():
     filter_latent_dim = cfg.FILTER_ENCODER_LATENT_DIM
 
     model = build_model(device=device, use_film=use_film, multi_samples=multi_samples,
-                       use_concatenation=use_concatenation, num_concat_samples=num_concat_samples)
+                       use_concatenation=use_concatenation, num_concat_samples=num_concat_samples,
+                       use_attention=use_attention, attn_layers=attn_layers,
+                       attn_heads=attn_heads, attn_hidden=attn_hidden)
 
     # Print number of parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -153,6 +179,10 @@ def main():
             "multi_samples": multi_samples,
             "use_concatenation": use_concatenation,
             "num_concat_samples": num_concat_samples,
+            "use_attention": use_attention,
+            "attn_layers": attn_layers,
+            "attn_heads": attn_heads,
+            "attn_hidden": attn_hidden,
         }
     )
     wandb.watch(model, log="all")
