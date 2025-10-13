@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import wandb
 
 from flow_v5.utils import normalize_to_flow_range
-from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples, calculate_reconstruction_error, plot_cls_attention
+from flow_v5.viz import create_recon_figure, uncertainty_figure, uncertainty_figure_2, calculate_mean_std_of_samples, calculate_reconstruction_error, plot_cls_attention
 
 
 def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0, multi_samples: bool = False, attention_map: bool = True) -> Tuple[list, list]:
@@ -251,7 +251,7 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             "sample_std_std": sample_std_std,
         }, step=total_epoch)
 
-        if (epoch + 1) % 1 == 0:
+        if (epoch + 1) % 5 == 0:
             print(f"Creating reconstruction plot for epoch {total_epoch}...")
             try:
                 model.eval()
@@ -312,8 +312,38 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             except Exception as e:
                 print(f"Error creating uncertainty analysis: {e}")
 
+        if (epoch + 1) % 1 == 0:
+            print(f"Creating uncertainty analysis v2 for epoch {total_epoch}...")
+            #Use the first 8 elements of the fixed batch
+            try:
+                if multi_samples:
+                    fig = uncertainty_figure_2(
+                        model,
+                        fixed_ground_truth[:8],
+                        fixed_different_digit[:8],
+                        fixed_same_digit[:8],
+                        is_multi=True,
+                        same_number_augments=fixed_same_number_augments[:8],
+                        same_filter_augments=fixed_same_filter_augments[:8]
+                    )
+                else:
+                    fig = uncertainty_figure_2(
+                        model,
+                        fixed_ground_truth[:8],
+                        fixed_different_digit[:8],
+                        fixed_same_digit[:8],
+                        is_multi=False
+                    )
+                wandb.log({"uncertainty_analysis_v2": wandb.Image(fig)}, step=total_epoch)
+                # uncertainty_v2_filename = os.path.join(run_dir, f"uncertainty_v2_epoch_{total_epoch:03d}.png")
+                # fig.savefig(uncertainty_v2_filename, dpi=150, bbox_inches='tight')
+                # plt.close(fig)
+                # print(f"Saved uncertainty v2 plot to: {uncertainty_v2_filename}")
+            except Exception as e:
+                print(f"Error creating uncertainty analysis: {e}")
+
         # Create attention visualization every 5 epochs (only for multi-sample attention-based models)
-        if (epoch + 1) % 1 == 0 and multi_samples and attention_map:
+        if (epoch + 1) % 5 == 0 and multi_samples and attention_map:
             print(f"Creating attention visualization for epoch {total_epoch}...")
             try:
                 model.eval()

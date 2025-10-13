@@ -182,6 +182,122 @@ def uncertainty_figure(model, triplet_creator, num_samples=50, num_examples=8, f
     return fig
 
 
+def uncertainty_figure_2(model, ground_truth, different_digit, same_digit, is_multi: bool = False, num_samples: int = 64, same_number_augments=None, same_filter_augments=None):
+    """
+    Analyze uncertainty by sampling multiple reconstructions per example using pre-computed data.
+
+    This function is similar to uncertainty_figure but takes pre-computed ground truth and input data
+    instead of generating it from a triplet_creator. Useful for analyzing specific examples or
+    when you want to control the exact inputs used for uncertainty analysis.
+
+    Args:
+        model: The trained flow matching model
+        ground_truth: Target images for reconstruction. Shape: [B, C, H, W] in [-1, 1] range
+        different_digit: Different digit with same augmentation (for filter encoder).
+                        Shape: [B, C, H, W] in [-1, 1] range
+        same_digit: Same digit with different augmentation (for number encoder).
+                   Shape: [B, C, H, W] in [-1, 1] range
+        is_multi: Whether to use multi-sample encoding mode (default: False)
+        num_samples: Number of samples to generate per example (default: 64)
+        same_number_augments: For multi-sample mode, tensor of shape [B, N, C, H, W] where N is
+                             the number of augmentations of the same digit. Each slice along N
+                             is an augmentation of the same digit. Required when is_multi=True.
+        same_filter_augments: For multi-sample mode, tensor of shape [B, F, C, H, W] where F is
+                             the number of different digits with same augmentation. Each slice
+                             along F shares the filter/augmentation but comes from a different
+                             digit. Required when is_multi=True.
+
+    Returns:
+        matplotlib.figure.Figure: Figure containing uncertainty analysis plots with:
+            - Column 0: Ground truth images [B, C, H, W]
+            - Column 1: Mean of num_samples reconstructions [B, C, H, W]
+            - Column 2: Standard deviation across samples [B, C, H, W] (uncertainty map)
+            - Column 3: Absolute difference |Ground Truth - Mean| [B, C, H, W]
+
+    Note:
+        In multi-sample mode, same_digit and different_digit are the first augmentations
+        from the sets (for visualization), while same_number_augments and same_filter_augments
+        are the full augmentation sets used for encoding.
+    """
+
+    model.eval()
+    device = next(model.parameters()).device
+    with torch.no_grad():
+        if is_multi:
+            if same_number_augments is None or same_filter_augments is None:
+                raise ValueError("For multi-sample mode, same_number_augments and same_filter_augments must be provided")
+            # Use the full augmentation sets for encoding
+            combined_z, _, _ = model.multi_sample_encoding(
+                same_number_augments,  # Full set of number augmentations
+                same_filter_augments   # Full set of filter augmentations
+            )
+            samples_flat = model.decoder.sample(combined_z, num_samples)
+            samples = samples_flat.view(num_samples, -1, 1, model.image_size, model.image_size) # [num_samples, batch_size, 1, 28, 28]
+            print(f"Samples shape: {samples.shape}")
+            print(f"Range of samples: {samples.min().item()}, {samples.max().item()}")
+            print(f"Range of ground truth: {ground_truth.min().item()}, {ground_truth.max().item()}")
+        else:
+            # In single-sample mode, same_digit and different_digit are used directly
+            samples = model.sample(same_digit, different_digit, num_samples=num_samples) # [num_samples, batch_size, 1, 28, 28]
+            print(f"Samples shape: {samples.shape}")
+            print(f"Range of samples: {samples.min().item()}, {samples.max().item()}")
+            print(f"Range of ground truth: {ground_truth.min().item()}, {ground_truth.max().item()}")
+
+        mean_img = samples.mean(dim=0) # [batch_size, 1, 28, 28]
+        std_img = samples.std(dim=0) # [batch_size, 1, 28, 28]
+        diff_img = torch.abs(ground_truth - mean_img) # [batch_size, 1, 28, 28]
+        print(f"Mean img shape: {mean_img.shape}")
+        print(f"Std img shape: {std_img.shape}")
+        print(f"Diff img shape: {diff_img.shape}")
+        print(f"Range of mean img: {mean_img.min().item()}, {mean_img.max().item()}")
+        print(f"Range of std img: {std_img.min().item()}, {std_img.max().item()}")
+        print(f"Range of diff img: {diff_img.min().item()}, {diff_img.max().item()}")
+
+        # Create the figure
+        batch_size = ground_truth.shape[0]
+        fig, axes = plt.subplots(batch_size, 4, figsize=(16, 4 * batch_size))
+        if batch_size == 1:
+            axes = axes.reshape(1, -1)
+
+        # Plot each example
+        for idx in range(batch_size):
+            # Convert to numpy for plotting
+            original_img = to_visualization_range(ground_truth[idx, 0]).cpu().numpy()
+            mean_img_np = to_visualization_range(mean_img[idx, 0]).cpu().numpy()
+            std_img_np = to_visualization_range(std_img[idx, 0].cpu().numpy())
+            diff_img_np = to_visualization_range(diff_img[idx, 0]).cpu().numpy()
+
+            # Ground truth
+            im0 = axes[idx, 0].imshow(original_img, cmap='gray')
+            axes[idx, 0].set_title('Ground Truth')
+            axes[idx, 0].axis('off')
+
+            # Mean reconstruction
+            im1 = axes[idx, 1].imshow(mean_img_np, cmap='gray', vmin=0, vmax=1)
+            axes[idx, 1].set_title(f'Mean of {num_samples} samples')
+            axes[idx, 1].axis('off')
+
+            # Uncertainty (std)
+            im2 = axes[idx, 2].imshow(std_img_np, cmap='hot', vmin=0, vmax=max(np.max(std_img_np),0.5))
+            axes[idx, 2].set_title('Uncertainty (Std Dev)')
+            axes[idx, 2].axis('off')
+
+            # Difference
+            im3 = axes[idx, 3].imshow(diff_img_np, cmap='Reds', vmin=0, vmax=np.max(diff_img_np) if np.max(diff_img_np) > 0 else 1)
+            axes[idx, 3].set_title('|Original - Mean|')
+            axes[idx, 3].axis('off')
+
+            # Add colorbars
+            plt.colorbar(im1, ax=axes[idx, 1], fraction=0.046, pad=0.04)
+            plt.colorbar(im2, ax=axes[idx, 2], fraction=0.046, pad=0.04)
+            plt.colorbar(im3, ax=axes[idx, 3], fraction=0.046, pad=0.04)
+
+        plt.tight_layout()
+        plt.suptitle(f'Flow Matching Uncertainty Analysis ({num_samples} samples per example)', fontsize=16, y=1.02)
+        return fig
+
+
+
 def calculate_mean_std_of_samples(model, triplet_creator, num_samples=64, num_examples=16, data_seed: int | None = None, sample_seed: int | None = None):
     """Calculate the mean and std of samples from the model.
     Inputs:
