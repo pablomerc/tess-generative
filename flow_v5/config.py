@@ -22,7 +22,7 @@ from config import *  # noqa: F401,F403
 DATASET_TYPE='mnist'
 # Training hyperparameters
 BATCH_SIZE = 128  # Reduced for quick test, use 128
-NUM_EPOCHS = 250   # Just 1 epoch for quick test, use 50
+NUM_EPOCHS = 20   # Just 1 epoch for quick test, use 50
 LEARNING_RATE = 2e-4
 
 # Multi-sample batching
@@ -42,12 +42,12 @@ ATTENTION_HIDDEN_DIM = 128
 
 
 # Pretrained model options
-load_pretrain = False
+load_pretrain = True
 # path_pretrain = "../flow_decoder/reconstruction_plots_v5_mnist/double_encoder_flow_model_mnist_200.pth"
 # path_pretrain = '/root/work/tess-generative/flow_models/mnist/double-encoder-flow-mnist-v5-20251006_204716/double_encoder_flow_model_mnist_epoch_250_20251007_032221.pth'
-
+path_pretrain = '/root/work/tess-generative/flow_models/mnist/double-encoder-flow-mnist-v5-20251013_005213/double_encoder_flow_model_mnist_epoch_250_20251013_131027.pth'
 # Model save settings
-SAVE_INTERVAL = 50 # Save model every N epochsc - 50
+SAVE_INTERVAL = 10 # Save model every N epochsc - 50
 VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs - 5
 
 # Model options

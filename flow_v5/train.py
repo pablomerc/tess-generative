@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 import wandb
 
 from flow_v5.utils import normalize_to_flow_range
-from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples, calculate_reconstruction_error
+from flow_v5.viz import create_recon_figure, uncertainty_figure, calculate_mean_std_of_samples, calculate_reconstruction_error, plot_cls_attention
 
 
-def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0, multi_samples: bool = False) -> Tuple[list, list]:
+def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, start_epoch: int = 0, multi_samples: bool = False, attention_map: bool = True) -> Tuple[list, list]:
     """Training loop migrated for v5 modules.
 
     start_epoch: number of epochs the loaded model has already been trained for.
@@ -251,7 +251,7 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             "sample_std_std": sample_std_std,
         }, step=total_epoch)
 
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % 1 == 0:
             print(f"Creating reconstruction plot for epoch {total_epoch}...")
             try:
                 model.eval()
@@ -259,7 +259,7 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
                     vis_batch_size = 8
                     if multi_samples:
                         batch = triplet_creator.create_batch_multi_triplets(
-                            batch_size=vis_batch_size, dataset='train'
+                            batch_size=vis_batch_size, dataset='train', num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
                         )
 
                         ground_truth = normalize_to_flow_range(batch["anchor"]).to(device)
@@ -311,6 +311,44 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
                 print(f"Saved uncertainty plot to: {uncertainty_filename}")
             except Exception as e:
                 print(f"Error creating uncertainty analysis: {e}")
+
+        # Create attention visualization every 5 epochs (only for multi-sample attention-based models)
+        if (epoch + 1) % 1 == 0 and multi_samples and attention_map:
+            print(f"Creating attention visualization for epoch {total_epoch}...")
+            try:
+                model.eval()
+                with torch.no_grad():
+                    # Get a small batch for attention analysis
+                    vis_batch_size = 16
+                    batch = triplet_creator.create_batch_multi_triplets(
+                        batch_size=vis_batch_size, dataset='train', num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
+                    )
+                    anchor = normalize_to_flow_range(batch["anchor"]).to(device)
+                    same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
+                    same_filter_augments = normalize_to_flow_range(batch["same_filter_augments"]).to(device)
+
+                    attention_weights = model.get_attention_weights(
+                        same_number_augments, same_filter_augments
+                    )
+                    number_attention = attention_weights['number_attention']
+                    filter_attention = attention_weights['filter_attention']
+                    print(f"Number attention shape: {number_attention.shape}")
+                    print(f"Filter attention shape: {filter_attention.shape}")
+
+                    # Create attention visualization
+                    attention_fig = plot_cls_attention(number_attention, filter_attention)
+
+                    # Log to wandb
+                    wandb.log({"attention_visualization": wandb.Image(attention_fig)}, step=total_epoch)
+
+                    # Save to disk
+                    attention_filename = os.path.join(run_dir, f"attention_epoch_{total_epoch:03d}.png")
+                    attention_fig.savefig(attention_filename, dpi=150, bbox_inches='tight')
+                    plt.close(attention_fig)
+                    print(f"Saved attention plot to: {attention_filename}")
+
+            except Exception as e:
+                print(f"Error creating attention visualization: {e}")
 
         epoch_time = time.time() - epoch_start
         total_time = time.time() - start_time

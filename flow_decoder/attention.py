@@ -148,7 +148,6 @@ class TransformerPooling(nn.Module):
         # self.layers = nn.ModuleList([MultiHeadedAttention(dim=dim,n_hidden=attn_dim,num_heads=num_heads)])
         self.layers = nn.ModuleList([AttentionResidual(dim,attn_dim,mlp_dim,num_heads) for i in range(num_layers)])
 
-
     def forward(self, x: torch.Tensor, return_attn=False):
         # x                the inputs. shape: (B x T x dim)
         #
@@ -172,13 +171,12 @@ class TransformerPooling(nn.Module):
 
         # Extract CLS token (first token)
         output = x_with_cls[:, 0, :]  # [B, D]
-
+        collected_attns = torch.stack(alphas_list,dim=1)
         if return_attn:
           collected_attns = torch.stack(alphas_list,dim=1)
           return output, collected_attns
         else:
           return output
-
 
 
 

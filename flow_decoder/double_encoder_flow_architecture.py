@@ -83,37 +83,13 @@ class DoubleEncoderFlowMatching(nn.Module):
         self.filter_encoder = FilterEncoder(filter_latent_dim)
 
         # Flow matching decoder
-        # Input: combined latent (number_z + filter_z)
+        # Input: combined latent (number_z + filter_z) possibly concatenated across samples
         # Output: flattened image
-
-
-        if use_concatenation:
-            # For concatenation: we concatenate features for each sample
-            # Each sample gets (number_latent_dim + filter_latent_dim) features
-            # Total samples = num_samples_concatenation
-            decoder_input_dim = (self.combined_latent_dim) * num_samples_concatenation
-        else:
-            decoder_input_dim = self.combined_latent_dim
-
-
-
-        self.decoder = FlowMatchingDecoder(
-            input_dim=decoder_input_dim,
-            output_dim=self.image_dim,
-            velocity_field_type=velocity_field_type,
-            n_integration_steps=n_integration_steps,
-            # U-Net specific parameters
-            image_size=image_size,
-            unet_channels=unet_channels,
-            num_residual_layers=num_residual_layers,
-            t_embed_dim=t_embed_dim,
-            z_embed_dim=z_embed_dim,
-            use_film=use_film
-        )
 
         if multi_samples:
             if use_attention:
-                use_concatenation = False  # Can't use both attention and concatenation
+                # Can't use both attention and concatenation; ensure the instance flag is off
+                self.use_concatenation = False
                 self.num_aggregator = TransformerPooling(
                     dim=number_latent_dim,
                     attn_dim=128,
@@ -129,7 +105,7 @@ class DoubleEncoderFlowMatching(nn.Module):
                     num_layers=2
                 )
 
-            elif use_concatenation:
+            elif self.use_concatenation:
                 self.num_aggregator = Concatenator()
                 self.filter_aggregator = Concatenator()
             else:
@@ -144,8 +120,27 @@ class DoubleEncoderFlowMatching(nn.Module):
                     rho_hidden=128,
                     out_dim=filter_latent_dim,
                     pooling="mean")
+        # Determine decoder input dimensionality after finalizing aggregation strategy
+        if self.use_concatenation:
+            # For concatenation: concatenate features for each sample
+            decoder_input_dim = self.combined_latent_dim * self.num_samples_concatenation
+        else:
+            # For attention or DeepSets pooling, we produce a single combined latent per example
+            decoder_input_dim = self.combined_latent_dim
 
-
+        self.decoder = FlowMatchingDecoder(
+            input_dim=decoder_input_dim,
+            output_dim=self.image_dim,
+            velocity_field_type=velocity_field_type,
+            n_integration_steps=n_integration_steps,
+            # U-Net specific parameters
+            image_size=image_size,
+            unet_channels=unet_channels,
+            num_residual_layers=num_residual_layers,
+            t_embed_dim=t_embed_dim,
+            z_embed_dim=z_embed_dim,
+            use_film=use_film
+        )
 
 
     def forward(self, same_digit, different_digit):
@@ -355,6 +350,56 @@ class DoubleEncoderFlowMatching(nn.Module):
 
         flow_loss = self.decoder.get_loss(ground_truth_flat, combined_z)
         return flow_loss
+
+    def get_attention_weights(self, same_number_augments=None, same_filter_augments=None, same_digit=None, different_digit=None):
+        """
+        Extract attention weights from the model's transformer pooling layers.
+
+        Args:
+            For multi-sample mode:
+                same_number_augments: Tensor of shape [B, N, C, H, W]
+                same_filter_augments: Tensor of shape [B, F, C, H, W]
+            For single-sample mode:
+                same_digit: Tensor of shape [B, C, H, W]
+                different_digit: Tensor of shape [B, C, H, W]
+
+        Returns:
+            dict: Dictionary containing attention weights for both number and filter encoders
+                - 'number_attention': [B, num_layers, num_heads, N+1, N+1]
+                - 'filter_attention': [B, num_layers, num_heads, F+1, F+1]
+        """
+        if not hasattr(self, 'num_aggregator') or not hasattr(self, 'filter_aggregator'):
+            raise RuntimeError("get_attention_weights requires multi_samples=True with use_attention=True")
+
+        if not isinstance(self.num_aggregator, TransformerPooling) or not isinstance(self.filter_aggregator, TransformerPooling):
+            raise RuntimeError("get_attention_weights requires use_attention=True (TransformerPooling)")
+
+        with torch.no_grad():
+            if same_number_augments is not None and same_filter_augments is not None:
+                # Multi-sample mode
+                B, N, C, H, W = same_number_augments.shape
+                _, F, _, _, _ = same_filter_augments.shape
+
+                # Flatten and encode
+                number_flat = same_number_augments.view(B * N, C, H, W)
+                filter_flat = same_filter_augments.view(B * F, C, H, W)
+
+                number_z_flat, _, _ = self.number_encoder(number_flat)
+                filter_z_flat, _, _ = self.filter_encoder(filter_flat)
+
+                number_z = number_z_flat.view(B, N, -1)
+                filter_z = filter_z_flat.view(B, F, -1)
+
+                # Get attention weights from transformer pooling
+                _, number_attention = self.num_aggregator(number_z, return_attn=True)
+                _, filter_attention = self.filter_aggregator(filter_z, return_attn=True)
+
+                return {
+                    'number_attention': number_attention,
+                    'filter_attention': filter_attention
+                }
+            else:
+                raise ValueError("Must provide either (same_number_augments, same_filter_augments)")
 
 
 class AttentionHead(nn.Module):

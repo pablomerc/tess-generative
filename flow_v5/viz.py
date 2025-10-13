@@ -328,3 +328,108 @@ def calculate_reconstruction_error(model, ground_truth, different_digit, same_di
         print(f'(not used for training - just tracking as a metric)')
 
         return overall_error.item()
+
+
+def plot_cls_attention(collected_attns_num, collected_attns_filter, sample_idx=0, layer_idx=None, head_idx=None,
+                      token_labels=None, figsize=(16, 6)):
+    """
+    Visualize what the CLS token attends to across different tokens for both number and filter encoders.
+
+    Args:
+        collected_attns_num: Number encoder attention weights with shape [B, num_layers, num_heads, T+1, T+1]
+        collected_attns_filter: Filter encoder attention weights with shape [B, num_layers, num_heads, T+1, T+1]
+        sample_idx: Which sample in the batch to visualize (default: 0)
+        layer_idx: Which layer to show (None = average across all layers)
+        head_idx: Which head to show (None = average across all heads)
+        token_labels: Custom labels for tokens (default: ['CLS', 'Token 0', ...])
+        figsize: Figure size tuple
+    """
+
+    if collected_attns_num.shape[0] < 16:
+        raise ValueError("collected_attns_num must have at least 16 examples")
+
+    # Process number encoder attention
+    attention_num = collected_attns_num.flatten(1, 2)  # [B, num_layers * num_heads, T+1, T+1]
+    attention_num = attention_num[:16, :, 0, 1:].mean(1)  # [B, T] - CLS attention to other tokens
+
+    mean_attention_num = attention_num.mean(0)
+    std_attention_num = attention_num.std(0)
+
+    attention_num = torch.cat([attention_num, mean_attention_num.unsqueeze(0), std_attention_num.unsqueeze(0)], dim=0)
+
+    # Move to CPU for matplotlib
+    attention_num = attention_num.cpu()
+
+    # Process filter encoder attention
+    attention_filter = collected_attns_filter.flatten(1, 2)  # [B, num_layers * num_heads, T+1, T+1]
+    attention_filter = attention_filter[:16, :, 0, 1:].mean(1)  # [B, T] - CLS attention to other tokens
+
+    mean_attention_filter = attention_filter.mean(0)
+    std_attention_filter = attention_filter.std(0)
+
+    attention_filter = torch.cat([attention_filter, mean_attention_filter.unsqueeze(0), std_attention_filter.unsqueeze(0)], dim=0)
+
+    # Move to CPU for matplotlib
+    attention_filter = attention_filter.cpu()
+
+    # Create the plot
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+
+    # Calculate color scale limits
+    vmin_num = min(attention_num.min().item(), 0)
+    vmax_num = max(attention_num.max().item(), 0.5)
+    vmin_filter = min(attention_filter.min().item(), 0)
+    vmax_filter = max(attention_filter.max().item(), 0/5)
+    vmin = min(vmin_num, vmin_filter)
+    vmax = max(vmax_num, vmax_filter)
+
+    # Number encoder attention
+    im1 = ax1.imshow(attention_num, cmap='viridis', aspect='auto', vmin=vmin, vmax=vmax)
+    ax1.set_xlabel('Token Index')
+    ax1.set_ylabel('Batch Examples + Stats')
+    ax1.set_title('Number Encoder: CLS Attention to Augmentations')
+    ax1.set_yticks(range(attention_num.shape[0]))
+    ax1.set_yticklabels([f'Example {i}' for i in range(16)] + ['Mean', 'Std'])
+
+    # Add text annotations for number encoder
+    for i in range(attention_num.shape[0]):
+        for j in range(attention_num.shape[1]):
+            value = attention_num[i, j].item()
+            text_color = 'white' if value < (vmin + vmax) / 2 else 'black'
+            ax1.text(j, i, f'{value:.2f}', ha='center', va='center',
+                    color=text_color, fontsize=8, fontweight='bold')
+
+    plt.colorbar(im1, ax=ax1, label='Attention Weight')
+
+    # Filter encoder attention
+    im2 = ax2.imshow(attention_filter, cmap='viridis', aspect='auto', vmin=vmin, vmax=vmax)
+    ax2.set_xlabel('Token Index')
+    ax2.set_ylabel('Batch Examples + Stats')
+    ax2.set_title('Filter Encoder: CLS Attention to Different Digits')
+    ax2.set_yticks(range(attention_filter.shape[0]))
+    ax2.set_yticklabels([f'Example {i}' for i in range(16)] + ['Mean', 'Std'])
+
+    # Add text annotations for filter encoder
+    for i in range(attention_filter.shape[0]):
+        for j in range(attention_filter.shape[1]):
+            value = attention_filter[i, j].item()
+            text_color = 'white' if value < (vmin + vmax) / 2 else 'black'
+            ax2.text(j, i, f'{value:.2f}', ha='center', va='center',
+                    color=text_color, fontsize=8, fontweight='bold')
+
+    plt.colorbar(im2, ax=ax2, label='Attention Weight')
+
+    plt.tight_layout()
+    return fig
+
+
+def test_plot_cls_attention():
+    collected_attns_num = torch.randn(16, 2, 4, 6, 6)*0.5
+    collected_attns_filter = torch.randn(16, 2, 4, 6, 6)*0.5
+    fig = plot_cls_attention(collected_attns_num, collected_attns_filter)
+    fig.savefig('cls_attention.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print('Saved cls attention plot to cls_attention.png')
+
+if __name__ == '__main__':
+    test_plot_cls_attention()
