@@ -298,14 +298,14 @@ class DoubleEncoderFlowMatching(nn.Module):
         B, N, C, H, W = same_number_augments.shape
         _, F, _, _, _ = same_filter_augments.shape
 
-        number_flat = same_number_augments.view(B * N, C, H, W)
-        filter_flat = same_filter_augments.view(B * F, C, H, W)
+        number_flat = same_number_augments.reshape(B * N, C, H, W)
+        filter_flat = same_filter_augments.reshape(B * F, C, H, W)
 
         number_z_flat, _, _ = self.number_encoder(number_flat)
         filter_z_flat, _, _ = self.filter_encoder(filter_flat)
 
-        number_z = number_z_flat.view(B, N, -1)
-        filter_z = filter_z_flat.view(B, F, -1)
+        number_z = number_z_flat.reshape(B, N, -1)
+        filter_z = filter_z_flat.reshape(B, F, -1)
 
         # TODO: Support variable augmentation counts by tracking lengths per example.
         pooled_number_z = self.num_aggregator(number_z)

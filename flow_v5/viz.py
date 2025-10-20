@@ -5,7 +5,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from flow_v5.utils import normalize_to_flow_range, to_visualization_range
+from flow_v5.utils import normalize_to_flow_range, to_visualization_range, create_batch_multi_triplets_diff_seq_length
 
 
 def debug_normalization(triplet_creator, device):
@@ -539,6 +539,200 @@ def plot_cls_attention(collected_attns_num, collected_attns_filter, sample_idx=0
     return fig
 
 
+def visualize_variable_length_reconstructions(
+    model,
+    triplet_creator,
+    num_examples=4,
+    max_augs=5,
+    num_samples=1,
+    dataset='test'
+):
+    """
+    Visualize how reconstructions change with different numbers of augmentations.
+
+    Args:
+        model: The trained model
+        triplet_creator: For generating data
+        num_examples: Number of examples to show (columns)
+        max_augs: Maximum number of augmentations to test (rows)
+        num_samples: Number of samples per reconstruction (for uncertainty)
+        dataset: Dataset split to use
+
+    Returns:
+        matplotlib.figure.Figure: Figure showing reconstructions for different augmentation counts
+    """
+    model.eval()
+    device = next(model.parameters()).device
+
+    # Create a single batch with the maximum number of augmentations
+    # We'll use this as our base and then slice it for different counts
+    batch = create_batch_multi_triplets_diff_seq_length(
+        triplet_creator=triplet_creator,
+        batch_size=num_examples,
+        dataset=dataset,
+        max_num_filter_augs=max_augs,
+        max_num_number_augs=max_augs
+    )
+
+    # Normalize the data
+    ground_truth = normalize_to_flow_range(batch["anchor"]).to(device)
+    same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
+    same_filter_augments = normalize_to_flow_range(batch["same_filter_augments"]).to(device)
+    original_labels = batch["anchor_labels"].to(device)
+
+    # Create the figure: rows = max_augs + 1 (ground truth + reconstructions), cols = num_examples
+    fig, axes = plt.subplots(max_augs + 1, num_examples, figsize=(3 * num_examples, 3 * (max_augs + 1)))
+    if max_augs == 0:
+        axes = axes.reshape(1, -1)
+    if num_examples == 1:
+        axes = axes.reshape(-1, 1)
+
+    with torch.no_grad():
+        # First row: Ground truth
+        for col in range(num_examples):
+            axes[0, col].imshow(to_visualization_range(ground_truth[col, 0]).cpu(), cmap='gray')
+            axes[0, col].set_title(f'Ground Truth\nLabel: {triplet_creator.class_names[original_labels[col]]}')
+            axes[0, col].axis('off')
+
+        # Subsequent rows: Reconstructions with different augmentation counts
+        for row in range(max_augs):
+            n_augs = row + 1
+
+            # Use only the first n_augs augmentations
+            current_number_augments = same_number_augments[:, :n_augs]  # [B, n_augs, C, H, W]
+            current_filter_augments = same_filter_augments[:, :n_augs]  # [B, n_augs, C, H, W]
+
+            # Get reconstructions
+            # print(f"DEBUG: About to call multi_sample_encoding...")
+            combined_z, _, _ = model.multi_sample_encoding(
+                current_number_augments,
+                current_filter_augments,
+            )
+            # print(f"DEBUG: multi_sample_encoding completed")
+
+            if num_samples > 1:
+                # Multiple samples for uncertainty
+                # print(f"DEBUG: Using multi-sample path")
+                reconstruction_flat = model.decoder.sample(combined_z, num_samples)
+                # print(f"DEBUG: reconstruction_flat shape (multi): {reconstruction_flat.shape}")
+                reconstruction = reconstruction_flat.reshape(num_samples, -1, 1, model.image_size, model.image_size)
+                # Use mean of samples
+                reconstruction = reconstruction.mean(dim=0)  # [B, 1, H, W]
+            else:
+                # Single sample - decoder.sample returns flattened tensor
+                # print(f"DEBUG: Using single-sample path")
+                reconstruction_flat = model.decoder.sample(combined_z, 1)
+                # print(f"DEBUG: reconstruction_flat shape (single): {reconstruction_flat.shape}")
+                # Reshape to [batch_size, 1, image_size, image_size]
+                reconstruction = reconstruction_flat.reshape(-1, 1, model.image_size, model.image_size)
+                # print(f"DEBUG: reconstruction shape after reshape: {reconstruction.shape}")
+
+            # Plot reconstructions
+            for col in range(num_examples):
+                axes[row + 1, col].imshow(to_visualization_range(reconstruction[col, 0]).cpu(), cmap='gray')
+                axes[row + 1, col].set_title(f'N={n_augs} Augs\nReconstruction')
+                axes[row + 1, col].axis('off')
+
+    plt.tight_layout()
+    plt.suptitle(f'Variable-Length Reconstruction Analysis\n(Showing reconstructions for N=1 to N={max_augs} augmentations)',
+                 fontsize=14, y=0.98)
+    return fig
+
+
+def test_variable_length_debug():
+    """Debug function to test variable-length encoding with different augmentation counts."""
+    from flow_v5.data import make_multi_triplet_creator
+    from flow_v5.model import build_model
+
+    print("Testing variable-length encoding debug...")
+
+    # Create triplet creator
+    triplet_creator = make_multi_triplet_creator(dataset_type='mnist')
+
+    # Create a simple model
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = build_model(device=device, multi_samples=True, use_attention=True)
+
+    # Create a batch with max augmentations
+    batch = create_batch_multi_triplets_diff_seq_length(
+        triplet_creator=triplet_creator,
+        batch_size=2,
+        dataset='test',
+        max_num_filter_augs=3,
+        max_num_number_augs=3
+    )
+
+    # Normalize the data
+    ground_truth = normalize_to_flow_range(batch["anchor"]).to(device)
+    same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
+    same_filter_augments = normalize_to_flow_range(batch["same_filter_augments"]).to(device)
+
+    print(f"Ground truth shape: {ground_truth.shape}")
+    print(f"Same number augments shape: {same_number_augments.shape}")
+    print(f"Same filter augments shape: {same_filter_augments.shape}")
+
+    # Test different augmentation counts
+    for n_augs in range(1, 4):
+        print(f"\n--- Testing N={n_augs} augmentations ---")
+
+        # Use only the first n_augs augmentations
+        current_number_augments = same_number_augments[:, :n_augs]
+        current_filter_augments = same_filter_augments[:, :n_augs]
+
+        print(f"Current number augments shape: {current_number_augments.shape}")
+        print(f"Current filter augments shape: {current_filter_augments.shape}")
+
+        try:
+            print(f"Calling multi_sample_encoding...")
+            combined_z, _, _ = model.multi_sample_encoding(
+                current_number_augments,
+                current_filter_augments,
+            )
+            print(f"✓ multi_sample_encoding succeeded for N={n_augs}")
+            print(f"Combined z shape: {combined_z.shape}")
+
+            # Test sampling
+            reconstruction_flat = model.decoder.sample(combined_z, 1)
+            print(f"✓ decoder.sample succeeded for N={n_augs}")
+            print(f"Reconstruction flat shape: {reconstruction_flat.shape}")
+
+        except Exception as e:
+            print(f"✗ Error for N={n_augs}: {e}")
+            import traceback
+            traceback.print_exc()
+            break
+
+
+def test_visualize_variable_length_reconstructions():
+    """Test function for the variable-length reconstruction visualization."""
+    from flow_v5.data import make_multi_triplet_creator
+    from flow_v5.model import build_model
+
+    print("Testing variable-length reconstruction visualization...")
+
+    # Create triplet creator
+    triplet_creator = make_multi_triplet_creator(dataset_type='mnist')
+
+    # Create a simple model (you might want to load a trained one instead)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = build_model(device=device, multi_samples=True, use_attention=True)
+
+    # Create the visualization
+    fig = visualize_variable_length_reconstructions(
+        model=model,
+        triplet_creator=triplet_creator,
+        num_examples=3,
+        max_augs=4,
+        num_samples=1,
+        dataset='test'
+    )
+
+    # Save the figure
+    fig.savefig('variable_length_reconstructions.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print('Saved variable-length reconstruction plot to variable_length_reconstructions.png')
+
+
 def test_plot_cls_attention():
     collected_attns_num = torch.randn(16, 2, 4, 6, 6)*0.5
     collected_attns_filter = torch.randn(16, 2, 4, 6, 6)*0.5
@@ -548,4 +742,6 @@ def test_plot_cls_attention():
     print('Saved cls attention plot to cls_attention.png')
 
 if __name__ == '__main__':
+    test_variable_length_debug()
+    test_visualize_variable_length_reconstructions()
     test_plot_cls_attention()

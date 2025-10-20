@@ -32,16 +32,38 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
     if multi_samples:
         try:
             from flow_v5 import config as cfg
-            num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
-            num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+            use_variable_length = getattr(cfg, 'USE_VARIABLE_LENGTH', False)
+
+            if use_variable_length:
+                # Use variable-length batch creation for fixed validation batch
+                from flow_v5.utils import create_batch_multi_triplets_diff_seq_length
+                max_filter_augs = getattr(cfg, 'MAX_FILTER_AUGS', 5)
+                max_number_augs = getattr(cfg, 'MAX_NUMBER_AUGS', 5)
+
+                fixed_batch = create_batch_multi_triplets_diff_seq_length(
+                    triplet_creator=triplet_creator,
+                    batch_size=32,
+                    dataset='test',
+                    max_num_filter_augs=max_filter_augs,
+                    max_num_number_augs=max_number_augs
+                )
+            else:
+                # Use fixed-length batch creation
+                num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
+                num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+
+                fixed_batch = triplet_creator.create_batch_multi_triplets(
+                    batch_size=32, dataset='test',  # Use smaller batch for reconstruction error
+                    num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
+                )
         except Exception:
+            # Fallback to fixed values if config is not available
             num_filter_augs = 2
             num_number_augs = 2
-
-        fixed_batch = triplet_creator.create_batch_multi_triplets(
-            batch_size=32, dataset='test',  # Use smaller batch for reconstruction error
-            num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
-        )
+            fixed_batch = triplet_creator.create_batch_multi_triplets(
+                batch_size=32, dataset='test',
+                num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
+            )
         fixed_ground_truth = normalize_to_flow_range(fixed_batch["anchor"]).to(device)
         fixed_same_number_augments = normalize_to_flow_range(fixed_batch["same_number_augments"]).to(device)
         fixed_same_filter_augments = normalize_to_flow_range(fixed_batch["same_filter_augments"]).to(device)
@@ -85,13 +107,30 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             if multi_samples:
                 # Get augmentation counts from config
                 from flow_v5 import config as cfg
-                num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
-                num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+                use_variable_length = getattr(cfg, 'USE_VARIABLE_LENGTH', False)
 
-                batch = triplet_creator.create_batch_multi_triplets(
-                    batch_size=BATCH_SIZE, dataset='train',
-                    num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
-                )
+                if use_variable_length:
+                    # Use variable-length batch creation (only works with attention)
+                    from flow_v5.utils import create_batch_multi_triplets_diff_seq_length
+                    max_filter_augs = getattr(cfg, 'MAX_FILTER_AUGS', 5)
+                    max_number_augs = getattr(cfg, 'MAX_NUMBER_AUGS', 5)
+
+                    batch = create_batch_multi_triplets_diff_seq_length(
+                        triplet_creator=triplet_creator,
+                        batch_size=BATCH_SIZE,
+                        dataset='train',
+                        max_num_filter_augs=max_filter_augs,
+                        max_num_number_augs=max_number_augs
+                    )
+                else:
+                    # Use fixed-length batch creation
+                    num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
+                    num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+
+                    batch = triplet_creator.create_batch_multi_triplets(
+                        batch_size=BATCH_SIZE, dataset='train',
+                        num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
+                    )
 
                 anchor = normalize_to_flow_range(batch["anchor"]).to(device)
                 same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
@@ -171,13 +210,30 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
                 if multi_samples:
                     # Get augmentation counts from config (same as training)
                     from flow_v5 import config as cfg
-                    num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
-                    num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+                    use_variable_length = getattr(cfg, 'USE_VARIABLE_LENGTH', False)
 
-                    batch = triplet_creator.create_batch_multi_triplets(
-                        batch_size=BATCH_SIZE, dataset='test',
-                        num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
-                    )
+                    if use_variable_length:
+                        # Use variable-length batch creation (only works with attention)
+                        from flow_v5.utils import create_batch_multi_triplets_diff_seq_length
+                        max_filter_augs = getattr(cfg, 'MAX_FILTER_AUGS', 5)
+                        max_number_augs = getattr(cfg, 'MAX_NUMBER_AUGS', 5)
+
+                        batch = create_batch_multi_triplets_diff_seq_length(
+                            triplet_creator=triplet_creator,
+                            batch_size=BATCH_SIZE,
+                            dataset='test',
+                            max_num_filter_augs=max_filter_augs,
+                            max_num_number_augs=max_number_augs
+                        )
+                    else:
+                        # Use fixed-length batch creation
+                        num_filter_augs = getattr(cfg, 'MULTI_NUM_FILTER_AUGS', 2)
+                        num_number_augs = getattr(cfg, 'MULTI_NUM_NUMBER_AUGS', 2)
+
+                        batch = triplet_creator.create_batch_multi_triplets(
+                            batch_size=BATCH_SIZE, dataset='test',
+                            num_filter_augs=num_filter_augs, num_number_augs=num_number_augs
+                        )
 
                     anchor = normalize_to_flow_range(batch["anchor"]).to(device)
                     same_number_augments = normalize_to_flow_range(batch["same_number_augments"]).to(device)
@@ -312,7 +368,39 @@ def train(model, triplet_creator, num_epochs: int, lr: float, plots_dir: str, st
             except Exception as e:
                 print(f"Error creating uncertainty analysis: {e}")
 
-        if (epoch + 1) % 1 == 0:
+        # Variable-length reconstruction analysis (only when variable-length is enabled)
+        if (epoch + 1) % 5 == 0 and multi_samples:
+            print(f"Creating variable-length reconstruction analysis for epoch {total_epoch}...")
+            try:
+                from flow_v5.viz import visualize_variable_length_reconstructions
+                from flow_v5 import config as cfg
+
+                # Only create this visualization if variable-length is enabled
+                if getattr(cfg, 'USE_VARIABLE_LENGTH', False):
+                    max_augs = min(getattr(cfg, 'MAX_FILTER_AUGS', 5), getattr(cfg, 'MAX_NUMBER_AUGS', 5))
+
+                    var_length_fig = visualize_variable_length_reconstructions(
+                        model=model,
+                        triplet_creator=triplet_creator,
+                        num_examples=4,
+                        max_augs=max_augs,
+                        num_samples=1,
+                        dataset='test'
+                    )
+
+                    wandb.log({"variable_length_reconstructions": wandb.Image(var_length_fig)}, step=total_epoch)
+
+                    # Save to disk
+                    var_length_filename = os.path.join(run_dir, f"variable_length_epoch_{total_epoch:03d}.png")
+                    var_length_fig.savefig(var_length_filename, dpi=150, bbox_inches='tight')
+                    plt.close(var_length_fig)
+                    print(f"Saved variable-length reconstruction plot to: {var_length_filename}")
+                else:
+                    print("Skipping variable-length visualization (USE_VARIABLE_LENGTH=False)")
+            except Exception as e:
+                print(f"Error creating variable-length reconstruction analysis: {e}")
+
+        if (epoch + 1) % 5 == 0:
             print(f"Creating uncertainty analysis v2 for epoch {total_epoch}...")
             #Use the first 8 elements of the fixed batch
             try:
