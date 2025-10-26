@@ -124,8 +124,13 @@ class DoubleEncoderFlowMatching(nn.Module):
         if self.use_concatenation:
             # For concatenation: concatenate features for each sample
             decoder_input_dim = self.combined_latent_dim * self.num_samples_concatenation
+        elif use_attention:
+            # For attention pooling: we flatten CLS tokens, so dimension is n_clstokens * combined_latent_dim
+            # Get the actual number of CLS tokens from the aggregator
+            n_clstokens = getattr(self.num_aggregator, 'n_clstokens', 2)  # Default to 2 if not found
+            decoder_input_dim = self.combined_latent_dim * n_clstokens
         else:
-            # For attention or DeepSets pooling, we produce a single combined latent per example
+            # For DeepSets pooling, we produce a single combined latent per example
             decoder_input_dim = self.combined_latent_dim
 
         self.decoder = FlowMatchingDecoder(
@@ -814,21 +819,21 @@ def test_transformer_pooling():
     output = pooling(x)
 
     print(f"Output shape: {output.shape}")
-    print(f"Expected output shape: ({batch_size}, {d_model})")
+    print(f"Expected output shape: ({batch_size}, {d_model * pooling.n_clstokens})")  # Dynamic based on n_clstokens
 
     # Verify output shape
-    assert output.shape == (batch_size, d_model), f"Expected shape ({batch_size}, {d_model}), got {output.shape}"
+    assert output.shape == (batch_size, d_model * pooling.n_clstokens), f"Expected shape ({batch_size}, {d_model * pooling.n_clstokens}), got {output.shape}"
 
     # Test with different number of tokens
     x2 = torch.randn(batch_size, 3, d_model, device=device)
     output2 = pooling(x2)
-    assert output2.shape == (batch_size, d_model), f"Expected shape ({batch_size}, {d_model}), got {output2.shape}"
+    assert output2.shape == (batch_size, d_model * pooling.n_clstokens), f"Expected shape ({batch_size}, {d_model * pooling.n_clstokens}), got {output2.shape}"
 
     # Test attention weight extraction
     output3, attn_weights = pooling(x, return_attn=True)
     print(f"Attention weights shape: {attn_weights.shape}")
-    print(f"Expected attention shape: ({batch_size}, {num_layers}, {nhead}, {num_tokens+1}, {num_tokens+1})")
-    assert attn_weights.shape == (batch_size, num_layers, nhead, num_tokens+1, num_tokens+1), f"Expected attention shape ({batch_size}, {num_layers}, {nhead}, {num_tokens+1}, {num_tokens+1}), got {attn_weights.shape}"
+    print(f"Expected attention shape: ({batch_size}, {num_layers}, {nhead}, {num_tokens+pooling.n_clstokens}, {num_tokens+pooling.n_clstokens})")  # Dynamic based on n_clstokens
+    assert attn_weights.shape == (batch_size, num_layers, nhead, num_tokens+pooling.n_clstokens, num_tokens+pooling.n_clstokens), f"Expected attention shape ({batch_size}, {num_layers}, {nhead}, {num_tokens+pooling.n_clstokens}, {num_tokens+pooling.n_clstokens}), got {attn_weights.shape}"
 
     print("✓ TransformerPooling test passed!")
 
@@ -864,7 +869,9 @@ def test_attention_functionality():
     print(f"Pooled filter z shape: {pooled_filter_z.shape}")
 
     # Check that attention produces the expected output shape
-    expected_attention_dim = model_attention.number_latent_dim + model_attention.filter_latent_dim
+    # With n_clstokens flattened: (number_latent_dim + filter_latent_dim) * n_clstokens
+    n_clstokens = getattr(model_attention.num_aggregator, 'n_clstokens', 2)
+    expected_attention_dim = (model_attention.number_latent_dim + model_attention.filter_latent_dim) * n_clstokens
     assert combined_z.shape == (B, expected_attention_dim), f"Expected shape {(B, expected_attention_dim)}, got {combined_z.shape}"
 
     # Test flow loss computation

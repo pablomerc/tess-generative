@@ -27,8 +27,8 @@ LEARNING_RATE = 2e-4
 
 # Multi-sample batching
 USE_MULTI_SAMPLES = True
-MULTI_NUM_FILTER_AUGS = 3
-MULTI_NUM_NUMBER_AUGS = 3
+MULTI_NUM_FILTER_AUGS = 5
+MULTI_NUM_NUMBER_AUGS = 5
 
 # Concatenation options
 USE_CONCATENATION = False
@@ -41,7 +41,7 @@ ATTENTION_NUM_HEADS = 4
 ATTENTION_HIDDEN_DIM = 128
 
 # Variable-length sequence options (between batches - use only for attention)
-USE_VARIABLE_LENGTH = True  # Enable variable-length sequences between batches
+USE_VARIABLE_LENGTH = False  # Enable variable-length sequences between batches
 MAX_FILTER_AUGS = 5  # Maximum number of filter augmentations
 MAX_NUMBER_AUGS = 5  # Maximum number of number augmentations
 

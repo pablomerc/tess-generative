@@ -129,21 +129,23 @@ class AttentionResidual(nn.Module):
 
 
 class TransformerPooling(nn.Module):
-    def __init__(self, dim: int, attn_dim: int, mlp_dim: int, num_heads: int, num_layers: int):
+    def __init__(self, dim: int, attn_dim: int, mlp_dim: int, num_heads: int, num_layers: int, n_clstokens: int = 1):
         # dim       the dimension of the input
         # attn_dim  the hidden dimension of the attention layer
         # mlp_dim   the hidden layer of the FFN
         # num_heads the number of heads in the attention layer
         # num_layers the number of attention layers.
+        # n_clstokens the number of CLS tokens to use (default: 2)
         super().__init__()
 
         self.dim=dim
         self.n_hidden=attn_dim
         self.n_heads=num_heads
         self.n_layers=num_layers
+        self.n_clstokens=n_clstokens
 
-        # Learnable CLS token
-        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
+        # Learnable CLS tokens
+        self.cls_token = nn.Parameter(torch.randn(1, n_clstokens, dim))
 
         # self.layers = nn.ModuleList([MultiHeadedAttention(dim=dim,n_hidden=attn_dim,num_heads=num_heads)])
         self.layers = nn.ModuleList([AttentionResidual(dim,attn_dim,mlp_dim,num_heads) for i in range(num_layers)])
@@ -152,25 +154,29 @@ class TransformerPooling(nn.Module):
         # x                the inputs. shape: (B x T x dim)
         #
         # Outputs:
-        # attn_output      shape: (B x dim) - pooled CLS token
+        # attn_output      shape: (B x n_clstokens * dim) - flattened pooled CLS tokens
         # attn_alphas      If return_attn is False, return None. Otherwise return the attention weights
         #                  of each of each of the attention heads for each of the layers.
-        #                  shape: (B x Num_layers x Num_heads x T+1 x T+1)
+        #                  shape: (B x Num_layers x Num_heads x T+n_clstokens x T+n_clstokens)
 
         B, T, D = x.shape
         device = x.device
 
-        # Add CLS token at the beginning
+        # Add CLS tokens at the beginning
         cls_token = self.cls_token.expand(B, -1, -1).to(device)
-        x_with_cls = torch.cat([cls_token, x], dim=1)  # [B, T+1, D]
+        x_with_cls = torch.cat([cls_token, x], dim=1)  # [B, T+n_clstokens, D]
 
         alphas_list=[]
         for layer in self.layers:
           x_with_cls, alphas = layer(x_with_cls)
           alphas_list.append(alphas)
 
-        # Extract CLS token (first token)
-        output = x_with_cls[:, 0, :]  # [B, D]
+        # Extract CLS tokens (first n_clstokens tokens)
+        output = x_with_cls[:, :self.n_clstokens, :]  # [B, n_clstokens, D]
+
+        # Flatten the CLS tokens to [B, n_clstokens * D]
+        output = output.view(B, -1)
+
         collected_attns = torch.stack(alphas_list,dim=1)
         if return_attn:
           collected_attns = torch.stack(alphas_list,dim=1)
