@@ -129,7 +129,7 @@ class AttentionResidual(nn.Module):
 
 
 class TransformerPooling(nn.Module):
-    def __init__(self, dim: int, attn_dim: int, mlp_dim: int, num_heads: int, num_layers: int, n_clstokens: int = 1):
+    def __init__(self, dim: int, attn_dim: int, mlp_dim: int, num_heads: int, num_layers: int, n_clstokens: int = 2):
         # dim       the dimension of the input
         # attn_dim  the hidden dimension of the attention layer
         # mlp_dim   the hidden layer of the FFN
