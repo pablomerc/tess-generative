@@ -60,3 +60,8 @@ load_pretrain = False
 # Model save settings
 SAVE_INTERVAL = 50 # Save model every N epochsc - 50
 VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs - 5
+
+# Data paths
+DATA_DIR = '/mnt/scratch/legacysurvey_hsc_crossmatched/data'
+MODELS_DIR = '../models-galaxy/'
+PLOTS_DIR = '../plots-galaxy/'

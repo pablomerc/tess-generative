@@ -259,22 +259,23 @@ class UNetVelocityField(VelocityField):
     def __init__(self, input_dim: int, output_dim: int, image_size: int = 28,
                  channels: List[int] = [32, 64, 128], num_residual_layers: int = 2,
                  t_embed_dim: int = 40, z_embed_dim: int = 40, use_film: bool = True,
-                 unconditional: bool = False):
+                 unconditional: bool = False, num_channels: int = 1):
         super().__init__()
 
         self.image_size = image_size
         self.output_dim = output_dim
+        self.num_channels = num_channels
         self.use_film = use_film
         self.unconditional = unconditional or (input_dim == 0)
 
         # Verify output_dim matches image dimensions
-        expected_dim = image_size * image_size
+        expected_dim = num_channels * image_size * image_size
         if output_dim != expected_dim:
-            raise ValueError(f"output_dim {output_dim} must equal image_size² = {expected_dim}")
+            raise ValueError(f"output_dim {output_dim} must equal num_channels * image_size² = {expected_dim}")
 
-        # Initial convolution: (batch_size, 1, image_size, image_size) -> (batch_size, c_0, image_size, image_size)
+        # Initial convolution: (batch_size, num_channels, image_size, image_size) -> (batch_size, c_0, image_size, image_size)
         self.init_conv = nn.Sequential(
-            nn.Conv2d(1, channels[0], kernel_size=3, padding=1),
+            nn.Conv2d(num_channels, channels[0], kernel_size=3, padding=1),
             nn.BatchNorm2d(channels[0]),
             nn.SiLU()
         )
@@ -316,7 +317,7 @@ class UNetVelocityField(VelocityField):
                                  use_film=use_film, unconditional=self.unconditional)
 
         # Final convolution
-        self.final_conv = nn.Conv2d(channels[0], 1, kernel_size=3, padding=1)
+        self.final_conv = nn.Conv2d(channels[0], num_channels, kernel_size=3, padding=1)
 
     #     # Initialize weights for stability
     #     self._initialize_weights()
@@ -348,7 +349,7 @@ class UNetVelocityField(VelocityField):
         batch_size = x.shape[0]
 
         # Reshape x to image format
-        x = x.view(batch_size, 1, self.image_size, self.image_size)
+        x = x.view(batch_size, self.num_channels, self.image_size, self.image_size)
 
         # Handle time dimension
         if t.dim() == 0:
@@ -385,7 +386,7 @@ class UNetVelocityField(VelocityField):
             # x = torch.clamp(x, -5.0, 5.0)
 
         # Final convolution
-        x = self.final_conv(x)  # (batch_size, 1, image_size, image_size)
+        x = self.final_conv(x)  # (batch_size, num_channels, image_size, image_size)
         # x = torch.clamp(x, -3.0, 3.0)
 
         # Flatten back to original format
@@ -426,7 +427,8 @@ class FlowMatchingDecoder(BaseDecoder):
         t_embed_dim: int = 40,
         z_embed_dim: int = 40,
         use_film: bool = True,
-        unconditional: bool = False
+        unconditional: bool = False,
+        num_channels: int = 1
     ):
         super().__init__(input_dim, output_dim)
         self.n_integration_steps = n_integration_steps
@@ -444,7 +446,7 @@ class FlowMatchingDecoder(BaseDecoder):
             self.vector_field = UNetVelocityField(
                 effective_input_dim, output_dim, image_size, unet_channels,
                 num_residual_layers, t_embed_dim, z_embed_dim,
-                use_film=use_film, unconditional=self.unconditional
+                use_film=use_film, unconditional=self.unconditional, num_channels=num_channels
             )
         else:
             raise ValueError(f"Unknown velocity_field_type: {velocity_field_type}. Supported: 'mlp', 'unet'")

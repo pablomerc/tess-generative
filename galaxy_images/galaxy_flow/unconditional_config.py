@@ -6,7 +6,8 @@ that generates galaxy images without any conditioning.
 
 # Image configuration (after preprocessing)
 IMAGE_SIZE = 96  # After center crop from 160x160
-OUTPUT_DIM = IMAGE_SIZE * IMAGE_SIZE  # 96 * 96 = 9216 (flattened image)
+NUM_CHANNELS = 4  # Number of channels (g, r, i, z)
+OUTPUT_DIM = NUM_CHANNELS * IMAGE_SIZE * IMAGE_SIZE  # 4 * 96 * 96 = 36864 (flattened multi-channel image)
 
 # Model architecture parameters
 VELOCITY_FIELD_TYPE = "unet"  # "mlp" or "unet"
@@ -29,12 +30,20 @@ BATCH_SIZE = 32  # Batch size for training
 NUM_EPOCHS = 250  # Number of training epochs
 LEARNING_RATE = 2e-4  # Learning rate
 
+NUM_SAMPLES_PER_EPOCH=1000
+WEIGHT_DECAY = 1e-5
+
 # Model save settings
 SAVE_INTERVAL = 50  # Save model every N epochs
 VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs
 
 # Data configuration
 SURVEY = 'HSC'  # Survey to use for data loading
+DATA_DIR = '/mnt/scratch/legacysurvey_hsc_crossmatched/data'
+
+# Output directories
+MODELS_DIR = './models-galaxy/'
+PLOTS_DIR = './plots-galaxy/'
 
 # Pretrained model options
 LOAD_PRETRAIN = False

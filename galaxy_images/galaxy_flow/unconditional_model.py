@@ -22,6 +22,7 @@ class UnconditionalGalaxyFlow(nn.Module):
         self,
         image_size: int = None,
         output_dim: int = None,
+        num_channels: int = None,
         velocity_field_type: str = None,
         use_film: bool = None,
         unet_channels: list = None,
@@ -35,6 +36,7 @@ class UnconditionalGalaxyFlow(nn.Module):
 
         # Use config defaults if not provided
         image_size = image_size or cfg.IMAGE_SIZE
+        num_channels = num_channels if num_channels is not None else cfg.NUM_CHANNELS
         output_dim = output_dim or cfg.OUTPUT_DIM
         velocity_field_type = velocity_field_type or cfg.VELOCITY_FIELD_TYPE
         use_film = use_film if use_film is not None else cfg.USE_FILM
@@ -45,12 +47,12 @@ class UnconditionalGalaxyFlow(nn.Module):
         mlp_hidden_dims = mlp_hidden_dims or cfg.MLP_HIDDEN_DIMS
         n_integration_steps = n_integration_steps or cfg.N_INTEGRATION_STEPS
 
-        # Verify output_dim matches image_size
-        expected_output_dim = image_size * image_size
+        # Verify output_dim matches image_size and num_channels
+        expected_output_dim = num_channels * image_size * image_size
         if output_dim != expected_output_dim:
             raise ValueError(
-                f"output_dim {output_dim} must equal image_size² = {expected_output_dim} "
-                f"for UNetVelocityField. Got image_size={image_size}"
+                f"output_dim {output_dim} must equal num_channels * image_size² = {expected_output_dim} "
+                f"for UNetVelocityField. Got num_channels={num_channels}, image_size={image_size}"
             )
 
         # Create unconditional decoder (input_dim=0 means no conditioning)
@@ -68,9 +70,11 @@ class UnconditionalGalaxyFlow(nn.Module):
             z_embed_dim=z_embed_dim,
             use_film=use_film,
             unconditional=True,  # Explicitly set unconditional mode
+            num_channels=num_channels,  # Pass num_channels for multi-channel support
         )
 
         self.image_size = image_size
+        self.num_channels = num_channels
         self.output_dim = output_dim
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
