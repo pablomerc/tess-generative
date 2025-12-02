@@ -13,6 +13,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+# Try to import wandb
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not available. Install with: pip install wandb")
+
 
 current_path=os.path.abspath(__file__)
 parent_dir = os.path.dirname(os.path.dirname(current_path))
@@ -24,7 +32,7 @@ from . import unconditional_config as cfg
 from galaxy_images.image_preprocessing import preprocess_image
 
 
-def visualize_samples(model, device, num_samples=8, save_path=None, epoch=None):
+def visualize_samples(model, device, num_samples=8, save_path=None, epoch=None, use_wandb=False):
     """Visualize generated samples and save both plot and raw values."""
     model.eval()
 
@@ -90,7 +98,7 @@ def visualize_samples(model, device, num_samples=8, save_path=None, epoch=None):
     return samples_np
 
 
-def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_SIZE, use_object_mask=False, show_progress=True):
+def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_SIZE, use_object_mask=False, show_progress=False):
     """Train the model for one epoch."""
     model.train()
     total_loss = 0
@@ -154,7 +162,7 @@ def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_
     return avg_loss
 
 
-def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY):
+def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True):
     """Main training loop."""
 
     if device is None:
@@ -164,6 +172,36 @@ def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RAT
 
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+
+    # Initialize wandb if available and requested
+    if use_wandb and WANDB_AVAILABLE:
+        wandb.init(
+            project="galaxy-unconditional-flow",
+            name=f"unconditional_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            config={
+                "num_epochs": num_epochs,
+                "learning_rate": lr,
+                "batch_size": cfg.BATCH_SIZE,
+                "weight_decay": weight_decay,
+                "image_size": cfg.IMAGE_SIZE,
+                "num_channels": cfg.NUM_CHANNELS,
+                "output_dim": cfg.OUTPUT_DIM,
+                "velocity_field_type": cfg.VELOCITY_FIELD_TYPE,
+                "use_film": cfg.USE_FILM,
+                "unet_channels": cfg.UNET_CHANNELS,
+                "num_residual_layers": cfg.NUM_RESIDUAL_LAYERS,
+                "n_integration_steps": cfg.N_INTEGRATION_STEPS,
+                "num_samples_per_epoch": cfg.NUM_SAMPLES_PER_EPOCH,
+                "save_interval": cfg.SAVE_INTERVAL,
+                "visualization_interval": cfg.VISUALIZATION_INTERVAL,
+                "device": str(device),
+            }
+        )
+        wandb.watch(model, log="all")
+        print("Wandb initialized")
+    elif use_wandb and not WANDB_AVAILABLE:
+        print("Warning: wandb requested but not available. Continuing without wandb.")
+        use_wandb = False
 
     # Create output directory
     os.makedirs(plots_dir, exist_ok=True)
@@ -192,18 +230,58 @@ def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RAT
         # Print loss at every epoch
         print(f"\nEpoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.6f} - Time: {epoch_time:.1f}s")
 
+        # Log to wandb
+        if use_wandb and WANDB_AVAILABLE:
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": train_loss,
+                "learning_rate": optimizer.param_groups[0]['lr'],
+                "epoch_time": epoch_time,
+            }, step=epoch + 1)
+
         # Update progress bar with loss info
         pbar.set_postfix({'loss': f'{train_loss:.4f}', 'time': f'{epoch_time:.1f}s'})
 
         # Visualization
         if (epoch + 1) % cfg.VISUALIZATION_INTERVAL == 0:
             try:
-                visualize_samples(
+                samples_np = visualize_samples(
                     model, device,
                     num_samples=8,
                     save_path=os.path.join(run_dir, f'samples_epoch_{epoch+1}.png'),
-                    epoch=epoch+1
+                    epoch=epoch+1,
+                    use_wandb=use_wandb and WANDB_AVAILABLE
                 )
+                # Log images to wandb
+                if use_wandb and WANDB_AVAILABLE:
+                    # Create a figure for wandb logging
+                    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+                    axes = axes.flatten()
+                    for i in range(min(8, len(samples_np))):
+                        # Convert 4-channel to RGB
+                        rgb = np.stack([
+                            samples_np[i, 0],  # g -> R
+                            samples_np[i, 1],  # r -> G
+                            samples_np[i, 2]   # i -> B
+                        ], axis=-1)
+                        # Normalize for visualization
+                        for c in range(3):
+                            ch = rgb[:, :, c]
+                            ch_min, ch_max = ch.min(), ch.max()
+                            if ch_max > ch_min:
+                                rgb[:, :, c] = (ch - ch_min) / (ch_max - ch_min)
+                            else:
+                                rgb[:, :, c] = 0
+                        axes[i].imshow(rgb, vmin=0, vmax=1)
+                        axes[i].set_title(f'Sample {i+1}')
+                        axes[i].axis('off')
+                    # Hide unused subplots
+                    for i in range(len(samples_np), len(axes)):
+                        axes[i].axis('off')
+                    plt.suptitle(f'Generated Samples - Epoch {epoch+1}', fontsize=14)
+                    plt.tight_layout()
+                    wandb.log({"generated_samples": wandb.Image(fig)}, step=epoch + 1)
+                    plt.close(fig)
             except Exception as e:
                 print(f"Error creating visualization: {e}")
 
@@ -217,6 +295,11 @@ def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RAT
                 'train_losses': train_losses,
             }, checkpoint_path)
             print(f"Saved checkpoint to {checkpoint_path}")
+
+    # Finish wandb run
+    if use_wandb and WANDB_AVAILABLE:
+        wandb.finish()
+        print("Wandb run finished")
 
 
 
@@ -236,5 +319,4 @@ if __name__ == "__main__":
     print(f"Model initialized with {sum(p.numel() for p in model.parameters()):,} parameters")
 
     # Train
-    # train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device)
-    train(model, triplet_creator, num_epochs=3, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device)
+    train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device)

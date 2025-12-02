@@ -35,7 +35,7 @@ WEIGHT_DECAY = 1e-5
 
 # Model save settings
 SAVE_INTERVAL = 50  # Save model every N epochs
-VISUALIZATION_INTERVAL = 5  # Show visualizations every N epochs
+VISUALIZATION_INTERVAL = 2  # Show visualizations every N epochs
 
 # Data configuration
 SURVEY = 'HSC'  # Survey to use for data loading
