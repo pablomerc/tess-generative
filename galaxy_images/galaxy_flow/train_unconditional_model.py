@@ -12,6 +12,7 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from collections import defaultdict
 
 # Try to import wandb
 try:
@@ -30,6 +31,7 @@ from galaxy_triplets import TripletCreator
 from .unconditional_model import build_model
 from . import unconditional_config as cfg
 from galaxy_images.image_preprocessing import preprocess_image
+from .hsc_data_loader import HSCDataLoader
 
 
 def visualize_samples(model, device, num_samples=8, save_path=None, epoch=None, use_wandb=False):
@@ -98,8 +100,12 @@ def visualize_samples(model, device, num_samples=8, save_path=None, epoch=None, 
     return samples_np
 
 
-def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_SIZE, use_object_mask=False, show_progress=False):
-    """Train the model for one epoch."""
+def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_SIZE, use_object_mask=False, show_progress=False, profile=False):
+    """Train the model for one epoch.
+
+    Args:
+        profile: If True, returns timing breakdown and FLOPs info
+    """
     model.train()
     total_loss = 0
     num_batches = 0
@@ -112,43 +118,101 @@ def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_
     # Band names must match BAND_CENTER_MAX keys in image_preprocessing.py
     legacysurvey_bands = ['DES-G', 'DES-R', 'DES-I', 'DES-Z']
 
+    # Timing measurements
+    timing_stats = defaultdict(float)
+
     batch_iter = tqdm(range(num_batches_epoch), desc="Batches", leave=False) if show_progress else range(num_batches_epoch)
     for batch_idx in batch_iter:
         try:
+            # Time data loading
+            t0 = time.time()
+            anchor_survey='hsc'
+            # Use appropriate anchor_survey based on data loader type
+            # HSCDataLoader always uses HSC, TripletCreator can use either
+
+
             batch = triplet_creator.create_batch_triplets(
                 batch_size=batch_size,
-                anchor_survey="legacysurvey",
+                anchor_survey=anchor_survey,
                 use_object_mask=use_object_mask
             )
+            t1 = time.time()
+            timing_stats['data_loading'] += (t1 - t0)
 
-            # Extract image tensor: (B, C, H, W) where C = num_bands*3 (+ 1 if object_mask)
-            # Structure: [flux_bands, ivar_bands, mask_bands, (object_mask)]
+            # Extract image tensor
+            t0 = time.time()
             im = batch["ground_truth"]["tensor"].to(device)  # (B, C, H, W)
 
-            # Extract flux channels (first num_bands channels)
-            num_bands = 4  # Default from TripletCreator
-            flux_channels = im[:, :num_bands, :, :]  # (B, num_bands, H, W)
+            # Check if data is already preprocessed (shape should be (B, 4, 96, 96))
+            # If shape is (B, 4, 96, 96), data is preprocessed; otherwise, it needs preprocessing
+            is_preprocessed = (im.shape[1] == 4 and im.shape[2] == cfg.IMAGE_SIZE and im.shape[3] == cfg.IMAGE_SIZE)
 
-            # Preprocess: crop to 96x96, clamp, rescale, range compress
-            # preprocess_image expects (B, C, H, W) and returns (B, C, 96, 96)
-            processed = preprocess_image(
-                flux_channels,
-                bands=legacysurvey_bands,
-                crop_size=cfg.IMAGE_SIZE,
-                apply_range_compression=True
-            )  # (B, num_bands, 96, 96)
+            if is_preprocessed:
+                # Data is already preprocessed (crop, clamp, rescale, range compress)
+                # Normalize to [-1, 1] range for flow matching
+                min_val = im.min()
+                max_val = im.max()
+                if not torch.isclose(max_val, min_val):
+                    im_norm = (im - min_val) / (max_val - min_val)  # [0, 1]
+                    im_norm = 2.0 * im_norm - 1.0  # [-1, 1]
+                else:
+                    im_norm = torch.zeros_like(im)
+                # Flatten it
+                im_flat = im_norm.flatten(1)  # (B, num_channels * 96 * 96)
+            else:
+                # Extract flux channels (first num_bands channels)
+                # Structure: [flux_bands, ivar_bands, mask_bands, (object_mask)]
+                num_bands = 4  # Default from TripletCreator
+                flux_channels = im[:, :num_bands, :, :]  # (B, num_bands, H, W)
 
-            # Flatten all channels to (B, output_dim) where output_dim = num_channels * 96 * 96 = 36864
-            # Shape: (B, 4, 96, 96) -> (B, 4*96*96)
-            im_flat = processed.flatten(1)  # (B, num_channels * 96 * 96)
+                # Preprocess: crop to 96x96, clamp, rescale, range compress
+                # preprocess_image expects (B, C, H, W) and returns (B, C, 96, 96)
+                processed = preprocess_image(
+                    flux_channels,
+                    bands=legacysurvey_bands,
+                    crop_size=cfg.IMAGE_SIZE,
+                    apply_range_compression=True
+                )  # (B, num_bands, 96, 96)
+
+                # Normalize to [-1, 1] range for flow matching
+                # Compute min/max for normalization
+                min_val = processed.min()
+                max_val = processed.max()
+                if not torch.isclose(max_val, min_val):
+                    processed_norm = (processed - min_val) / (max_val - min_val)  # [0, 1]
+                    processed_norm = 2.0 * processed_norm - 1.0  # [-1, 1]
+                else:
+                    processed_norm = torch.zeros_like(processed)
+
+                # Flatten all channels to (B, output_dim) where output_dim = num_channels * 96 * 96 = 36864
+                # Shape: (B, 4, 96, 96) -> (B, 4*96*96)
+                im_flat = processed_norm.flatten(1)  # (B, num_channels * 96 * 96)
+
+            t1 = time.time()
+            timing_stats['data_preprocessing'] += (t1 - t0)
 
             # Forward pass
+            t0 = time.time()
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
             loss = model(im_flat)
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+            t1 = time.time()
+            timing_stats['forward'] += (t1 - t0)
 
             # Backward pass
+            t0 = time.time()
             optimizer.zero_grad()
             loss.backward()
+            # Gradient clipping for stability
+            if hasattr(cfg, 'MAX_GRAD_NORM') and cfg.MAX_GRAD_NORM > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.MAX_GRAD_NORM)
             optimizer.step()
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+            t1 = time.time()
+            timing_stats['backward'] += (t1 - t0)
 
             total_loss += loss.item()
             num_batches += 1
@@ -159,10 +223,71 @@ def train_epoch(model, triplet_creator, optimizer, device, batch_size=cfg.BATCH_
 
     avg_loss = total_loss / num_batches if num_batches > 0 else float('inf')
 
+    # Normalize timing by number of batches
+    if num_batches > 0:
+        for key in timing_stats:
+            timing_stats[key] /= num_batches
+
+    if profile:
+        return avg_loss, timing_stats
     return avg_loss
 
 
-def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True):
+def count_flops(model, input_shape, device):
+    """Estimate FLOPs for the model using a simple forward pass analysis.
+
+    This is a rough estimate. For more accurate FLOP counting, use thop or fvcore.
+    """
+    try:
+        # Try to use thop if available
+        import thop
+        dummy_input = torch.randn(1, *input_shape).to(device)
+        flops, params = thop.profile(model, inputs=(dummy_input,), verbose=False)
+        return flops, params
+    except ImportError:
+        # Fallback: estimate based on model parameters and input size
+        # Rough estimate: 2 * num_params * input_size (for forward pass)
+        total_params = sum(p.numel() for p in model.parameters())
+        input_size = np.prod(input_shape)
+        # Very rough estimate: assume each parameter is used once per forward pass
+        estimated_flops = total_params * input_size * 2  # multiply by 2 for add/multiply ops
+        return estimated_flops, total_params
+
+
+def print_profiling_info(timing_stats, num_batches, batch_size, flops_info=None):
+    """Print detailed profiling information."""
+    print("\n" + "="*60)
+    print("PROFILING INFORMATION")
+    print("="*60)
+
+    total_time = sum(timing_stats.values())
+    print(f"\nPer-batch timing (averaged over {num_batches} batches):")
+    for key, value in timing_stats.items():
+        percentage = (value / total_time * 100) if total_time > 0 else 0
+        print(f"  {key:20s}: {value*1000:6.2f} ms ({percentage:5.1f}%)")
+
+    print(f"\nTotal per-batch time: {total_time*1000:.2f} ms")
+    print(f"Estimated epoch time: {total_time * num_batches:.2f} s")
+
+    if flops_info:
+        flops, params = flops_info
+        print(f"\nModel complexity:")
+        print(f"  Parameters: {params:,}")
+        if flops > 1e12:
+            print(f"  FLOPs (estimated): {flops/1e12:.2f} TFLOPs")
+        elif flops > 1e9:
+            print(f"  FLOPs (estimated): {flops/1e9:.2f} GFLOPs")
+        elif flops > 1e6:
+            print(f"  FLOPs (estimated): {flops/1e6:.2f} MFLOPs")
+        else:
+            print(f"  FLOPs (estimated): {flops:,.0f}")
+        print(f"  FLOPs per batch: {flops/1e9:.4f} GFLOPs")
+        print(f"  Throughput: {batch_size / total_time:.2f} samples/sec")
+
+    print("="*60 + "\n")
+
+
+def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True, profile_first_epoch=None):
     """Main training loop."""
 
     if device is None:
@@ -215,7 +340,26 @@ def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RAT
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Output directory: {run_dir}")
 
-    pbar = tqdm(range(num_epochs), desc="Training")
+    # Profile first epoch if requested (default from config)
+    if profile_first_epoch is None:
+        profile_first_epoch = getattr(cfg, 'PROFILE_FIRST_EPOCH', True)
+
+    start_epoch = 0
+    if profile_first_epoch:
+        print("\nProfiling first epoch...")
+        flops_info = count_flops(model, (cfg.OUTPUT_DIM,), device)
+        train_loss, timing_stats = train_epoch(
+            model, triplet_creator, optimizer, device, profile=True
+        )
+        num_batches_epoch = max(1, cfg.NUM_SAMPLES_PER_EPOCH // cfg.BATCH_SIZE)
+        print_profiling_info(timing_stats, num_batches_epoch, cfg.BATCH_SIZE, flops_info)
+        train_losses.append(train_loss)
+        start_epoch = 1
+        scheduler.step(train_loss)
+        print(f"\nEpoch 1/{num_epochs} - Train Loss: {train_loss:.6f}")
+
+    pbar = tqdm(range(start_epoch, num_epochs), desc="Training", initial=start_epoch, total=num_epochs)
+
     for epoch in pbar:
         epoch_start = time.time()
 
@@ -308,11 +452,28 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Create triplet creator
-    triplet_creator = TripletCreator(
-        dataset_path=cfg.DATA_DIR,
-        split='train'
-    )
+    # Create data loader (either preprocessed HDF5 or TripletCreator)
+    if getattr(cfg, 'USE_PREPROCESSED_DATA', False):
+        hdf5_path = getattr(cfg, 'PREPROCESSED_HDF5_PATH', '/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5')
+        if not os.path.exists(hdf5_path):
+            print(f"Warning: Preprocessed HDF5 file not found at {hdf5_path}")
+            print("Falling back to TripletCreator. Run preprocess_hsc_images.py first to create preprocessed data.")
+            triplet_creator = TripletCreator(
+                dataset_path=cfg.DATA_DIR,
+                split='train'
+            )
+        else:
+            print(f"Using preprocessed HDF5 data from {hdf5_path}")
+            triplet_creator = HSCDataLoader(
+                hdf5_path=hdf5_path,
+                seed=42
+            )
+    else:
+        print("Using TripletCreator (raw parquet data)")
+        triplet_creator = TripletCreator(
+            dataset_path=cfg.DATA_DIR,
+            split='train'
+        )
 
     # Initialize model using build_model (uses unconditional_config defaults)
     model = build_model(device=device)
@@ -320,3 +481,7 @@ if __name__ == "__main__":
 
     # Train
     train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device)
+
+    # Cleanup: close HDF5 file if using HSCDataLoader
+    if isinstance(triplet_creator, HSCDataLoader):
+        triplet_creator.close()
