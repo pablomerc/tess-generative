@@ -171,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--files_to_use",
         type=int,
-        default=4,
+        default=40,
         help="Number of parquet files to use (default: 40, use 0 for all files)"
     )
 
