@@ -525,9 +525,11 @@ class FlowMatchingDecoder(BaseDecoder):
         for i in range(self.n_integration_steps):
             t = torch.full((actual_batch_size,), i * dt, device=actual_device)
             v = self.vector_field_forward(x, t, z_expanded)
-            v = torch.clamp(v, -10.0, 10.0) # Clamp velocity
+            # Use softer clamping or remove entirely - hard clamps can cause artifacts
+            # v = torch.clamp(v, -10.0, 10.0) # Clamp velocity
             x = x + dt * v
-            x = torch.clamp(x, -3.0, 3.0) # Clamp position
+            # Remove hard clamp on position - let the model learn the natural data range
+            # x = torch.clamp(x, -3.0, 3.0) # Clamp position
 
         if n_samples > 1:
             x = x.view(n_samples, z.shape[0], self.output_dim)
