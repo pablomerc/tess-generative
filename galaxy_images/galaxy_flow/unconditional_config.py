@@ -14,7 +14,7 @@ VELOCITY_FIELD_TYPE = "unet"  # "mlp" or "unet"
 USE_FILM = True  # Use FiLM (Feature-wise Linear Modulation) layers
 
 # U-Net specific parameters (only used if VELOCITY_FIELD_TYPE == "unet")
-UNET_CHANNELS = [128, 256, 512]  # Channel dimensions for U-Net encoder/decoder (increased for better capacity)
+UNET_CHANNELS = [64, 128, 256]  # Channel dimensions for U-Net encoder/decoder (increased for better capacity)
 # [64, 128, 256]
 NUM_RESIDUAL_LAYERS = 2  # Number of residual layers per U-Net block
 T_EMBED_DIM = 40  # Time embedding dimension
@@ -24,7 +24,8 @@ Z_EMBED_DIM = 40  # Conditioning embedding dimension (unused for unconditional, 
 MLP_HIDDEN_DIMS = [128, 128]  # Hidden layer dimensions for MLP velocity field
 
 # Flow matching parameters
-N_INTEGRATION_STEPS = 250  # Number of ODE integration steps for sampling (increased for better quality)
+N_INTEGRATION_STEPS = 100  # Number of ODE integration steps for sampling (increased for better quality)
+#just testing to see what happens if I reduce it, change back to 250?
 
 # Training hyperparameters
 BATCH_SIZE = 32  # Batch size for training
