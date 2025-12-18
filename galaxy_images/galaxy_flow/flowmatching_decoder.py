@@ -535,6 +535,42 @@ class FlowMatchingDecoder(BaseDecoder):
             x = x.view(n_samples, z.shape[0], self.output_dim)
         return x
 
+    def sample_from_fixed_noise(
+        self,
+        x0: torch.Tensor,
+        z: Optional[torch.Tensor] = None,
+        n_steps: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Evolve a fixed initial noise x0 under the learned velocity field.
+
+        This is useful for visualizations where you want multiple samples to start
+        from the same noise but use different conditioning vectors z.
+
+        Args:
+            x0: Initial noise, shape (batch_size, output_dim)
+            z: Optional conditioning, shape (batch_size, input_dim)
+            n_steps: Optional number of integration steps (defaults to self.n_integration_steps)
+
+        Returns:
+            x_T: Final samples after integrating from t=0 to t=1, same shape as x0
+        """
+        batch_size = x0.shape[0]
+        device = x0.device
+
+        # Get conditioning (handles unconditional case if needed)
+        z = self._get_z(z, batch_size, device)
+
+        n_steps = n_steps or self.n_integration_steps
+        dt = 1.0 / n_steps
+
+        x = x0.clone()
+        for i in range(n_steps):
+            t = torch.full((batch_size,), i * dt, device=device)
+            v = self.vector_field_forward(x, t, z)
+            x = x + dt * v
+
+        return x
+
     def sample(self, z: Optional[torch.Tensor] = None, n_samples: int = 1,
                batch_size: Optional[int] = None, device: Optional[torch.device] = None,
                generator: Optional[torch.Generator] = None) -> torch.Tensor:

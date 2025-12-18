@@ -28,8 +28,10 @@ from galaxy_images.galaxy_triplets import TripletCreator
 
 
 def preprocess_all_hsc_images(
-    dataset_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/data",
-    output_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
+    # dataset_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/data",
+    dataset_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/",
+    # output_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
+    output_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
     crop_size: int = 96,
     batch_size: int = 100,
     files_to_use: int = 40,  # Default to 40 files for testing
@@ -147,13 +149,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_path",
         type=str,
-        default="/mnt/scratch/legacysurvey_hsc_crossmatched/data",
+        # default="/mnt/scratch/legacysurvey_hsc_crossmatched/data",
+        default="/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/",
         help="Path to directory containing parquet files"
     )
     parser.add_argument(
         "--output_path",
         type=str,
-        default="/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
+        # default="/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
+        default="/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
         help="Path to output HDF5 file"
     )
     parser.add_argument(
