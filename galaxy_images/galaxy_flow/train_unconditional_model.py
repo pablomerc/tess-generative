@@ -291,7 +291,7 @@ def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RAT
     """Main training loop."""
 
     if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
     model = model.to(device)
 
@@ -449,7 +449,7 @@ def train(model, triplet_creator, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RAT
 
 if __name__ == "__main__":
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
     print(f"Using device: {device}")
 
     # Create data loader (either preprocessed HDF5 or TripletCreator)
