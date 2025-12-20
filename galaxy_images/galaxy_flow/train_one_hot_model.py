@@ -298,7 +298,11 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
     """
     model.train()
     total_loss = 0
+    total_hsc_loss = 0
+    total_legacy_loss = 0
     num_batches = 0
+    num_hsc_samples = 0
+    num_legacy_samples = 0
 
     num_samples = cfg.NUM_SAMPLES_PER_EPOCH
     num_batches_epoch = max(1, num_samples // batch_size)
@@ -359,6 +363,28 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
             t1 = time.time()
             timing_stats['forward'] += (t1 - t0)
 
+            # Compute per-sample losses for tracking survey-specific losses
+            # Identify which samples belong to which survey
+            # z shape: (batch_size, 2) where [1, 0] = HSC, [0, 1] = Legacy
+            hsc_mask = z[:, 0] > 0.5  # HSC samples (first element is 1)
+            legacy_mask = z[:, 1] > 0.5  # Legacy samples (second element is 1)
+
+            # Get per-sample losses by computing loss separately for each group
+            # We compute losses separately for each group to track them independently
+            # Note: This adds extra forward passes, but allows us to track survey-specific losses
+            with torch.no_grad():
+                if hsc_mask.any():
+                    hsc_loss = model(im_flat[hsc_mask], z[hsc_mask])
+                    num_hsc_in_batch = hsc_mask.sum().item()
+                    total_hsc_loss += hsc_loss.item() * num_hsc_in_batch
+                    num_hsc_samples += num_hsc_in_batch
+
+                if legacy_mask.any():
+                    legacy_loss = model(im_flat[legacy_mask], z[legacy_mask])
+                    num_legacy_in_batch = legacy_mask.sum().item()
+                    total_legacy_loss += legacy_loss.item() * num_legacy_in_batch
+                    num_legacy_samples += num_legacy_in_batch
+
             # Backward pass
             t0 = time.time()
             optimizer.zero_grad()
@@ -380,6 +406,8 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
             continue
 
     avg_loss = total_loss / num_batches if num_batches > 0 else float('inf')
+    avg_hsc_loss = total_hsc_loss / num_hsc_samples if num_hsc_samples > 0 else float('inf')
+    avg_legacy_loss = total_legacy_loss / num_legacy_samples if num_legacy_samples > 0 else float('inf')
 
     # Normalize timing by number of batches
     if num_batches > 0:
@@ -387,8 +415,8 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
             timing_stats[key] /= num_batches
 
     if profile:
-        return avg_loss, timing_stats
-    return avg_loss
+        return avg_loss, timing_stats, avg_hsc_loss, avg_legacy_loss
+    return avg_loss, avg_hsc_loss, avg_legacy_loss
 
 
 def count_flops(model, input_shape, device):
@@ -506,7 +534,7 @@ def train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, p
     if profile_first_epoch:
         print("\nProfiling first epoch...")
         flops_info = count_flops(model, (cfg.OUTPUT_DIM,), device)
-        train_loss, timing_stats = train_epoch(
+        train_loss, timing_stats, hsc_loss, legacy_loss = train_epoch(
             model, data_loader, optimizer, device, profile=True
         )
         num_batches_epoch = max(1, cfg.NUM_SAMPLES_PER_EPOCH // cfg.BATCH_SIZE)
@@ -514,7 +542,7 @@ def train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, p
         train_losses.append(train_loss)
         start_epoch = 1
         scheduler.step(train_loss)
-        print(f"\nEpoch 1/{num_epochs} - Train Loss: {train_loss:.6f}")
+        print(f"\nEpoch 1/{num_epochs} - Train Loss: {train_loss:.6f} - HSC Loss: {hsc_loss:.6f} - Legacy Loss: {legacy_loss:.6f}")
 
     pbar = tqdm(range(start_epoch, num_epochs), desc="Training", initial=start_epoch, total=num_epochs)
 
@@ -522,7 +550,7 @@ def train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, p
         epoch_start = time.time()
 
         # Train
-        train_loss = train_epoch(model, data_loader, optimizer, device)
+        train_loss, hsc_loss, legacy_loss = train_epoch(model, data_loader, optimizer, device)
         train_losses.append(train_loss)
 
         scheduler.step(train_loss)
@@ -530,19 +558,26 @@ def train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, p
         epoch_time = time.time() - epoch_start
 
         # Print loss at every epoch
-        print(f"\nEpoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.6f} - Time: {epoch_time:.1f}s")
+        print(f"\nEpoch {epoch+1}/{num_epochs} - Train Loss: {train_loss:.6f} - HSC Loss: {hsc_loss:.6f} - Legacy Loss: {legacy_loss:.6f} - Time: {epoch_time:.1f}s")
 
         # Log to wandb
         if use_wandb and WANDB_AVAILABLE:
             wandb.log({
                 "epoch": epoch + 1,
                 "train_loss": train_loss,
+                "hsc_loss": hsc_loss,
+                "legacy_loss": legacy_loss,
                 "learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch_time": epoch_time,
             }, step=epoch + 1)
 
         # Update progress bar with loss info
-        pbar.set_postfix({'loss': f'{train_loss:.4f}', 'time': f'{epoch_time:.1f}s'})
+        pbar.set_postfix({
+            'loss': f'{train_loss:.4f}',
+            'hsc': f'{hsc_loss:.4f}',
+            'legacy': f'{legacy_loss:.4f}',
+            'time': f'{epoch_time:.1f}s'
+        })
 
         # Visualization
         if (epoch + 1) % cfg.VISUALIZATION_INTERVAL == 0:
