@@ -10,7 +10,48 @@ Based on ConditionalConvVAE architecture
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from config import *
+from .config import *
+
+class GalaxyEncoder(nn.Module):
+    """
+    Galaxy Encoder: Learns to encode an image of a galaxy
+    Based on NumberEncoder architecture
+    """
+    def __init__(self, latent_dim=NUMBER_ENCODER_LATENT_DIM):
+        super().__init__()
+
+        # Encoder layers (based on ConditionalConvVAE)
+        self.enc = nn.Sequential(
+            nn.Conv2d(4, 64, 3, 1, 1),   # (B,64,28,28) - use 3x3 kernel with padding=1
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 3, 1, 1),  # (B,128,28,28) - use 3x3 kernel with padding=1
+            nn.ReLU(),
+            nn.Flatten()
+        )
+
+        # Latent space projection
+        self.fc_mu = nn.Linear(128*96*96, latent_dim)
+        self.fc_logvar = nn.Linear(128*96*96, latent_dim)
+
+    def encode(self, x):
+        """Encode input to latent representation"""
+        h = self.enc(x)
+        mu = self.fc_mu(h)
+        logvar = self.fc_logvar(h)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        """Reparameterization trick for VAE"""
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x):
+        """Forward pass: encode and reparameterize"""
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        return z, mu, logvar
+
 
 
 class NumberEncoder(nn.Module):
