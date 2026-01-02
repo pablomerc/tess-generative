@@ -15,6 +15,11 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SURVEY='HSC'
 
+# Model hyperparameters
+LATENT_DIM = 16
+NUMBER_ENCODER_LATENT_DIM = LATENT_DIM
+FILTER_ENCODER_LATENT_DIM = LATENT_DIM
+
 # Training hyperparameters
 BATCH_SIZE = 128  # Reduced for quick test, use 128
 NUM_EPOCHS = 250   # Just 1 epoch for quick test, use 50
