@@ -13,8 +13,7 @@ from typing import Optional
 
 from galaxy_images.galaxy_flow.flowmatching_decoder import FlowMatchingDecoder
 
-#TODO: Make a config for this model
-from galaxy_images.galaxy_flow import unconditional_config as cfg
+from galaxy_images.galaxy_flow import single_encoder_config as cfg
 
 from galaxy_images.galaxy_flow.encoder_architectures import GalaxyEncoder
 
@@ -25,7 +24,7 @@ class SingleEncoderGalaxyFlow(nn.Module):
     '''
     def __init__(
         self,
-        encoder_latent_dim: int=16,
+        encoder_latent_dim: int=None,
         image_size: int=None,
         output_dim: int=None,
         num_channels: int=None,
@@ -38,7 +37,7 @@ class SingleEncoderGalaxyFlow(nn.Module):
         t_embed_dim: int = None,
         z_embed_dim: int = None,
     ):
-        # encoder_latent_dim = encoder_latent_dim or cfg.ENCODER_LATENT_DIM
+        encoder_latent_dim = encoder_latent_dim or cfg.ENCODER_LATENT_DIM
         image_size = image_size or cfg.IMAGE_SIZE
         num_channels = num_channels if num_channels is not None else cfg.NUM_CHANNELS
         output_dim = output_dim or cfg.OUTPUT_DIM
