@@ -21,17 +21,34 @@ class GalaxyEncoder(nn.Module):
         super().__init__()
 
         # Encoder layers (based on ConditionalConvVAE)
+        # self.enc = nn.Sequential(
+        #     nn.Conv2d(4, 64, 3, 1, 1),   # (B,64,28,28) - use 3x3 kernel with padding=1
+        #     nn.ReLU(),
+        #     nn.Conv2d(64, 128, 3, 1, 1),  # (B,128,28,28) - use 3x3 kernel with padding=1
+        #     nn.ReLU(),
+        #     nn.Flatten()
+        # )
+        base_channels = 64
+        c1 = base_channels
+        c2 = base_channels*2
+        c3 = base_channels*4
+
         self.enc = nn.Sequential(
-            nn.Conv2d(4, 64, 3, 1, 1),   # (B,64,28,28) - use 3x3 kernel with padding=1
+            nn.Conv2d(4, c1, 3, 2, 1),   # (B,64,48,48) - use 3x3 kernel with stride = 2
             nn.ReLU(),
-            nn.Conv2d(64, 128, 3, 1, 1),  # (B,128,28,28) - use 3x3 kernel with padding=1
+            nn.Conv2d(c1, c2, 3, 2, 1),  # (B, 128, 24, 24) - use 3x3 kernel with padding=1
             nn.ReLU(),
-            nn.Flatten()
+            nn.Conv2d(c2, c3, 3, 2, 1),  # (B, 256, 12, 12) - use 3x3 kernel with padding=1
+            nn.ReLU(),
+            # (B, c3, 12, 12) -> (B, c3, 1, 1)
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),  # -> (B, c3)
         )
 
+
         # Latent space projection
-        self.fc_mu = nn.Linear(128*96*96, latent_dim)
-        self.fc_logvar = nn.Linear(128*96*96, latent_dim)
+        self.fc_mu = nn.Linear(c3, latent_dim)
+        self.fc_logvar = nn.Linear(c3, latent_dim)
 
     def encode(self, x):
         """Encode input to latent representation"""
