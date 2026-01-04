@@ -11,7 +11,7 @@ NUM_CHANNELS = 4  # Number of channels (g, r, i, z)
 OUTPUT_DIM = NUM_CHANNELS * IMAGE_SIZE * IMAGE_SIZE  # 4 * 96 * 96 = 36864 (flattened multi-channel image)
 
 
-ENCODER_LATENT_DIM = 40
+ENCODER_LATENT_DIM = 20 # originally 40
 
 # Model architecture parameters
 VELOCITY_FIELD_TYPE = "unet"  # "mlp" or "unet"
@@ -28,7 +28,8 @@ Z_EMBED_DIM = ENCODER_LATENT_DIM
 MLP_HIDDEN_DIMS = [128, 128]  # Hidden layer dimensions for MLP velocity field
 
 # Flow matching parameters
-N_INTEGRATION_STEPS = 250  # Number of ODE integration steps for sampling
+N_INTEGRATION_STEPS = 100  # Number of ODE integration steps for sampling
+# Originally 250
 
 # Training hyperparameters
 BATCH_SIZE = 32  # Batch size for training
@@ -41,7 +42,7 @@ WEIGHT_DECAY = 1e-5
 
 # Model save settings
 SAVE_INTERVAL = 25  # Save model every N epochs
-VISUALIZATION_INTERVAL = 10  # Show visualizations every N epochs
+VISUALIZATION_INTERVAL = 2  # Show visualizations every N epochs
 PROFILE_FIRST_EPOCH = True  # Profile first epoch to show timing breakdown and FLOPs
 
 # Data configuration
@@ -51,7 +52,8 @@ DATA_DIR = '/mnt/scratch/legacysurvey_hsc_crossmatched/data'
 # Preprocessed data configuration (for faster loading)
 USE_PREPROCESSED_DATA = True # Set to True to use preprocessed HDF5 format
 # PREPROCESSED_HDF5_PATH = '/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5'
-PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5'
+# PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5'
+PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy.h5'
 
 # Data loader options
 LOAD_TO_MEMORY = True  # Whether to load all preprocessed images into memory
