@@ -205,9 +205,14 @@ if __name__ == "__main__":
     # Convert 0 to None (meaning use all files)
     files_to_use = None if args.files_to_use == 0 else args.files_to_use
 
+    dataset_path = '/Users/pablomercaderperez/Desktop/data/data/'
+    output_path = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy.h5'
+
     preprocess_all_hsc_legacy_images(
-        dataset_path=args.dataset_path,
-        output_path=args.output_path,
+        # dataset_path=args.dataset_path,
+        dataset_path = dataset_path,
+        # output_path=args.output_path,
+        output_path = output_path,
         crop_size=args.crop_size,
         batch_size=args.batch_size,
         files_to_use=files_to_use,
