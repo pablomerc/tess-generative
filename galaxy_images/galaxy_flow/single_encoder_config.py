@@ -11,7 +11,7 @@ NUM_CHANNELS = 4  # Number of channels (g, r, i, z)
 OUTPUT_DIM = NUM_CHANNELS * IMAGE_SIZE * IMAGE_SIZE  # 4 * 96 * 96 = 36864 (flattened multi-channel image)
 
 
-ENCODER_LATENT_DIM = 20 # originally 40
+ENCODER_LATENT_DIM = 40 # originally 40
 
 # Model architecture parameters
 VELOCITY_FIELD_TYPE = "unet"  # "mlp" or "unet"
