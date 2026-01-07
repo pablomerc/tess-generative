@@ -640,21 +640,45 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Load model
-    print("\nLoading pretrained model...")
+    # Load checkpoint first to get config
+    if not os.path.exists(args.checkpoint):
+        print(f"ERROR: Checkpoint not found at {args.checkpoint}")
+        return
+    
+    print("\nLoading checkpoint to extract model configuration...")
+    checkpoint = torch.load(args.checkpoint, map_location=device)
+    
+    # Extract config from checkpoint if available
+    checkpoint_config = checkpoint.get('config', {})
+    number_latent_dim = checkpoint_config.get('number_latent_dim', None)
+    filter_latent_dim = checkpoint_config.get('filter_latent_dim', None)
+    
+    if number_latent_dim is not None and filter_latent_dim is not None:
+        print(f"Found checkpoint config: number_latent_dim={number_latent_dim}, filter_latent_dim={filter_latent_dim}")
+    else:
+        print("Warning: Checkpoint config not found, using default config values")
+        print(f"  Default: number_latent_dim={cfg.NUMBER_ENCODER_LATENT_DIM}, filter_latent_dim={cfg.FILTER_ENCODER_LATENT_DIM}")
+    
+    # Build model with checkpoint config (if available)
+    print("\nBuilding model...")
     dataset_type = args.dataset or cfg.DATASET_TYPE
     multi_samples = args.multi_samples or getattr(cfg, 'USE_MULTI_SAMPLES', False)
     
-    model = build_model(device=device, multi_samples=multi_samples)
+    model = build_model(
+        device=device,
+        multi_samples=multi_samples,
+        number_latent_dim=number_latent_dim,
+        filter_latent_dim=filter_latent_dim
+    )
     
-    if os.path.exists(args.checkpoint):
-        checkpoint = torch.load(args.checkpoint, map_location=device)
-        state_dict = checkpoint.get('model_state_dict', checkpoint)
-        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-        print(f"Loaded checkpoint. Missing keys: {len(missing_keys)}, Unexpected keys: {len(unexpected_keys)}")
-    else:
-        print(f"ERROR: Checkpoint not found at {args.checkpoint}")
-        return
+    # Load state dict
+    state_dict = checkpoint.get('model_state_dict', checkpoint)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print(f"Loaded checkpoint. Missing keys: {len(missing_keys)}, Unexpected keys: {len(unexpected_keys)}")
+    if missing_keys:
+        print(f"  Missing keys (first 5): {list(missing_keys)[:5]}")
+    if unexpected_keys:
+        print(f"  Unexpected keys (first 5): {list(unexpected_keys)[:5]}")
 
     model.eval()
 
@@ -839,6 +863,13 @@ python -m flow_v5.downstream_tasks \
     --multi_samples \
     --num_filter_augs 5 \
     --num_number_augs 5 \
+    --task classification
+'''
+'''
+
+python -m flow_v5.downstream_tasks \
+    --checkpoint <your_checkpoint_path> \
+    --num_samples 10000 \
     --task classification
 '''
 
