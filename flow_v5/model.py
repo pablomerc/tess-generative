@@ -2,7 +2,7 @@ import torch
 from flow_v5 import config as cfg
 
 
-def build_model(device: str = None, use_film: bool = None, multi_samples: bool = False,
+def build_model(device: str = None, use_film: bool = None, multi_samples: bool = None,
                 use_concatenation: bool = None, num_concat_samples: int = None,
                 use_attention: bool = None, attn_layers: int = None,
                 attn_heads: int = None, attn_hidden: int = None):
@@ -13,6 +13,8 @@ def build_model(device: str = None, use_film: bool = None, multi_samples: bool =
     filter_latent_dim = cfg.FILTER_ENCODER_LATENT_DIM
     if use_film is None:
         use_film = getattr(cfg, "USE_FILM", True)
+    if multi_samples is None:
+        multi_samples = getattr(cfg, "USE_MULTI_SAMPLES", False)
     if use_concatenation is None:
         use_concatenation = getattr(cfg, "USE_CONCATENATION", False)
     if num_concat_samples is None:

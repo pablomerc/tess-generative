@@ -124,13 +124,14 @@ class DoubleEncoderFlowMatching(nn.Module):
         if self.use_concatenation:
             # For concatenation: concatenate features for each sample
             decoder_input_dim = self.combined_latent_dim * self.num_samples_concatenation
-        elif use_attention:
+        elif use_attention and multi_samples:
             # For attention pooling: we flatten CLS tokens, so dimension is n_clstokens * combined_latent_dim
             # Get the actual number of CLS tokens from the aggregator
+            # Only access num_aggregator if multi_samples is True (aggregators are only created when multi_samples=True)
             n_clstokens = getattr(self.num_aggregator, 'n_clstokens', 2)  # Default to 2 if not found
             decoder_input_dim = self.combined_latent_dim * n_clstokens
         else:
-            # For DeepSets pooling, we produce a single combined latent per example
+            # For DeepSets pooling or single-sample mode, we produce a single combined latent per example
             decoder_input_dim = self.combined_latent_dim
 
         self.decoder = FlowMatchingDecoder(
