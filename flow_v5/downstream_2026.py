@@ -250,7 +250,8 @@ def main():
     print(f'Using device:{device}')
 
     # check_point_path = 'path_to_checkpoint'
-    check_point_path = '/Users/pablomercaderperez/Desktop/tess-generative/flow_models/mnist/double-encoder-flow-mnist-v5-20260107_125957/double_encoder_flow_model_mnist_epoch_1_20260107_131442.pth'
+    # check_point_path = '/Users/pablomercaderperez/Desktop/tess-generative/flow_models/mnist/double-encoder-flow-mnist-v5-20260107_125957/double_encoder_flow_model_mnist_epoch_1_20260107_131442.pth'
+    check_point_path = '/Users/pablomercaderperez/Desktop/tess-generative/pdo_models/double_encoder_flow_model_mnist_epoch_250_20260108_045316.pth'
     if check_point_path == 'path_to_checkpoint':
         print('NEED TO UPDATE PATH TO CHECKPOINT')
         # return
@@ -314,7 +315,7 @@ def main():
 
     # Unique rotatioins
     unique_rotations = torch.unique(rotations)
-    
+
     # Convert rotations to discrete class labels
     print('\nConverting rotations to discrete class labels...')
     # Create mapping from rotation value to class index
