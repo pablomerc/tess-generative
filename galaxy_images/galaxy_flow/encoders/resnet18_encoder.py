@@ -15,7 +15,7 @@ class GalaxyResnet(nn.Module):
     '''
     Resnet18 based galaxy encoder
     '''
-    def __init__(self):
+    def __init__(self, z_dim = 512):
         super().__init__()
 
         self.backbone = models.resnet18(weights=None)
@@ -29,30 +29,71 @@ class GalaxyResnet(nn.Module):
             bias=False
         )
 
-        # Remove classifier head to return latents
-        self.backbone.fc = nn.Identity()
+        if z_dim == 512:
+            self.backbone.fc = nn.Identity()
+        else:
+            self.backbone.fc = nn.Linear(512, z_dim)
 
     def forward(self, x):
         """
         Args:
             x: Tensor (B,4,H,W)
         Returns:
-            z: Tensor (B, 512)
+            z: Tensor (B, 512) or (B, z_dim)
+        """
+        return self.backbone(x)
+
+
+class GalaxyResnet34(nn.Module):
+    '''
+    Resnet34 based galaxy encoder
+    '''
+    def __init__(self, z_dim = 512):
+        super().__init__()
+
+        self.backbone = models.resnet34(weights=None)
+
+        self.backbone.conv1 = nn.Conv2d(
+            in_channels=4,
+            out_channels=64,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False
+        )
+
+        if z_dim == 512:
+            self.backbone.fc = nn.Identity()
+        else:
+            self.backbone.fc = nn.Linear(512, z_dim)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor (B,4,H,W)
+        Returns:
+            z: Tensor (B, 512) or (B, z_dim)
         """
         return self.backbone(x)
 
 
 
 if __name__ == '__main__':
-    model = GalaxyResnet()
-    # print(model)
-    # Tesing the inputs of the model
-    x = torch.randn(100,4,256,256)
 
-    with torch.no_grad():
-        z = model(x)
-
-    print(f'Shape of z {z.shape}')
-
+    model = GalaxyResnet34()
+    print(model)
     total_params = sum(p.numel() for p in model.parameters())
     print(f'Total model params: {total_params:,}')
+
+    # model = GalaxyResnet()
+    # print(model)
+    # # Tesing the inputs of the model
+    # x = torch.randn(100,4,256,256)
+
+    # with torch.no_grad():
+    #     z = model(x)
+
+    # print(f'Shape of z {z.shape}')
+
+    # total_params = sum(p.numel() for p in model.parameters())
+    # print(f'Total model params: {total_params:,}')
