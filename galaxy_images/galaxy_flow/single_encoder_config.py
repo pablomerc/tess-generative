@@ -77,6 +77,8 @@ PREPROCESSED_HDF5_PATH = '/data/vision/billf/scratch/pablomer/legacysurvey_hsc/d
 
 # Data loader options
 LOAD_TO_MEMORY = True  # Whether to load all preprocessed images into memory
+# MAX_SAMPLES = None  # Maximum number of image pairs to use. Set to None to use all available pairs.
+MAX_SAMPLES=50
 
 # Output directories
 MODELS_DIR = './models-galaxy/'

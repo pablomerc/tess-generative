@@ -38,11 +38,11 @@ def _is_concat_model(model):
 
 def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE, normalize=False):
     """Train the model for one epoch.
-    
+
     The single encoder model needs pairs of images (source and target).
     Supports both latent and concat decoder types.
     """
-    
+
     model.train()
     total_loss = 0
     num_batches = 0
@@ -61,7 +61,7 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
             if normalize:
                 min_val_hsc = hsc_batch.min()
                 max_val_hsc = hsc_batch.max()
-                
+
                 hsc_norm = (hsc_batch - min_val_hsc) / ((max_val_hsc - min_val_hsc)+1e-3)
                 hsc_flat = hsc_norm.flatten(1)
 
@@ -88,20 +88,20 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
             optimizer.step()
 
             total_loss += loss.item()
-            num_batches += 1 
+            num_batches += 1
 
             # Update the progress bar with current stats
             batch_iter.set_postfix({
                 'loss': f"{loss.item():.4f}",
                 'avg_loss': f"{total_loss / num_batches:.4f}"
             })
-            
+
         except Exception as e:
             print(f'Error in training batch {batch_idx}: {e}')
             continue
-    
+
     avg_loss = total_loss / num_batches
-    
+
     return avg_loss
 
 
@@ -152,7 +152,7 @@ def train(
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     run_dir = os.path.join(plots_dir, f'single_enc_flow_{timestamp}')
     os.makedirs(run_dir, exist_ok=True)
-    
+
     train_losses=[]
     print(f"Starting training on device: {device}")
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -243,7 +243,7 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
         if normalize:
             min_val_hsc = hsc_batch.min()
             max_val_hsc = hsc_batch.max()
-            
+
             hsc_norm = (hsc_batch - min_val_hsc) / ((max_val_hsc - min_val_hsc)+1e-3)
             hsc_flat = hsc_norm.flatten(1)
 
@@ -265,7 +265,7 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
             # Latent mode: encode first
             z = model.encode(legacy_batch)
             samples_hsc = model.sample(device=device, n_samples=num_samples, z=z)
-        
+
         # samples_hsc shape: (n_samples, n_examples, C*H*W) for both modes
 
         # Clear cache again after sampling
@@ -283,7 +283,7 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
     num_cols = num_samples + 2  # +2 for target and condition columns
 
     fig, axes = plt.subplots(num_rows, num_cols, figsize=(4 * num_cols, 2 * num_rows))
-    
+
     # Ensure axes is 2D array
     if num_rows == 1:
         axes = axes.reshape(1, num_cols)
@@ -307,7 +307,7 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
                 rgb[:, :, c] = 0.0
         return rgb
 
-    
+
     for j in range(num_examples):
         rgb_gt = to_rgb(hsc_batch_np[j])
         axes[j,0].imshow(rgb_gt, vmin=0, vmax=1)
@@ -329,16 +329,16 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
         fontsize=14,
     )
     plt.tight_layout()
-    
+
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         print(f"Saved visualization to {save_path}")
-    
+
     if use_wandb:
         wandb.log({"generated_samples": wandb.Image(fig)}, step=epoch if epoch is not None else None)
-    
+
     plt.close(fig)
-    
+
     return samples_hsc
 
 
@@ -355,6 +355,7 @@ if __name__ == "__main__":
         hdf5_path=hdf5_path,
         seed=42,
         load_to_memory=getattr(cfg, 'LOAD_TO_MEMORY', True),
+        max_samples=getattr(cfg, 'MAX_SAMPLES', None),
     )
 
     # Initialize the model based on decoder type
@@ -373,15 +374,9 @@ if __name__ == "__main__":
     #     print(name, p.shape, p.numel(), p.requires_grad)
 
     # Train
-    train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device)
+    use_wandb = getattr(cfg, 'USE_WANDB', True)  # Default to True for backward compatibility
+    train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device, use_wandb=use_wandb)
 
     # Cleanup: close HDF5 file if using HSCDataLoader
     if isinstance(data_loader, HSC_Legacy_DataLoader_OneHot):
         data_loader.close()
-
-
-   
-
-    
-
- 
