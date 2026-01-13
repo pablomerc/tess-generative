@@ -59,8 +59,7 @@ class SingleEncoderGalaxyFlow(nn.Module):
             self.encoder = GalaxyEncoder(encoder_latent_dim)
             self._encoder_returns_tuple = True  # GalaxyEncoder returns (z, mu, logvar)
         elif encoder_type == 'resnet':
-            self.encoder = GalaxyResnet()
-            encoder_latent_dim = 512
+            self.encoder = GalaxyResnet(z_dim=encoder_latent_dim)
             self._encoder_returns_tuple = False  # GalaxyResnet returns z directly
         else:
             raise ValueError(f"Unknown encoder_type: {encoder_type}. Must be 'cnn' or 'resnet'")
