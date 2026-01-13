@@ -26,6 +26,7 @@ class HSCDataLoader:
         hdf5_path: str,
         seed: int = 42,
         load_to_memory: bool = True,
+        max_samples: Optional[int] = None,
     ):
         """
         Initialize the HSC data loader.
@@ -34,6 +35,7 @@ class HSCDataLoader:
             hdf5_path: Path to preprocessed HDF5 file
             seed: Random seed for sampling
             load_to_memory: If True, load all images into memory at initialization (default: True)
+            max_samples: Optional limit on number of images to use. If None, uses all available images.
         """
         if not os.path.exists(hdf5_path):
             raise FileNotFoundError(f"HDF5 file not found: {hdf5_path}")
@@ -45,14 +47,22 @@ class HSCDataLoader:
         # Open HDF5 file to read metadata and optionally load data
         with h5py.File(hdf5_path, 'r') as h5_file:
             # Get metadata
-            self.num_images = h5_file.attrs['num_images']
+            total_images = h5_file.attrs['num_images']
             self.crop_size = h5_file.attrs['crop_size']
             self.num_channels = h5_file.attrs['num_channels']
 
+            # Apply max_samples limit if specified
+            if max_samples is not None:
+                self.num_images = min(max_samples, total_images)
+                if self.num_images < total_images:
+                    print(f"Limiting dataset to {self.num_images} images (out of {total_images} available)")
+            else:
+                self.num_images = total_images
+
             if load_to_memory:
-                # Load all images into memory at once
-                print(f"Loading all {self.num_images} images into memory...")
-                self.images = torch.from_numpy(h5_file['images'][:]).float()  # (num_images, 4, 96, 96)
+                # Load images into memory (only up to max_samples if specified)
+                print(f"Loading {self.num_images} images into memory...")
+                self.images = torch.from_numpy(h5_file['images'][:self.num_images]).float()  # (num_images, 4, 96, 96)
                 self.h5_file = None  # Close HDF5 file
                 print(f"Loaded {self.num_images} images into memory, "
                       f"shape: ({self.num_images}, {self.num_channels}, {self.crop_size}, {self.crop_size})")
@@ -62,7 +72,7 @@ class HSCDataLoader:
                 self.h5_file = h5py.File(hdf5_path, 'r')
                 self.images_dset = self.h5_file['images']
                 self.images = None
-                print(f"Opened HDF5 dataset: {self.num_images} images, "
+                print(f"Opened HDF5 dataset: {self.num_images} images (out of {total_images} available), "
                       f"shape: ({self.num_channels}, {self.crop_size}, {self.crop_size})")
                 print("Images will be loaded on-demand from disk.")
 
@@ -174,6 +184,7 @@ class HSCDataLoader:
 def create_hsc_loader(
     hdf5_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5",
     seed: int = 42,
+    max_samples: Optional[int] = None,
 ) -> HSCDataLoader:
     """
     Convenience function to create an HSCDataLoader.
@@ -181,11 +192,12 @@ def create_hsc_loader(
     Args:
         hdf5_path: Path to preprocessed HDF5 file
         seed: Random seed for sampling
+        max_samples: Optional limit on number of images to use. If None, uses all available images.
 
     Returns:
         HSCDataLoader instance
     """
-    return HSCDataLoader(hdf5_path=hdf5_path, seed=seed)
+    return HSCDataLoader(hdf5_path=hdf5_path, seed=seed, max_samples=max_samples)
 
 
 class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
@@ -198,7 +210,8 @@ class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
         self,
         hdf5_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
         seed: int = 42,
-        load_to_memory: bool = True):
+        load_to_memory: bool = True,
+        max_samples: Optional[int] = None):
         """
         Initialize the HSC and Legacy Survey data loader with one-hot conditioning.
 
@@ -206,6 +219,7 @@ class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
             hdf5_path: Path to preprocessed HDF5 file with 'hsc_images' and 'legacy_images' datasets
             seed: Random seed for sampling
             load_to_memory: If True, load all images into memory at initialization (default: True)
+            max_samples: Optional limit on number of image pairs to use. If None, uses all available pairs.
         """
         if not os.path.exists(hdf5_path):
             raise FileNotFoundError(f"HDF5 file not found: {hdf5_path}")
@@ -217,7 +231,7 @@ class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
         # Open HDF5 file to read metadata and optionally load data
         with h5py.File(hdf5_path, 'r') as h5_file:
             # Get metadata
-            self.num_images = h5_file.attrs['num_images']
+            total_images = h5_file.attrs['num_images']
             self.crop_size = h5_file.attrs['crop_size']
             self.num_channels = h5_file.attrs['num_channels']
 
@@ -227,11 +241,19 @@ class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
             if 'legacy_images' not in h5_file:
                 raise KeyError(f"HDF5 file missing 'legacy_images' dataset: {hdf5_path}")
 
+            # Apply max_samples limit if specified
+            if max_samples is not None:
+                self.num_images = min(max_samples, total_images)
+                if self.num_images < total_images:
+                    print(f"Limiting dataset to {self.num_images} image pairs (out of {total_images} available)")
+            else:
+                self.num_images = total_images
+
             if load_to_memory:
-                # Load all images into memory at once
-                print(f"Loading all {self.num_images} image pairs into memory...")
-                self.hsc_images = torch.from_numpy(h5_file['hsc_images'][:]).float()  # (num_images, 4, 96, 96)
-                self.legacy_images = torch.from_numpy(h5_file['legacy_images'][:]).float()  # (num_images, 4, 96, 96)
+                # Load images into memory (only up to max_samples if specified)
+                print(f"Loading {self.num_images} image pairs into memory...")
+                self.hsc_images = torch.from_numpy(h5_file['hsc_images'][:self.num_images]).float()  # (num_images, 4, 96, 96)
+                self.legacy_images = torch.from_numpy(h5_file['legacy_images'][:self.num_images]).float()  # (num_images, 4, 96, 96)
                 self.h5_file = None  # Close HDF5 file
                 print(f"Loaded {self.num_images} HSC images into memory, "
                       f"shape: ({self.num_images}, {self.num_channels}, {self.crop_size}, {self.crop_size})")
@@ -246,7 +268,7 @@ class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
                 self.legacy_images_dset = self.h5_file['legacy_images']
                 self.hsc_images = None
                 self.legacy_images = None
-                print(f"Opened HDF5 dataset: {self.num_images} image pairs, "
+                print(f"Opened HDF5 dataset: {self.num_images} image pairs (out of {total_images} available), "
                       f"shape: ({self.num_channels}, {self.crop_size}, {self.crop_size})")
                 print("Images will be loaded on-demand from disk.")
 
@@ -384,10 +406,30 @@ class HSC_Legacy_DataLoader_OneHot(HSCDataLoader):
         return images_batch, conditioning_batch
 
 
+class HSC_Legacy_Triplets_Dataloader(HSCDataLoader):
+    '''
+    Dataloader for training a model with double encoder.
+    Gives triplets of 1 target image, 1 example from the other instrument and N examples from the same instrument
+
+    Note: This class is incomplete and needs to be implemented.
+    '''
+
+    def __init__(
+        self,
+        anchor_survey: str = 'hsc',
+        N_same_instr: int = 5,
+    ):
+        # TODO: Implement triplet dataloader
+        super().__init__()
+
+
+
+
 def create_hsc_legacy_loader(
     hdf5_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
     seed: int = 42,
-    load_to_memory: bool = True
+    load_to_memory: bool = True,
+    max_samples: Optional[int] = None
 ) -> HSC_Legacy_DataLoader_OneHot:
     """
     Convenience function to create an HSC_Legacy_DataLoader_OneHot.
@@ -396,6 +438,7 @@ def create_hsc_legacy_loader(
         hdf5_path: Path to preprocessed HDF5 file with 'hsc_images' and 'legacy_images' datasets
         seed: Random seed for sampling
         load_to_memory: If True, load all images into memory at initialization (default: True)
+        max_samples: Optional limit on number of image pairs to use. If None, uses all available pairs.
 
     Returns:
         HSC_Legacy_DataLoader_OneHot instance
@@ -403,7 +446,8 @@ def create_hsc_legacy_loader(
     return HSC_Legacy_DataLoader_OneHot(
         hdf5_path=hdf5_path,
         seed=seed,
-        load_to_memory=load_to_memory
+        load_to_memory=load_to_memory,
+        max_samples=max_samples
     )
 
 
