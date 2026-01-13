@@ -89,3 +89,7 @@ PLOTS_DIR = './plots-galaxy/'
 # Pretrained model options
 LOAD_PRETRAIN = False
 # PATH_PRETRAIN = None  # Path to pretrained model checkpoint
+
+# Multi-GPU training options
+# Options: 'auto' (use DataParallel if multiple GPUs), 'dp' (force DataParallel), 'ddp' (DistributedDataParallel), False (single GPU)
+USE_MULTI_GPU = False  # Set to 'auto' to automatically use multiple GPUs if available

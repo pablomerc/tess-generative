@@ -3,6 +3,15 @@ Training script for the single encoder flow matching model for galaxy images.
 
 It expects data already preprocessed.
 
+Multi-GPU Training (experimental):
+    - DataParallel (DP): Set USE_MULTI_GPU='auto' or 'dp' in config. Automatically uses all available GPUs.
+      Expected speedup: ~1.5-1.8x (2 GPUs), ~2.5-3x (4 GPUs)
+
+    - DistributedDataParallel (DDP): For better performance, launch with:
+      torchrun --nproc_per_node=N train_single_encoder_model.py
+      Expected speedup: ~1.8-1.95x (2 GPUs), ~3.5-3.9x (4 GPUs)
+
+    Note: DDP requires the script to be modified to call train_ddp() instead of train().
 '''
 
 import os
@@ -46,7 +55,10 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
     model.train()
     total_loss = 0
     num_batches = 0
-    is_concat = _is_concat_model(model)
+
+    # Get the underlying model if wrapped in DataParallel
+    curr_model = model.module if isinstance(model, nn.DataParallel) else model
+    is_concat = _is_concat_model(curr_model)
 
     num_samples = cfg.NUM_SAMPLES_PER_EPOCH
     num_batches_epoch = max(1, num_samples // batch_size)
@@ -76,8 +88,8 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
                 # Concat mode: pass images directly
                 loss = model(hsc_flat, cond_images=legacy_batch)
             else:
-                # Latent mode: encode first
-                z = model.encode(legacy_batch)
+                # Latent mode: encode first - use curr_model to access .encode() method
+                z = curr_model.encode(legacy_batch)
                 loss = model(hsc_flat, z=z)
 
             optimizer.zero_grad()
@@ -107,14 +119,38 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
 
 def train(
     model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE,
-    plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True, normalize=False
+    plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True, normalize=False,
+    use_multi_gpu='auto'  # 'auto', 'dp', 'ddp', or False
 ):
-    '''Main training loop'''
+    '''Main training loop
+
+    Args:
+        use_multi_gpu: Multi-GPU strategy
+            - 'auto': Automatically use DataParallel if multiple GPUs available
+            - 'dp': Force DataParallel
+            - 'ddp': Use DistributedDataParallel (requires separate launch script)
+            - False: Single GPU/CPU
+    '''
 
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
-    model = model.to(device)
+    # Multi-GPU setup
+    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    is_multi_gpu = False
+
+    if use_multi_gpu in ['auto', 'dp'] and num_gpus > 1:
+        print(f"Using DataParallel with {num_gpus} GPUs")
+        model = model.to(device)
+        model = nn.DataParallel(model)
+        is_multi_gpu = True
+        # Note: With DataParallel, the actual device should be cuda:0
+        device = torch.device('cuda:0')
+    elif use_multi_gpu == 'ddp':
+        # DDP requires special setup - see train_ddp() function below
+        raise ValueError("DDP requires separate launch. Use train_ddp() or launch with torchrun.")
+    else:
+        model = model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
@@ -194,8 +230,10 @@ def train(
         # Visualization
         if (epoch + 1) % cfg.VISUALIZATION_INTERVAL == 0:
             try:
+                # For DataParallel, unwrap model for visualization
+                vis_model = model.module if isinstance(model, nn.DataParallel) else model
                 visualize_samples(
-                    model,
+                    vis_model,
                     device,
                     data_loader,
                     num_examples=4,
@@ -211,9 +249,11 @@ def train(
         # Save checkpoint
         if (epoch+1) % cfg.SAVE_INTERVAL == 0:
             checkpoint_path = os.path.join(run_dir, f'model_epoch_{epoch+1}.pth')
+            # For DataParallel, save the underlying model
+            model_to_save = model.module if isinstance(model, nn.DataParallel) else model
             torch.save({
                 'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
+                'model_state_dict': model_to_save.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_losses': train_losses,
             }, checkpoint_path)
@@ -225,6 +265,180 @@ def train(
         print("Wandb run finished")
 
 
+def train_ddp(
+    model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE,
+    plots_dir=cfg.PLOTS_DIR, rank=0, world_size=1, weight_decay=cfg.WEIGHT_DECAY,
+    use_wandb=True, normalize=False
+):
+    """
+    CURRENTLY NOT USED - EXPERIMENTAL - MADE WITH CURSOR (not checked)
+    Distributed Data Parallel (DDP) training function.
+
+    Launch with: torchrun --nproc_per_node=N train_single_encoder_model.py
+
+    Args:
+        rank: Process rank (0 to world_size-1)
+        world_size: Total number of processes
+    """
+    import torch.distributed as dist
+    from torch.nn.parallel import DistributedDataParallel as DDP
+
+    # Initialize process group
+    dist.init_process_group(backend='nccl' if torch.cuda.is_available() else 'gloo')
+
+    device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(device)
+
+    model = model.to(device)
+    model = DDP(model, device_ids=[rank] if torch.cuda.is_available() else None)
+
+    # Scale learning rate by world size (common practice)
+    effective_lr = lr * world_size
+
+    optimizer = optim.Adam(model.parameters(), lr=effective_lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+
+    # Initialize wandb only on rank 0
+    if use_wandb and rank == 0:
+        wandb.init(
+            project="galaxy-sing-encoder-flow",
+            name=f"single_enc_flow_ddp_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            config={
+                "num_epochs": num_epochs,
+                "learning_rate": effective_lr,
+                "batch_size": cfg.BATCH_SIZE,
+                "weight_decay": weight_decay,
+                "world_size": world_size,
+                "device": str(device),
+                "decoder_type": getattr(cfg, 'DECODER_TYPE', 'latent'),
+            }
+        )
+        wandb.watch(model.module, log="all")
+        print("Wandb initialized")
+
+    os.makedirs(plots_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_dir = os.path.join(plots_dir, f'single_enc_flow_ddp_{timestamp}')
+    if rank == 0:
+        os.makedirs(run_dir, exist_ok=True)
+
+    train_losses = []
+    if rank == 0:
+        print(f"Starting DDP training on {world_size} GPUs")
+        print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+        print(f"Output directory: {run_dir}")
+
+    pbar = tqdm(range(num_epochs), desc=f'Training (rank {rank})', disable=(rank != 0))
+
+    for epoch in pbar:
+        epoch_start = time.time()
+
+        # Train 1 epoch
+        model.train()
+        total_loss = 0
+        num_batches = 0
+        is_concat = _is_concat_model(model.module)
+
+        num_samples = cfg.NUM_SAMPLES_PER_EPOCH
+        num_batches_epoch = max(1, num_samples // (cfg.BATCH_SIZE * world_size))
+
+        for batch_idx in range(num_batches_epoch):
+            try:
+                hsc_batch, legacy_batch, _, _ = data_loader.get_batch(batch_size=cfg.BATCH_SIZE)
+                hsc_batch = hsc_batch.to(device)
+                legacy_batch = legacy_batch.to(device)
+
+                if normalize:
+                    min_val_hsc = hsc_batch.min()
+                    max_val_hsc = hsc_batch.max()
+                    hsc_norm = (hsc_batch - min_val_hsc) / ((max_val_hsc - min_val_hsc)+1e-3)
+                    hsc_flat = hsc_norm.flatten(1)
+                    min_val_legacy = legacy_batch.min()
+                    max_val_legacy = legacy_batch.max()
+                    legacy_batch = (legacy_batch - min_val_legacy) / ((max_val_legacy - min_val_legacy)+1e-3)
+                else:
+                    hsc_flat = hsc_batch.flatten(1)
+
+                if is_concat:
+                    loss = model(hsc_flat, cond_images=legacy_batch)
+                else:
+                    z = model.module.encode(legacy_batch)
+                    loss = model(hsc_flat, z=z)
+
+                optimizer.zero_grad()
+                loss.backward()
+                if hasattr(cfg, 'MAX_GRAD_NORM') and cfg.MAX_GRAD_NORM > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.MAX_GRAD_NORM)
+                optimizer.step()
+
+                total_loss += loss.item()
+                num_batches += 1
+
+            except Exception as e:
+                if rank == 0:
+                    print(f'Error in training batch {batch_idx}: {e}')
+                continue
+
+        # Average loss across all processes
+        avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+        # Synchronize loss across all processes
+        loss_tensor = torch.tensor(avg_loss, device=device)
+        dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+        avg_loss = (loss_tensor / world_size).item()
+
+        scheduler.step(avg_loss)
+        train_losses.append(avg_loss)
+        epoch_time = time.time() - epoch_start
+
+        if rank == 0:
+            print(f"\n Epoch {epoch+1}/{num_epochs} - Train Loss: {avg_loss:.5f}")
+            if use_wandb:
+                wandb.log({
+                    "epoch": epoch + 1,
+                    "train_loss": avg_loss,
+                    "learning_rate": optimizer.param_groups[0]['lr'],
+                    "epoch_time": epoch_time,
+                }, step=epoch + 1)
+
+            pbar.set_postfix({
+                'loss': f'{avg_loss:.4f}',
+                'time': f'{epoch_time:.1f}s'
+            })
+
+            # Visualization and checkpointing only on rank 0
+            if (epoch + 1) % cfg.VISUALIZATION_INTERVAL == 0:
+                try:
+                    visualize_samples(
+                        model.module,
+                        device,
+                        data_loader,
+                        num_examples=4,
+                        num_samples=4,
+                        save_path=os.path.join(run_dir, f'samples_epoch_{epoch+1}.png'),
+                        epoch=epoch + 1,
+                        use_wandb=use_wandb,
+                        normalize=normalize,
+                    )
+                except Exception as e:
+                    print(f"Error creating visualization: {e}")
+
+            if (epoch+1) % cfg.SAVE_INTERVAL == 0:
+                checkpoint_path = os.path.join(run_dir, f'model_epoch_{epoch+1}.pth')
+                torch.save({
+                    'epoch': epoch + 1,
+                    'model_state_dict': model.module.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'train_losses': train_losses,
+                }, checkpoint_path)
+                print(f"Saved checkpoint to {checkpoint_path}")
+
+    if use_wandb and rank == 0:
+        wandb.finish()
+        print("Wandb run finished")
+
+    dist.destroy_process_group()
+
+
 def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8, save_path=None, epoch=None, use_wandb=False, normalize=False):
     '''
     Visualize generated samples for HSC based on Legacy Survey examples.
@@ -233,7 +447,10 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
 
     model.eval()  # Set model to evaluation mode
     batch_size = num_examples
-    is_concat = _is_concat_model(model)
+
+    # Get the underlying model if wrapped in DataParallel
+    curr_model = model.module if isinstance(model, nn.DataParallel) else model
+    is_concat = _is_concat_model(curr_model)
 
     with torch.no_grad():  # Disable gradient computation to save memory
         hsc_batch, legacy_batch, _, _ = data_loader.get_batch(batch_size=batch_size)
@@ -260,11 +477,11 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
         # Handle different decoder types
         if is_concat:
             # Concat mode: pass images directly
-            samples_hsc = model.sample(cond_images=legacy_batch, device=device, n_samples=num_samples)
+            samples_hsc = curr_model.sample(cond_images=legacy_batch, device=device, n_samples=num_samples)
         else:
-            # Latent mode: encode first
-            z = model.encode(legacy_batch)
-            samples_hsc = model.sample(device=device, n_samples=num_samples, z=z)
+            # Latent mode: encode first - use curr_model to access .encode() and .sample() methods
+            z = curr_model.encode(legacy_batch)
+            samples_hsc = curr_model.sample(device=device, n_samples=num_samples, z=z)
 
         # samples_hsc shape: (n_samples, n_examples, C*H*W) for both modes
 
@@ -375,7 +592,8 @@ if __name__ == "__main__":
 
     # Train
     use_wandb = getattr(cfg, 'USE_WANDB', True)  # Default to True for backward compatibility
-    train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device, use_wandb=use_wandb)
+    use_multi_gpu = getattr(cfg, 'USE_MULTI_GPU', 'auto')  # 'auto', 'dp', False
+    train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device, use_wandb=use_wandb, use_multi_gpu=use_multi_gpu)
 
     # Cleanup: close HDF5 file if using HSCDataLoader
     if isinstance(data_loader, HSC_Legacy_DataLoader_OneHot):
