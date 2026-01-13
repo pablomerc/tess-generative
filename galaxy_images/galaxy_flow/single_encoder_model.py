@@ -17,6 +17,8 @@ from galaxy_images.galaxy_flow import single_encoder_config as cfg
 
 from galaxy_images.galaxy_flow.encoder_architectures import GalaxyEncoder
 
+from galaxy_images.galaxy_flow.encoders.resnet18_encoder import GalaxyResnet
+
 class SingleEncoderGalaxyFlow(nn.Module):
     '''
     Conditional Flow Matching model for galaxy images with a single encoder.
@@ -36,7 +38,9 @@ class SingleEncoderGalaxyFlow(nn.Module):
         use_film: bool=None,
         t_embed_dim: int = None,
         z_embed_dim: int = None,
+        encoder_type: str = 'resnet'
     ):
+        encoder_type = encoder_type or cfg.ENCODER_TYPE
         encoder_latent_dim = encoder_latent_dim or cfg.ENCODER_LATENT_DIM
         image_size = image_size or cfg.IMAGE_SIZE
         num_channels = num_channels if num_channels is not None else cfg.NUM_CHANNELS
@@ -50,7 +54,18 @@ class SingleEncoderGalaxyFlow(nn.Module):
         z_embed_dim = z_embed_dim or cfg.Z_EMBED_DIM
 
         super().__init__()
-        self.encoder = GalaxyEncoder(encoder_latent_dim)
+
+        if encoder_type == 'cnn':
+            self.encoder = GalaxyEncoder(encoder_latent_dim)
+            self._encoder_returns_tuple = True  # GalaxyEncoder returns (z, mu, logvar)
+        elif encoder_type == 'resnet':
+            self.encoder = GalaxyResnet()
+            encoder_latent_dim = 512
+            self._encoder_returns_tuple = False  # GalaxyResnet returns z directly
+        else:
+            raise ValueError(f"Unknown encoder_type: {encoder_type}. Must be 'cnn' or 'resnet'")
+
+
         self.decoder = FlowMatchingDecoder(
             input_dim=encoder_latent_dim,
             output_dim=output_dim,
@@ -67,9 +82,11 @@ class SingleEncoderGalaxyFlow(nn.Module):
 
     def encode(self, img: torch.Tensor) -> torch.Tensor:
         ''' Encode an image into a low dimensional embedding using the encoder'''
-        z = self.encoder(img)[0]
+        encoder_output = self.encoder(img)
+        # GalaxyEncoder returns (z, mu, logvar), GalaxyResnet returns z directly
+        z = encoder_output[0] if self._encoder_returns_tuple else encoder_output
         return z
-    
+
     def forward(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         '''
         Forward pass: compute the flow matching loss
@@ -79,12 +96,12 @@ class SingleEncoderGalaxyFlow(nn.Module):
                where output_dim = num_channels * image_size * image_size
                Images should be preprocessed (cropped, clamped, rescaled, range compressed)
                and normalized (?) to [-1, 1] range
-            
+
             z: encoding vector (B, d)
                where d is the encoder_latent_dim
                this should be the encoding of the counterfactual image
-        
-        Returns: 
+
+        Returns:
             loss: Flow Matching loss
         '''
         loss = self.decoder.get_loss(x, z=z)
@@ -100,7 +117,7 @@ class SingleEncoderGalaxyFlow(nn.Module):
 
         if device is None:
             device = next(self.parameters()).device
-        
+
         samples = self.decoder.sample(
             z=z,
             batch_size=None,  #determined by z

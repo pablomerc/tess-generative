@@ -33,7 +33,7 @@ def preprocess_all_hsc_legacy_images(
     output_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
     crop_size: int = 96,
     batch_size: int = 100,
-    files_to_use: int = 40,  # Default to 40 files for testing
+    files_to_use: int = 4,  # Default to 4 files for testing
 ):
     """
     Load all HSC and Legacy Survey images, preprocess them, and save to HDF5 format.
@@ -53,10 +53,16 @@ def preprocess_all_hsc_legacy_images(
     if not all_files:
         raise FileNotFoundError(f"No parquet files found under {pattern}")
 
-    if files_to_use is not None and files_to_use > 0:
-        all_files = all_files[:files_to_use]
+    total_files_found = len(all_files)
+    print(f"Total parquet files found: {total_files_found}")
 
-    print(f"Found {len(all_files)} parquet files")
+    if files_to_use is not None and files_to_use > 0:
+        print(f"Limiting to {files_to_use} files (from {total_files_found} total)")
+        all_files = all_files[:files_to_use]
+    else:
+        print(f"Using all {total_files_found} files")
+
+    print(f"Processing {len(all_files)} parquet files")
 
     # Load dataset
     dataset = load_dataset("parquet", data_files=all_files, split="train")
@@ -196,7 +202,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--files_to_use",
         type=int,
-        default=40,
+        default=4,
         help="Number of parquet files to use (default: 40, use 0 for all files)"
     )
 
@@ -205,15 +211,15 @@ if __name__ == "__main__":
     # Convert 0 to None (meaning use all files)
     files_to_use = None if args.files_to_use == 0 else args.files_to_use
 
-    dataset_path = '/Users/pablomercaderperez/Desktop/data/data/'
-    output_path = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy.h5'
+    output_path = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy_48x48.h5'
 
     preprocess_all_hsc_legacy_images(
-        # dataset_path=args.dataset_path,
-        dataset_path = dataset_path,
+        dataset_path=args.dataset_path,
         # output_path=args.output_path,
         output_path = output_path,
-        crop_size=args.crop_size,
+        # crop_size=args.crop_size,
+        crop_size = 48,
         batch_size=args.batch_size,
-        files_to_use=files_to_use,
+        # files_to_use=files_to_use,
+        files_to_use = 4
     )

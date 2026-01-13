@@ -7,13 +7,16 @@ from a single encoder (e.g., encode HSC images and generate Legacy images, or vi
 
 # Image configuration (after preprocessing)
 # IMAGE_SIZE = 96  # After center crop from 160x160
-IMAGE_SIZE = 48
+IMAGE_SIZE = 96
 NUM_CHANNELS = 4  # Number of channels (g, r, i, z)
 OUTPUT_DIM = NUM_CHANNELS * IMAGE_SIZE * IMAGE_SIZE  # 4 * 96 * 96 = 36864 (flattened multi-channel image)
 
 
+
+ENCODER_TYPE = 'resnet'
+# Encoder latent dim - only matters if encoder type is 'cnn', if its resnet it will be set to 512 automatically
 # ENCODER_LATENT_DIM = 512 # originally 40
-ENCODER_LATENT_DIM = 40
+ENCODER_LATENT_DIM = 512
 
 # Model architecture parameters
 DECODER_TYPE = "concat"  # "latent" (uses encoder + latent z) or "concat" (direct image concatenation)
@@ -65,7 +68,9 @@ USE_PREPROCESSED_DATA = True # Set to True to use preprocessed HDF5 format
 # PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_28x28.h5'
-PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_48x48.h5'
+# PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_48x48.h5'
+PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5'
+# PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy_48x48.h5'
 
 # Data loader options
 LOAD_TO_MEMORY = True  # Whether to load all preprocessed images into memory
