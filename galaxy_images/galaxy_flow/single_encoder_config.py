@@ -69,8 +69,11 @@ USE_PREPROCESSED_DATA = True # Set to True to use preprocessed HDF5 format
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_28x28.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_48x48.h5'
-PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5'
+# PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy_48x48.h5'
+
+#csail clulster
+PREPROCESSED_HDF5_PATH = '/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5'
 
 # Data loader options
 LOAD_TO_MEMORY = True  # Whether to load all preprocessed images into memory
