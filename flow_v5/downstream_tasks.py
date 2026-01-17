@@ -42,7 +42,7 @@ from flow_v5 import config as cfg
 class LatentClassifier(nn.Module):
     """
     MLP classifier for downstream classification tasks.
-    
+
     Outputs raw logits (no softmax) - CrossEntropyLoss applies log_softmax internally.
     """
     def __init__(self, input_dim, num_classes, hidden_dims=[256, 128, 64], dropout=0.2):
@@ -66,10 +66,10 @@ class LatentClassifier(nn.Module):
     def forward(self, x):
         """
         Forward pass returning raw logits.
-        
+
         Args:
             x: Input features [batch_size, input_dim]
-            
+
         Returns:
             Logits [batch_size, num_classes] (no softmax applied)
         """
@@ -79,7 +79,7 @@ class LatentClassifier(nn.Module):
 class LatentRegressor(nn.Module):
     """
     MLP regressor for downstream regression tasks.
-    
+
     Outputs continuous values for regression (no activation on final layer).
     """
     def __init__(self, input_dim, output_dim=1, hidden_dims=[256, 128, 64], dropout=0.2):
@@ -103,10 +103,10 @@ class LatentRegressor(nn.Module):
     def forward(self, x):
         """
         Forward pass returning continuous predictions.
-        
+
         Args:
             x: Input features [batch_size, input_dim]
-            
+
         Returns:
             Predictions [batch_size, output_dim] (continuous values)
         """
@@ -644,33 +644,52 @@ def main():
     if not os.path.exists(args.checkpoint):
         print(f"ERROR: Checkpoint not found at {args.checkpoint}")
         return
-    
+
     print("\nLoading checkpoint to extract model configuration...")
     checkpoint = torch.load(args.checkpoint, map_location=device)
-    
-    # Extract config from checkpoint if available
+
+    # Extract config from checkpoint if available (for informational purposes)
     checkpoint_config = checkpoint.get('config', {})
     number_latent_dim = checkpoint_config.get('number_latent_dim', None)
     filter_latent_dim = checkpoint_config.get('filter_latent_dim', None)
-    
+
     if number_latent_dim is not None and filter_latent_dim is not None:
         print(f"Found checkpoint config: number_latent_dim={number_latent_dim}, filter_latent_dim={filter_latent_dim}")
+        # Verify they match config (build_model always uses config values)
+        if number_latent_dim != cfg.NUMBER_ENCODER_LATENT_DIM or filter_latent_dim != cfg.FILTER_ENCODER_LATENT_DIM:
+            print(f"Warning: Checkpoint latent dims ({number_latent_dim}, {filter_latent_dim}) differ from config ({cfg.NUMBER_ENCODER_LATENT_DIM}, {cfg.FILTER_ENCODER_LATENT_DIM})")
+            print("  Note: build_model always uses config values, so model will use config dimensions")
     else:
-        print("Warning: Checkpoint config not found, using default config values")
-        print(f"  Default: number_latent_dim={cfg.NUMBER_ENCODER_LATENT_DIM}, filter_latent_dim={cfg.FILTER_ENCODER_LATENT_DIM}")
-    
-    # Build model with checkpoint config (if available)
+        print("Checkpoint config not found, using default config values")
+        print(f"  Config: number_latent_dim={cfg.NUMBER_ENCODER_LATENT_DIM}, filter_latent_dim={cfg.FILTER_ENCODER_LATENT_DIM}")
+
+    # Build model with same parameters as main.py
+    # Note: build_model doesn't accept number_latent_dim/filter_latent_dim - it always uses config
     print("\nBuilding model...")
     dataset_type = args.dataset or cfg.DATASET_TYPE
     multi_samples = args.multi_samples or getattr(cfg, 'USE_MULTI_SAMPLES', False)
-    
+
+    # Use config defaults for architecture parameters (matching main.py pattern)
+    use_film = getattr(cfg, 'USE_FILM', True)
+    use_concatenation = getattr(cfg, 'USE_CONCATENATION', False)
+    num_concat_samples = getattr(cfg, 'NUM_SAMPLES_CONCATENATION', 5)
+    use_attention = getattr(cfg, 'USE_ATTENTION', False)
+    attn_layers = getattr(cfg, 'ATTENTION_NUM_LAYERS', 2)
+    attn_heads = getattr(cfg, 'ATTENTION_NUM_HEADS', 4)
+    attn_hidden = getattr(cfg, 'ATTENTION_HIDDEN_DIM', 128)
+
     model = build_model(
         device=device,
+        use_film=use_film,
         multi_samples=multi_samples,
-        number_latent_dim=number_latent_dim,
-        filter_latent_dim=filter_latent_dim
+        use_concatenation=use_concatenation,
+        num_concat_samples=num_concat_samples,
+        use_attention=use_attention,
+        attn_layers=attn_layers,
+        attn_heads=attn_heads,
+        attn_hidden=attn_hidden
     )
-    
+
     # Load state dict
     state_dict = checkpoint.get('model_state_dict', checkpoint)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
@@ -715,19 +734,23 @@ def main():
     if args.task == 'classification':
         # For classification: predict digit from z_number, rotation class from z_filter
         num_digit_classes = len(triplet_creator.class_names)
-        
-        # Convert rotation angles to discrete classes
-        rotation_range = getattr(cfg, 'ROTATION_DEGREES', 30)
-        rotation_step = getattr(cfg, 'ROTATION_STEP', 5)
-        angle_bins = torch.arange(-rotation_range, rotation_range + 1, rotation_step)
-        rotation_class_labels = []
-        for angle in rotation_labels:
-            distances = torch.abs(angle_bins - angle)
-            closest_bin = torch.argmin(distances)
-            rotation_class_labels.append(closest_bin)
-        rotation_class_labels = torch.tensor(rotation_class_labels)
 
-        num_rotation_classes = len(torch.unique(rotation_class_labels))
+        # Convert rotation angles to discrete classes using actual unique rotations
+        # (matching downstream_2026.py approach)
+        print('\nConverting rotations to discrete class labels...')
+        unique_rotations = torch.unique(rotation_labels)
+
+        # Create mapping from rotation value to class index
+        unique_rotations_sorted = torch.sort(unique_rotations)[0]
+        rotation_to_class = {rot.item(): idx for idx, rot in enumerate(unique_rotations_sorted)}
+        rotation_class_labels = torch.tensor(
+            [rotation_to_class[rot.item()] for rot in rotation_labels],
+            dtype=torch.long
+        )
+        num_rotation_classes = len(unique_rotations)
+
+        print(f'Rotation classes: {num_rotation_classes}')
+        print(f'Rotation label mapping: {dict(zip([r.item() for r in unique_rotations_sorted], range(num_rotation_classes)))}')
 
         print(f"\nClassification task:")
         print(f"Number of digit classes: {num_digit_classes}")
@@ -872,4 +895,3 @@ python -m flow_v5.downstream_tasks \
     --num_samples 10000 \
     --task classification
 '''
-

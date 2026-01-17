@@ -19,7 +19,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 
 
-import os 
+import os
 import sys
 from datetime import datetime
 
@@ -43,7 +43,7 @@ from flow_v5 import config as cfg
 def get_n_samples(triplet_creator, n=500):
     '''
     Use the triplet creator function to extract a set of 'n' examples with their label and rotation.
-    
+
     Returns:
         tuple: (images, labels, rotations) where:
             images: torch.Tensor of shape [n, C, H, W]
@@ -53,28 +53,28 @@ def get_n_samples(triplet_creator, n=500):
     images_list = []
     labels_list = []
     rotations_list = []
-    
+
     batch_size = 256
     num_batches = (n + batch_size - 1) // batch_size
-    
+
     for batch_idx in range(num_batches):
         current_batch_size = min(batch_size, n - len(images_list))
         if current_batch_size <= 0:
             break
-            
+
         (ground_truth, different_digit, same_digit, original_labels, different_labels,
          ground_truth_rotations, ground_truth_scales, same_digit_rotations, same_digit_scales) = \
             triplet_creator.create_batch_triplets(current_batch_size, dataset='test')
-        
+
         images_list.append(ground_truth)
         labels_list.append(original_labels)
         rotations_list.append(ground_truth_rotations)
-    
+
     # Concatenate all batches and take exactly n samples
     images = torch.cat(images_list, dim=0)[:n]
     labels = torch.cat(labels_list, dim=0)[:n]
     rotations = torch.cat(rotations_list, dim=0)[:n]
-    
+
     return images, labels, rotations
 
 class LatentClassifier(nn.Module):
@@ -94,23 +94,23 @@ class LatentClassifier(nn.Module):
                 nn.Dropout(dropout)
             ])
             prev_dim = hidden_dim
-        
+
         # Final layer outputs raw logits
         layers.append(nn.Linear(prev_dim, num_classes))
         self.classifier = nn.Sequential(*layers)
 
-    
+
     def forward(self, x):
         """
         Forward pass - returns raw logits
 
         Args:
             x: Input features [batch_size, input_dim]
-        Returns: 
+        Returns:
             Logits: [batch_size, num_classes] (no softmax applied)
         """
         return self.classifier(x)
-    
+
 def train_classifier(
     z_data: torch.Tensor,
     labels: torch.Tensor,
@@ -133,14 +133,14 @@ def train_classifier(
     # Convert to numpy for sklearn, then back to tensors
     z_np = z_data.detach().cpu().numpy() if isinstance(z_data, torch.Tensor) else z_data
     labels_np = labels.detach().cpu().numpy() if isinstance(labels, torch.Tensor) else labels
-    
+
     z_train, z_temp, labels_train, labels_temp = train_test_split(
         z_np, labels_np, test_size=0.2, random_state=42, stratify=labels_np
     )
     z_val, z_test, labels_val, labels_test = train_test_split(
         z_temp, labels_temp, test_size=0.5, random_state=42, stratify=labels_temp
     )
-    
+
     # Convert back to tensors - labels must be long dtype for CrossEntropyLoss
     z_train = torch.tensor(z_train, dtype=torch.float32)
     z_val = torch.tensor(z_val, dtype=torch.float32)
@@ -189,7 +189,7 @@ def train_classifier(
 
         train_acc = train_correct / train_total
         train_accuracies.append(train_acc)
-        
+
         # Validation evaluation
         model.eval()
         val_correct = 0
@@ -201,14 +201,14 @@ def train_classifier(
                 _, predicted = torch.max(outputs.data, 1)
                 val_total += batch_labels.size(0)
                 val_correct += (predicted == batch_labels).sum().item()
-        
+
         val_acc = val_correct / val_total
         val_accuracies.append(val_acc)
         model.train()
-        
+
         if epoch % 10 == 0:
             print(f"Epoch {epoch+1}/{num_epochs}: Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}")
-        
+
 
     # Test evaluation
     model.eval()
@@ -251,7 +251,8 @@ def main():
 
     # check_point_path = 'path_to_checkpoint'
     # check_point_path = '/Users/pablomercaderperez/Desktop/tess-generative/flow_models/mnist/double-encoder-flow-mnist-v5-20260107_125957/double_encoder_flow_model_mnist_epoch_1_20260107_131442.pth'
-    check_point_path = '/Users/pablomercaderperez/Desktop/tess-generative/pdo_models/double_encoder_flow_model_mnist_epoch_250_20260108_045316.pth'
+    # check_point_path = '/Users/pablomercaderperez/Desktop/tess-generative/pdo_models/double_encoder_flow_model_mnist_epoch_250_20260108_045316.pth'
+    check_point_path = '/Users/pablom.perez/Desktop/AstroAI-Code/tess-generative/pdo-models/double_encoder_flow_model_mnist_epoch_250_20260108_045316.pth'
     if check_point_path == 'path_to_checkpoint':
         print('NEED TO UPDATE PATH TO CHECKPOINT')
         # return
@@ -284,7 +285,7 @@ def main():
 
     # Move images to device and normalize to flow range [-1, 1]
     images = normalize_to_flow_range(images.to(device))
-    
+
     number_z, filter_z, number_mu, number_logvar, filter_mu, filter_logvar = model.encode_only(images, images)
 
 
@@ -310,7 +311,7 @@ def main():
     print('Comparison of results')
     print(f'Number from number_z: {result_dict_number["test_acc"]}')
     print(f'Number from filter_z: {result_dict_filter["test_acc"]}')
-    
+
 
 
     # Unique rotatioins
@@ -325,7 +326,7 @@ def main():
     num_rotation_classes = len(unique_rotations)
     print(f'Rotation classes: {num_rotation_classes}')
     print(f'Rotation label mapping: {dict(zip([r.item() for r in unique_rotations_sorted], range(num_rotation_classes)))}')
-    
+
     # Train rotation classifiers
     print('\nTraining classifier to predict rotation from number_z')
     result_dict_rotation_from_number = train_classifier(z_data=number_z, labels=rotation_labels,
@@ -335,7 +336,7 @@ def main():
         num_epochs=50,
         batch_size=64,
         device=device)
-    
+
     print('Training classifier to predict rotation from filter_z')
     result_dict_rotation_from_filter = train_classifier(z_data=filter_z, labels=rotation_labels,
         num_classes=num_rotation_classes,
@@ -344,7 +345,7 @@ def main():
         num_epochs=50,
         batch_size=64,
         device=device)
-    
+
     print('\nRotation prediction comparison:')
     print(f'Rotation from number_z: {result_dict_rotation_from_number["test_acc"]:.4f}')
     print(f'Rotation from filter_z: {result_dict_rotation_from_filter["test_acc"]:.4f}')
