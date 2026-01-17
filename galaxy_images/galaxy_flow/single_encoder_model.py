@@ -19,6 +19,8 @@ from galaxy_images.galaxy_flow.encoder_architectures import GalaxyEncoder
 
 from galaxy_images.galaxy_flow.encoders.resnet18_encoder import GalaxyResnet
 
+from galaxy_images.galaxy_flow.encoders.minuet_encoder import MinuetEncoder
+
 class SingleEncoderGalaxyFlow(nn.Module):
     '''
     Conditional Flow Matching model for galaxy images with a single encoder.
@@ -38,9 +40,9 @@ class SingleEncoderGalaxyFlow(nn.Module):
         use_film: bool=None,
         t_embed_dim: int = None,
         z_embed_dim: int = None,
-        encoder_type: str = 'resnet'
+        encoder_type: str = None
     ):
-        encoder_type = encoder_type or cfg.ENCODER_TYPE
+        encoder_type = encoder_type if encoder_type is not None else cfg.ENCODER_TYPE
         encoder_latent_dim = encoder_latent_dim or cfg.ENCODER_LATENT_DIM
         image_size = image_size or cfg.IMAGE_SIZE
         num_channels = num_channels if num_channels is not None else cfg.NUM_CHANNELS
@@ -61,8 +63,26 @@ class SingleEncoderGalaxyFlow(nn.Module):
         elif encoder_type == 'resnet':
             self.encoder = GalaxyResnet(z_dim=encoder_latent_dim)
             self._encoder_returns_tuple = False  # GalaxyResnet returns z directly
+        elif encoder_type == 'minuet':
+            # Minuet encoder parameters from config
+            # Note: bottleneck_length must match encoder_latent_dim for decoder compatibility
+            self.encoder = MinuetEncoder(
+                img_size=image_size,
+                bottleneck_length=cfg.MINUET_BOTTLENECK_LENGTH,
+                bottleneck_dim=cfg.MINUET_BOTTLENECK_DIM,
+                patch_size=cfg.MINUET_PATCH_SIZE,
+                in_channels=num_channels,
+                model_dim=cfg.MINUET_MODEL_DIM,
+                num_heads=cfg.MINUET_NUM_HEADS,
+                ff_dim=cfg.MINUET_FF_DIM,
+                num_layers=cfg.MINUET_NUM_LAYERS,
+                dropout=cfg.MINUET_DROPOUT,
+                selfattn=cfg.MINUET_SELFATTN,
+                sincosin=cfg.MINUET_SINCOSIN
+            )
+            self._encoder_returns_tuple = False  # MinuetEncoder returns z directly
         else:
-            raise ValueError(f"Unknown encoder_type: {encoder_type}. Must be 'cnn' or 'resnet'")
+            raise ValueError(f"Unknown encoder_type: {encoder_type}. Must be 'cnn', 'resnet', or 'minuet'")
 
 
         self.decoder = FlowMatchingDecoder(

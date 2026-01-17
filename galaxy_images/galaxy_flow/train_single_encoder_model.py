@@ -3,15 +3,10 @@ Training script for the single encoder flow matching model for galaxy images.
 
 It expects data already preprocessed.
 
-Multi-GPU Training (experimental):
-    - DataParallel (DP): Set USE_MULTI_GPU='auto' or 'dp' in config. Automatically uses all available GPUs.
-      Expected speedup: ~1.5-1.8x (2 GPUs), ~2.5-3x (4 GPUs)
-
-    - DistributedDataParallel (DDP): For better performance, launch with:
-      torchrun --nproc_per_node=N train_single_encoder_model.py
+Multi-GPU Training:
+    - DistributedDataParallel (DDP): For multi-GPU training, launch with:
+      torchrun --nproc_per_node=N -m galaxy_images.galaxy_flow.train_single_encoder_model
       Expected speedup: ~1.8-1.95x (2 GPUs), ~3.5-3.9x (4 GPUs)
-
-    Note: DDP requires the script to be modified to call train_ddp() instead of train().
 '''
 
 import os
@@ -21,10 +16,18 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.optim as optim
+# Set matplotlib backend before importing pyplot (important for headless environments)
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
+# Set matplotlib config directory to a writable location (fixes permission errors)
+if 'MPLCONFIGDIR' not in os.environ:
+    # Use a temp directory in the current working directory or /tmp
+    mpl_config_dir = os.path.join(os.getcwd(), '.matplotlib_cache')
+    os.makedirs(mpl_config_dir, exist_ok=True)
+    os.environ['MPLCONFIGDIR'] = mpl_config_dir
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-from collections import defaultdict
 import wandb
 
 current_path=os.path.abspath(__file__)
@@ -45,6 +48,22 @@ def _is_concat_model(model):
     return 'Concat' in model.__class__.__name__
 
 
+def _count_parameters(module):
+    """Count the number of parameters in a module."""
+    return sum(p.numel() for p in module.parameters())
+
+
+def _print_model_parameters(model):
+    """Print the number of parameters in encoder, decoder, and total."""
+    encoder_params = _count_parameters(model.encoder)
+    decoder_params = _count_parameters(model.decoder)
+    total_params = _count_parameters(model)
+
+    print(f"Encoder parameters: {encoder_params:,}")
+    print(f"Decoder parameters: {decoder_params:,}")
+    print(f"Total model parameters: {total_params:,}")
+
+
 def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE, normalize=False):
     """Train the model for one epoch.
 
@@ -56,9 +75,7 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
     total_loss = 0
     num_batches = 0
 
-    # Get the underlying model if wrapped in DataParallel
-    curr_model = model.module if isinstance(model, nn.DataParallel) else model
-    is_concat = _is_concat_model(curr_model)
+    is_concat = _is_concat_model(model)
 
     num_samples = cfg.NUM_SAMPLES_PER_EPOCH
     num_batches_epoch = max(1, num_samples // batch_size)
@@ -88,8 +105,8 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
                 # Concat mode: pass images directly
                 loss = model(hsc_flat, cond_images=legacy_batch)
             else:
-                # Latent mode: encode first - use curr_model to access .encode() method
-                z = curr_model.encode(legacy_batch)
+                # Latent mode: encode first
+                z = model.encode(legacy_batch)
                 loss = model(hsc_flat, z=z)
 
             optimizer.zero_grad()
@@ -119,38 +136,18 @@ def train_epoch(model, data_loader, optimizer, device, batch_size=cfg.BATCH_SIZE
 
 def train(
     model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE,
-    plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True, normalize=False,
-    use_multi_gpu='auto'  # 'auto', 'dp', 'ddp', or False
+    plots_dir=cfg.PLOTS_DIR, device=None, weight_decay=cfg.WEIGHT_DECAY, use_wandb=True, normalize=False
 ):
-    '''Main training loop
+    '''Main training loop for single GPU training.
 
-    Args:
-        use_multi_gpu: Multi-GPU strategy
-            - 'auto': Automatically use DataParallel if multiple GPUs available
-            - 'dp': Force DataParallel
-            - 'ddp': Use DistributedDataParallel (requires separate launch script)
-            - False: Single GPU/CPU
+    For multi-GPU training, use DDP by launching with:
+    torchrun --nproc_per_node=N -m galaxy_images.galaxy_flow.train_single_encoder_model
     '''
 
     if device is None:
         device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
-    # Multi-GPU setup
-    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    is_multi_gpu = False
-
-    if use_multi_gpu in ['auto', 'dp'] and num_gpus > 1:
-        print(f"Using DataParallel with {num_gpus} GPUs")
-        model = model.to(device)
-        model = nn.DataParallel(model)
-        is_multi_gpu = True
-        # Note: With DataParallel, the actual device should be cuda:0
-        device = torch.device('cuda:0')
-    elif use_multi_gpu == 'ddp':
-        # DDP requires special setup - see train_ddp() function below
-        raise ValueError("DDP requires separate launch. Use train_ddp() or launch with torchrun.")
-    else:
-        model = model.to(device)
+    model = model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
@@ -178,6 +175,8 @@ def train(
                 "visualization_interval": cfg.VISUALIZATION_INTERVAL,
                 "device": str(device),
                 "decoder_type": getattr(cfg, 'DECODER_TYPE', 'latent'),
+                "encoder_type": getattr(cfg, 'ENCODER_TYPE', 'resnet'),
+                "encoder_latent_dim": getattr(cfg, 'ENCODER_LATENT_DIM', 512),
             }
         )
         wandb.watch(model, log="all")
@@ -191,7 +190,7 @@ def train(
 
     train_losses=[]
     print(f"Starting training on device: {device}")
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    _print_model_parameters(model)
     print(f"Output directory: {run_dir}")
 
 
@@ -230,10 +229,8 @@ def train(
         # Visualization
         if (epoch + 1) % cfg.VISUALIZATION_INTERVAL == 0:
             try:
-                # For DataParallel, unwrap model for visualization
-                vis_model = model.module if isinstance(model, nn.DataParallel) else model
                 visualize_samples(
-                    vis_model,
+                    model,
                     device,
                     data_loader,
                     num_examples=4,
@@ -249,11 +246,9 @@ def train(
         # Save checkpoint
         if (epoch+1) % cfg.SAVE_INTERVAL == 0:
             checkpoint_path = os.path.join(run_dir, f'model_epoch_{epoch+1}.pth')
-            # For DataParallel, save the underlying model
-            model_to_save = model.module if isinstance(model, nn.DataParallel) else model
             torch.save({
                 'epoch': epoch + 1,
-                'model_state_dict': model_to_save.state_dict(),
+                'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_losses': train_losses,
             }, checkpoint_path)
@@ -267,27 +262,44 @@ def train(
 
 def train_ddp(
     model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE,
-    plots_dir=cfg.PLOTS_DIR, rank=0, world_size=1, weight_decay=cfg.WEIGHT_DECAY,
+    plots_dir=cfg.PLOTS_DIR, rank=None, world_size=None, weight_decay=cfg.WEIGHT_DECAY,
     use_wandb=True, normalize=False
 ):
     """
-    CURRENTLY NOT USED - EXPERIMENTAL - MADE WITH CURSOR (not checked)
     Distributed Data Parallel (DDP) training function.
 
     Launch with: torchrun --nproc_per_node=N train_single_encoder_model.py
 
     Args:
-        rank: Process rank (0 to world_size-1)
-        world_size: Total number of processes
+        rank: Process rank (0 to world_size-1). If None, will be read from environment.
+        world_size: Total number of processes. If None, will be read from environment.
     """
     import torch.distributed as dist
     from torch.nn.parallel import DistributedDataParallel as DDP
 
+    # Get rank and world_size from environment if not provided
+    if rank is None:
+        rank = int(os.environ.get('RANK', 0))
+    if world_size is None:
+        world_size = int(os.environ.get('WORLD_SIZE', 1))
+
+    # Check if NUM_GPUS is set and warn if world_size doesn't match
+    num_gpus_config = getattr(cfg, 'NUM_GPUS', None)
+    if num_gpus_config is not None and world_size != num_gpus_config:
+        if rank == 0:
+            print(f"Warning: WORLD_SIZE ({world_size}) doesn't match NUM_GPUS config ({num_gpus_config})")
+            print(f"Make sure to use: torchrun --nproc_per_node={num_gpus_config} ...")
+
     # Initialize process group
-    dist.init_process_group(backend='nccl' if torch.cuda.is_available() else 'gloo')
+    if not dist.is_initialized():
+        dist.init_process_group(backend='nccl' if torch.cuda.is_available() else 'gloo')
 
     device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(device)
+
+    # Ensure rank doesn't exceed available GPUs
+    if torch.cuda.is_available() and rank >= torch.cuda.device_count():
+        raise ValueError(f"Rank {rank} exceeds available GPUs ({torch.cuda.device_count()})")
 
     model = model.to(device)
     model = DDP(model, device_ids=[rank] if torch.cuda.is_available() else None)
@@ -311,6 +323,8 @@ def train_ddp(
                 "world_size": world_size,
                 "device": str(device),
                 "decoder_type": getattr(cfg, 'DECODER_TYPE', 'latent'),
+                "encoder_type": getattr(cfg, 'ENCODER_TYPE', 'resnet'),
+                "encoder_latent_dim": getattr(cfg, 'ENCODER_LATENT_DIM', 512),
             }
         )
         wandb.watch(model.module, log="all")
@@ -325,7 +339,7 @@ def train_ddp(
     train_losses = []
     if rank == 0:
         print(f"Starting DDP training on {world_size} GPUs")
-        print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+        _print_model_parameters(model.module)
         print(f"Output directory: {run_dir}")
 
     pbar = tqdm(range(num_epochs), desc=f'Training (rank {rank})', disable=(rank != 0))
@@ -359,11 +373,12 @@ def train_ddp(
                 else:
                     hsc_flat = hsc_batch.flatten(1)
 
+                # DDP handles scalar losses properly, but we use model.module to avoid issues
                 if is_concat:
-                    loss = model(hsc_flat, cond_images=legacy_batch)
+                    loss = model.module(hsc_flat, cond_images=legacy_batch)
                 else:
                     z = model.module.encode(legacy_batch)
-                    loss = model(hsc_flat, z=z)
+                    loss = model.module(hsc_flat, z=z)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -408,6 +423,8 @@ def train_ddp(
             # Visualization and checkpointing only on rank 0
             if (epoch + 1) % cfg.VISUALIZATION_INTERVAL == 0:
                 try:
+                    if rank == 0:
+                        print(f"Creating visualization for epoch {epoch + 1}...")
                     visualize_samples(
                         model.module,
                         device,
@@ -416,11 +433,16 @@ def train_ddp(
                         num_samples=4,
                         save_path=os.path.join(run_dir, f'samples_epoch_{epoch+1}.png'),
                         epoch=epoch + 1,
-                        use_wandb=use_wandb,
+                        use_wandb=use_wandb and rank == 0,  # Only log to wandb on rank 0
                         normalize=normalize,
                     )
+                    if rank == 0:
+                        print(f"Visualization completed for epoch {epoch + 1}")
                 except Exception as e:
-                    print(f"Error creating visualization: {e}")
+                    import traceback
+                    if rank == 0:
+                        print(f"Error creating visualization: {e}")
+                        print(traceback.format_exc())
 
             if (epoch+1) % cfg.SAVE_INTERVAL == 0:
                 checkpoint_path = os.path.join(run_dir, f'model_epoch_{epoch+1}.pth')
@@ -448,9 +470,7 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
     model.eval()  # Set model to evaluation mode
     batch_size = num_examples
 
-    # Get the underlying model if wrapped in DataParallel
-    curr_model = model.module if isinstance(model, nn.DataParallel) else model
-    is_concat = _is_concat_model(curr_model)
+    is_concat = _is_concat_model(model)
 
     with torch.no_grad():  # Disable gradient computation to save memory
         hsc_batch, legacy_batch, _, _ = data_loader.get_batch(batch_size=batch_size)
@@ -477,11 +497,11 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
         # Handle different decoder types
         if is_concat:
             # Concat mode: pass images directly
-            samples_hsc = curr_model.sample(cond_images=legacy_batch, device=device, n_samples=num_samples)
+            samples_hsc = model.sample(cond_images=legacy_batch, device=device, n_samples=num_samples)
         else:
-            # Latent mode: encode first - use curr_model to access .encode() and .sample() methods
-            z = curr_model.encode(legacy_batch)
-            samples_hsc = curr_model.sample(device=device, n_samples=num_samples, z=z)
+            # Latent mode: encode first
+            z = model.encode(legacy_batch)
+            samples_hsc = model.sample(device=device, n_samples=num_samples, z=z)
 
         # samples_hsc shape: (n_samples, n_examples, C*H*W) for both modes
 
@@ -552,7 +572,17 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
         print(f"Saved visualization to {save_path}")
 
     if use_wandb:
-        wandb.log({"generated_samples": wandb.Image(fig)}, step=epoch if epoch is not None else None)
+        try:
+            # Check if wandb is initialized
+            if wandb.run is not None:
+                wandb.log({"generated_samples": wandb.Image(fig)}, step=epoch if epoch is not None else None)
+                print(f"Logged visualization to wandb for epoch {epoch}")
+            else:
+                print(f"Warning: wandb is not initialized, skipping wandb log for epoch {epoch}")
+        except Exception as e:
+            print(f"Error logging to wandb: {e}")
+            import traceback
+            traceback.print_exc()
 
     plt.close(fig)
 
@@ -562,9 +592,22 @@ def visualize_samples(model, device, data_loader, num_examples=8, num_samples=8,
 
 if __name__ == "__main__":
     print('Entered main function')
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
-    print(f"Using device: {device}")
+
+    # Check if we're running in distributed mode (DDP)
+    is_distributed = 'RANK' in os.environ and 'WORLD_SIZE' in os.environ
+
+    if is_distributed:
+        # DDP mode - get rank and world_size from environment
+        rank = int(os.environ['RANK'])
+        world_size = int(os.environ['WORLD_SIZE'])
+        print(f"Running in DDP mode: rank={rank}, world_size={world_size}")
+
+        # Set device based on rank
+        device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
+    else:
+        # Regular training mode
+        device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
+        print(f"Using device: {device}")
 
     hdf5_path = cfg.PREPROCESSED_HDF5_PATH
 
@@ -584,7 +627,9 @@ if __name__ == "__main__":
         print("Using latent decoder model")
         model = build_model(device=device)
 
-    print(f'Model initialized with {sum(p.numel() for p in model.parameters()):,} parameters')
+    if not is_distributed or rank == 0:
+        print('Model initialized:')
+        _print_model_parameters(model)
 
     # Optional: View the number of parameters per part of the model
     # for name, p in model.named_parameters():
@@ -592,8 +637,32 @@ if __name__ == "__main__":
 
     # Train
     use_wandb = getattr(cfg, 'USE_WANDB', True)  # Default to True for backward compatibility
-    use_multi_gpu = getattr(cfg, 'USE_MULTI_GPU', 'auto')  # 'auto', 'dp', False
-    train(model, data_loader, num_epochs=cfg.NUM_EPOCHS, lr=cfg.LEARNING_RATE, plots_dir=cfg.PLOTS_DIR, device=device, use_wandb=use_wandb, use_multi_gpu=use_multi_gpu)
+    normalize = getattr(cfg, 'NORMALIZE', False)
+
+    if is_distributed:
+        # Use DDP training
+        train_ddp(
+            model, data_loader,
+            num_epochs=cfg.NUM_EPOCHS,
+            lr=cfg.LEARNING_RATE,
+            plots_dir=cfg.PLOTS_DIR,
+            rank=rank,
+            world_size=world_size,
+            weight_decay=cfg.WEIGHT_DECAY,
+            use_wandb=use_wandb,
+            normalize=normalize
+        )
+    else:
+        # Use regular training (single GPU)
+        train(
+            model, data_loader,
+            num_epochs=cfg.NUM_EPOCHS,
+            lr=cfg.LEARNING_RATE,
+            plots_dir=cfg.PLOTS_DIR,
+            device=device,
+            use_wandb=use_wandb,
+            normalize=normalize
+        )
 
     # Cleanup: close HDF5 file if using HSCDataLoader
     if isinstance(data_loader, HSC_Legacy_DataLoader_OneHot):

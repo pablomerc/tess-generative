@@ -13,15 +13,29 @@ OUTPUT_DIM = NUM_CHANNELS * IMAGE_SIZE * IMAGE_SIZE  # 4 * 96 * 96 = 36864 (flat
 
 
 
-ENCODER_TYPE = 'resnet'
+ENCODER_TYPE = 'minuet'
 # Encoder latent dim - used for both 'cnn' and 'resnet' encoder types
 # For resnet: if set to 512, uses Identity layer (native ResNet output)
 #            if set to other value, adds Linear layer to project from 512 to desired dim
+# For minuet: this should match MINUET_BOTTLENECK_LENGTH
 # ENCODER_LATENT_DIM = 512 # originally 40
-ENCODER_LATENT_DIM = 512
+# ENCODER_LATENT_DIM = 512
+ENCODER_LATENT_DIM = 64
+
+# Minuet encoder parameters (only used if ENCODER_TYPE == 'minuet')
+MINUET_BOTTLENECK_LENGTH = ENCODER_LATENT_DIM  # Must match ENCODER_LATENT_DIM for decoder compatibility
+MINUET_BOTTLENECK_DIM = 1  # Gets squeezed out in forward pass
+MINUET_PATCH_SIZE = 3
+MINUET_MODEL_DIM = 256
+MINUET_NUM_HEADS = 4
+MINUET_FF_DIM = 256
+MINUET_NUM_LAYERS = 4
+MINUET_DROPOUT = 0.1
+MINUET_SELFATTN = False
+MINUET_SINCOSIN = True
 
 # Model architecture parameters
-DECODER_TYPE = "concat"  # "latent" (uses encoder + latent z) or "concat" (direct image concatenation)
+DECODER_TYPE = "latent"  # "latent" (uses encoder + latent z) or "concat" (direct image concatenation)
 VELOCITY_FIELD_TYPE = "unet"  # "mlp" or "unet"
 USE_FILM = True  # Use FiLM (Feature-wise Linear Modulation) layers
 
@@ -46,8 +60,8 @@ N_INTEGRATION_STEPS = 100  # Number of ODE integration steps for sampling
 
 # Training hyperparameters
 BATCH_SIZE = 32  # Batch size for training
-NUM_EPOCHS = 400  # Number of training epochs
-LEARNING_RATE = 5e-4  # Learning rate
+NUM_EPOCHS = 10_000  # Number of training epochs
+LEARNING_RATE = 5e-4 / 8  # Learning rate
 MAX_GRAD_NORM=1
 
 # NUM_SAMPLES_PER_EPOCH=10280 # 2570
@@ -56,8 +70,8 @@ NUM_SAMPLES_PER_EPOCH = 5140
 WEIGHT_DECAY = 1e-5
 
 # Model save settings
-SAVE_INTERVAL = 25  # Save model every N epochs
-VISUALIZATION_INTERVAL = 2  # Show visualizations every N epochs
+SAVE_INTERVAL = 200  # Save model every N epochs
+VISUALIZATION_INTERVAL = 50  # Show visualizations every N epochs
 PROFILE_FIRST_EPOCH = True  # Profile first epoch to show timing breakdown and FLOPs
 
 # Data configuration
@@ -72,15 +86,16 @@ USE_PREPROCESSED_DATA = True # Set to True to use preprocessed HDF5 format
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_28x28.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablomercaderperez/Desktop/data/preprocessed/preprocessed_hsc_legacy_48x48.h5'
 # PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5'
-PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy_48x48.h5'
+# PREPROCESSED_HDF5_PATH = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy_48x48.h5'
 
 #csail clulster
 # PREPROCESSED_HDF5_PATH = '/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5'
+PREPROCESSED_HDF5_PATH = '/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5'
 
 # Data loader options
 LOAD_TO_MEMORY = True  # Whether to load all preprocessed images into memory
-# MAX_SAMPLES = None  # Maximum number of image pairs to use. Set to None to use all available pairs.
-MAX_SAMPLES=50
+MAX_SAMPLES = None  # Maximum number of image pairs to use. Set to None to use all available pairs.
+# MAX_SAMPLES=50
 
 # Output directories
 MODELS_DIR = './models-galaxy/'
@@ -90,6 +105,11 @@ PLOTS_DIR = './plots-galaxy/'
 LOAD_PRETRAIN = False
 # PATH_PRETRAIN = None  # Path to pretrained model checkpoint
 
-# Multi-GPU training options
-# Options: 'auto' (use DataParallel if multiple GPUs), 'dp' (force DataParallel), 'ddp' (DistributedDataParallel), False (single GPU)
-USE_MULTI_GPU = False  # Set to 'auto' to automatically use multiple GPUs if available
+# Multi-GPU training (DDP)
+# Number of GPUs to use for DDP training
+# Set this to match the number of GPUs in your partition
+# For example, if you have a partition with 4 GPUs but system sees 8, set NUM_GPUS = 4
+NUM_GPUS = 8  # Number of GPUs for DDP (should match --nproc_per_node)
+
+# To run with DDP:
+# torchrun --nproc_per_node=8 -m galaxy_images.galaxy_flow.train_single_encoder_model
