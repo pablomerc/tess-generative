@@ -11,6 +11,14 @@ Note: Normalization to [-1, 1] range is handled in the training code, not here.
 
 import os
 import sys
+
+# Set HuggingFace cache to a writable location BEFORE importing datasets
+# (datasets library reads these env vars at import time)
+hf_cache_dir = "/data/vision/billf/scratch/pablomer/.cache/huggingface"
+os.makedirs(hf_cache_dir, exist_ok=True)
+os.environ['HF_HOME'] = hf_cache_dir
+os.environ['HF_DATASETS_CACHE'] = os.path.join(hf_cache_dir, 'datasets')
+
 import h5py
 import numpy as np
 import torch
@@ -28,9 +36,11 @@ from galaxy_images.image_preprocessing import preprocess_image
 
 def preprocess_all_hsc_legacy_images(
     # dataset_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/data",
-    dataset_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/",
+    # dataset_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/",
+    dataset_path: str = "/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/",
     # output_path: str = "/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
-    output_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
+    # output_path: str = "/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
+    output_path: str = "/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5",
     crop_size: int = 96,
     batch_size: int = 100,
     files_to_use: int = 4,  # Default to 4 files for testing
@@ -177,21 +187,23 @@ if __name__ == "__main__":
         "--dataset_path",
         type=str,
         # default="/mnt/scratch/legacysurvey_hsc_crossmatched/data",
-        default="/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/",
+        # default="/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/",
+        default="/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/",
         help="Path to directory containing parquet files"
     )
     parser.add_argument(
         "--output_path",
         type=str,
         # default="/mnt/scratch/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
-        default="/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
+        # default="/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy.h5",
+        default="/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5",
         help="Path to output HDF5 file"
     )
     parser.add_argument(
         "--crop_size",
         type=int,
-        default=96,
-        help="Size to crop images to (default: 96)"
+        default=48,
+        help="Size to crop images to (default: 48)"
     )
     parser.add_argument(
         "--batch_size",
@@ -202,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--files_to_use",
         type=int,
-        default=4,
+        default=0,
         help="Number of parquet files to use (default: 40, use 0 for all files)"
     )
 
@@ -211,15 +223,10 @@ if __name__ == "__main__":
     # Convert 0 to None (meaning use all files)
     files_to_use = None if args.files_to_use == 0 else args.files_to_use
 
-    output_path = '/Users/pablom.perez/Desktop/data/legacysurvey_hsc_crossmatched/preprocessed_hsc_legacy_48x48.h5'
-
     preprocess_all_hsc_legacy_images(
         dataset_path=args.dataset_path,
-        # output_path=args.output_path,
-        output_path = output_path,
-        # crop_size=args.crop_size,
-        crop_size = 48,
+        output_path=args.output_path,
+        crop_size=args.crop_size,
         batch_size=args.batch_size,
-        # files_to_use=files_to_use,
-        files_to_use = 4
+        files_to_use=files_to_use,
     )
