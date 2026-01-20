@@ -229,3 +229,6 @@ flow_decoder/wandb/
 
 #the folder data/augmented/rotation_v2_augmented_mnist_train_images.npy
 data/augmented/rotation_v2_augmented_mnist_train_images.npy
+
+galaxy_images/galaxy_model/galaxy-flow-matching/
+galaxy_images/galaxy_model/runs/
