@@ -6,7 +6,7 @@ import torch
 import h5py
 from pathlib import Path
 from torch.utils.data import Dataset
-
+import random
 
 NORM_DICT = {
     'hsc': [0.022, 0.05],
@@ -58,3 +58,117 @@ class HSCLegacyDataset(Dataset):
         mean_legacy, std_legacy = self.norm_dict['legacy']
         legacy_image = (legacy_image - mean_legacy) / std_legacy
         return hsc_image, legacy_image
+
+class HSCLegacyTripletDataset(Dataset):
+    def __init__(
+        self,
+        hdf5_path: str,
+        norm_dict: dict = NORM_DICT,
+        idx_list: list = None,
+    ):
+
+        hdf5_path = Path(hdf5_path)
+        if not hdf5_path.exists():
+            raise FileNotFoundError(f"HDF5 file not found:{hdf5_path}")
+        self.hdf5_path = hdf5_path
+        self.norm_dict = norm_dict
+        self.idx_list = idx_list
+        self.num_images = len(idx_list) if idx_list is not None else None
+
+        with h5py.File(hdf5_path, 'r') as f:
+            total_images = f.attrs['num_images']
+            self.crop_size = f.attrs['crop_size']
+            self.num_channels = f.attrs['num_channels']
+            if self.idx_list is not None:
+                self.hsc_images = torch.from_numpy(f['hsc_images'][self.idx_list]).float()
+                self.legacy_images = torch.from_numpy(f['legacy_images'][self.idx_list]).float()
+            else:
+                self.hsc_images = torch.from_numpy(f['hsc_images'][:total_images]).float()
+                self.legacy_images = torch.from_numpy(f['legacy_images'][:total_images]).float()
+        if self.idx_list is None:
+            self.num_images = total_images
+        print(f"Loaded {self.num_images} images into memory, "
+        f"shape: ({self.num_images}, {self.num_channels}, {self.crop_size}, {self.crop_size})")
+        print(f"Memory usage: ~{2 * self.hsc_images.numel() * 4 / (1024**3):.3f} GB")
+
+    def __len__(self):
+
+        return self.num_images
+
+    def __getitem__(self, idx):
+        """
+        Returns an example with anchor image, same galaxy on the other instrument, and k examples of same instrument with different galaxies.
+
+        Returns:
+            tuple: (anchor_image, same_galaxy, same_instrument, metadata)
+                - anchor_image: torch.Tensor, shape (C, H, W) - normalized anchor image
+                - same_galaxy: torch.Tensor, shape (C, H, W) - same galaxy from other instrument, normalized
+                - same_instrument: torch.Tensor, shape (k, C, H, W) - k different galaxies from same instrument, normalized
+                - metadata: dict with keys:
+                    - 'anchor_survey': str, either 'hsc' or 'legacy'
+                    - 'idx': int, the dataset index used
+                    - 'num_same_instrument': int, actual number of same_instrument examples (may be < k for small datasets)
+        """
+        if idx < 0 or idx >= self.num_images:
+            raise IndexError(f"Index {idx} out of range [0, {self.num_images})")
+        hsc_image = self.hsc_images[idx]
+        legacy_image = self.legacy_images[idx]
+        mean_hsc, std_hsc = self.norm_dict['hsc']
+        hsc_image = (hsc_image - mean_hsc) / std_hsc
+        mean_legacy, std_legacy = self.norm_dict['legacy']
+        legacy_image = (legacy_image - mean_legacy) / std_legacy
+
+        anchor_survey = random.choice(['hsc', 'legacy'])
+
+
+        # TODO: Replace this by SNR-based matching
+        k = 5
+        # Generate enough candidates to ensure we get k unique indices (excluding idx)
+        # Use a set to ensure uniqueness, and keep sampling until we have enough
+        different_indexes_set = set()
+        max_attempts = 100  # Prevent infinite loop
+        attempts = 0
+        while len(different_indexes_set) < k and attempts < max_attempts:
+            candidates = torch.randint(0, self.num_images, (k * 2,)).tolist()
+            for cand_idx in candidates:
+                if cand_idx != idx:
+                    different_indexes_set.add(cand_idx)
+                if len(different_indexes_set) >= k:
+                    break
+            attempts += 1
+
+        if len(different_indexes_set) < k:
+            # Fallback: if we can't get k unique indices, use what we have
+            # This can happen with very small datasets
+            different_indexes = torch.tensor(list(different_indexes_set), dtype=torch.long)
+        else:
+            different_indexes = torch.tensor(list(different_indexes_set)[:k], dtype=torch.long)
+
+        anchor_image = None
+        same_galaxy = None
+        same_instrument = None
+
+        if anchor_survey == 'hsc':
+            anchor_image = hsc_image
+            same_galaxy = legacy_image
+
+            # Normalize same_instrument images
+            same_instrument_raw = self.hsc_images[different_indexes]
+            same_instrument = (same_instrument_raw - mean_hsc) / std_hsc
+
+        elif anchor_survey == 'legacy':
+            anchor_image = legacy_image
+            same_galaxy = hsc_image
+
+            # Normalize same_instrument images
+            same_instrument_raw = self.legacy_images[different_indexes]
+            same_instrument = (same_instrument_raw - mean_legacy) / std_legacy
+
+        # Metadata dictionary for debugging, analysis, and logging
+        metadata = {
+            'anchor_survey': anchor_survey,
+            'idx': idx,
+            'num_same_instrument': len(different_indexes),
+        }
+
+        return anchor_image, same_galaxy, same_instrument, metadata
