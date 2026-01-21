@@ -7,6 +7,10 @@ import h5py
 from pathlib import Path
 from torch.utils.data import Dataset
 import random
+import math
+# import torch
+from torch.utils.data import Sampler
+
 
 NORM_DICT = {
     'hsc': [0.022, 0.05],
@@ -99,6 +103,10 @@ class HSCLegacyTripletDataset(Dataset):
         """
         Returns an example with anchor image, same galaxy on the other instrument, and k examples of same instrument with different galaxies.
 
+        Args:
+            idx: Either an int (dataset index) or a tuple (idx, anchor_survey) when using BalancedAnchorBatchSampler.
+                 If tuple, anchor_survey will be used instead of random choice.
+
         Returns:
             tuple: (anchor_image, same_galaxy, same_instrument, metadata)
                 - anchor_image: torch.Tensor, shape (C, H, W) - normalized anchor image
@@ -109,6 +117,12 @@ class HSCLegacyTripletDataset(Dataset):
                     - 'idx': int, the dataset index used
                     - 'num_same_instrument': int, actual number of same_instrument examples (may be < k for small datasets)
         """
+        # Handle tuple from BalancedAnchorBatchSampler: (idx, anchor_survey)
+        if isinstance(idx, tuple):
+            idx, anchor_survey = idx
+        else:
+            anchor_survey = None  # Will be randomly chosen below
+
         if idx < 0 or idx >= self.num_images:
             raise IndexError(f"Index {idx} out of range [0, {self.num_images})")
         hsc_image = self.hsc_images[idx]
@@ -118,7 +132,9 @@ class HSCLegacyTripletDataset(Dataset):
         mean_legacy, std_legacy = self.norm_dict['legacy']
         legacy_image = (legacy_image - mean_legacy) / std_legacy
 
-        anchor_survey = random.choice(['hsc', 'legacy'])
+        # Use provided anchor_survey or randomly choose
+        if anchor_survey is None:
+            anchor_survey = random.choice(['hsc', 'legacy'])
 
 
         # TODO: Replace this by SNR-based matching
@@ -172,3 +188,57 @@ class HSCLegacyTripletDataset(Dataset):
         }
 
         return anchor_image, same_galaxy, same_instrument, metadata
+
+
+class BalancedAnchorBatchSampler(Sampler):
+    """
+    Yields batches of (idx, anchor_survey) tuples so that each batch is exactly 50/50
+    in terms of anchor survey. The anchor_survey assignments are randomly shuffled within
+    each batch to avoid systematic patterns.
+
+    This ensures balanced training while maintaining randomness in the assignment.
+    """
+    def __init__(self, num_samples: int, batch_size: int, drop_last: bool = True, seed: int = 0):
+        assert batch_size % 2 == 0, "batch_size must be even for 50/50 split"
+        self.num_samples = num_samples
+        self.batch_size = batch_size
+        self.half = batch_size // 2
+        self.drop_last = drop_last
+        self.seed = seed
+
+    def __len__(self):
+        if self.drop_last:
+            return self.num_samples // self.batch_size
+        return math.ceil(self.num_samples / self.batch_size)
+
+    def __iter__(self):
+        g = torch.Generator()
+        g.manual_seed(self.seed)
+
+        # Shuffle indices once per epoch
+        perm = torch.randperm(self.num_samples, generator=g).tolist()
+
+        # Calculate number of batches
+        n_full = self.num_samples // self.batch_size
+        n_batches = n_full if self.drop_last else math.ceil(self.num_samples / self.batch_size)
+
+        cursor = 0
+        for _ in range(n_batches):
+            if cursor + self.batch_size > self.num_samples:
+                if self.drop_last:
+                    break
+                # If not dropping last, stop here (could pad if needed)
+                break
+
+            batch_idxs = perm[cursor:cursor + self.batch_size]
+            cursor += self.batch_size
+
+            # Create balanced anchor_survey assignments: half hsc, half legacy
+            anchor_surveys = ['hsc'] * self.half + ['legacy'] * self.half
+            # Shuffle the anchor_survey assignments within the batch for randomness
+            anchor_survey_perm = torch.randperm(self.batch_size, generator=g).tolist()
+            anchor_surveys_shuffled = [anchor_surveys[i] for i in anchor_survey_perm]
+
+            # Pair each idx with its randomly assigned anchor_survey
+            batch = [(idx, anchor_survey) for idx, anchor_survey in zip(batch_idxs, anchor_surveys_shuffled)]
+            yield batch
