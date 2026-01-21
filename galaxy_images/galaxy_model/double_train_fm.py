@@ -14,61 +14,6 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-def setup_run_snapshot() -> Path:
-    """
-    Create a timestamped run directory, copy key source files into it,
-    and tee stdout/stderr into a log file while still printing to terminal.
-
-    Returns:
-        Path to the created run directory.
-    """
-
-    script_path = Path(__file__).resolve()
-    script_dir = script_path.parent
-
-    runs_dir = script_dir / "runs"
-    runs_dir.mkdir(exist_ok=True)
-
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = runs_dir / timestamp
-    run_dir.mkdir(exist_ok=True)
-
-    # Snapshot key source files
-    src_files = [
-        script_dir / "train_fm.py",
-        script_dir / "data.py",
-    ]
-    for src in src_files:
-        if src.exists():
-            shutil.copy2(src, run_dir / src.name)
-
-    # Set up tee-style logging
-    log_path = run_dir / "train.log"
-
-    class _Tee:
-        def __init__(self, stream, log_file):
-            self._stream = stream
-            self._log_file = log_file
-
-        def write(self, data):
-            self._stream.write(data)
-            self._log_file.write(data)
-
-        def flush(self):
-            self._stream.flush()
-            self._log_file.flush()
-
-    # Line-buffered text file for immediate writes
-    log_file = open(log_path, "a", buffering=1)
-    sys.stdout = _Tee(sys.stdout, log_file)
-    sys.stderr = _Tee(sys.stderr, log_file)
-
-    print(f"[run snapshot] Logging to {log_path}")
-    print(f"[run snapshot] Source snapshot stored in {run_dir}")
-
-    return run_dir
-
-
 class ResNetEncoder(nn.Module):
     """
     ResNet18 encoder from timm that produces spatial feature maps for conditioning.
@@ -172,30 +117,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         block_out_channels = tuple(model_channels * m for m in channel_mult)
 
         if concat_conditioning:
-            self.encoder = None
-
-            self.velocity_model = UNet2DModel(
-                sample_size=image_size,
-                in_channels=in_channels + cond_channels,  # x_t + cond concatenated
-                out_channels=in_channels,
-                layers_per_block=layers_per_block,
-                block_out_channels=block_out_channels,
-                down_block_types=(
-                    "DownBlock2D",
-                    "AttnDownBlock2D",
-                    "AttnDownBlock2D",
-                    "DownBlock2D",
-                ),
-                up_block_types=(
-                    "UpBlock2D",
-                    "AttnUpBlock2D",
-                    "AttnUpBlock2D",
-                    "UpBlock2D",
-                ),
-                attention_head_dim=attention_head_dim,
-            )
+            raise ValueError("Concat conditioning is not supported for the double encoder case")
         else:
-            self.encoder = ResNetEncoder(
+            self.encoder_1 = ResNetEncoder(
+                in_channels=cond_channels,
+                cross_attention_dim=cross_attention_dim,
+                pretrained=pretrained_encoder,
+            )
+
+            self.encoder_2 = ResNetEncoder(
                 in_channels=cond_channels,
                 cross_attention_dim=cross_attention_dim,
                 pretrained=pretrained_encoder,
@@ -209,19 +139,14 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 block_out_channels=block_out_channels,
                 down_block_types=(
                     "DownBlock2D",
-                    # "CrossAttnDownBlock2D",
-                    "DownBlock2D",
-                    # "CrossAttnDownBlock2D",
-                    "DownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
                     "DownBlock2D",
                 ),
-                mid_block_type='UNetMidBlock2D',
                 up_block_types=(
                     "UpBlock2D",
-                    # "CrossAttnUpBlock2D",
-                    "UpBlock2D",
-                    # "CrossAttnUpBlock2D",
-                    "UpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
                     "UpBlock2D",
                 ),
                 cross_attention_dim=cross_attention_dim,
@@ -232,7 +157,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self,
         x_t: torch.Tensor,
         t: torch.Tensor,
-        cond_image: torch.Tensor,
+        cond_image_samegal: torch.Tensor,
+        cond_image_sameins: torch.Tensor,
     ) -> torch.Tensor:
         """
         Predict velocity v(x_t, t, c).
@@ -240,24 +166,38 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         Args:
             x_t: Noisy image at time t (B, C, H, W)
             t: Time in [0, 1] (B,)
-            cond_image: Conditioning image (B, C, H, W)
+            cond_image_samegal: Conditioning image (B, C, H, W)
+            cond_image_sameins: Set of conditioning images (B, k, C, H, W)
         """
         timesteps = t * 1000
 
-        if self.concat_conditioning:
-            x_input = torch.cat([x_t, cond_image], dim=1)
-            return self.velocity_model(x_input, timesteps).sample
-        else:
-            cond_embedding = self.encoder(cond_image)  # (B, seq_len, embed_dim)
-            return self.velocity_model(
-                x_t,
-                timesteps,
-                encoder_hidden_states=cond_embedding,
-            ).sample
+        cond_gal_embedding = self.encoder_1(cond_image_samegal)  # (B, seq_len, embed_dim)
+
+        B, k, C, H, W = cond_image_sameins.shape
+
+        cond_image_sameins_flat = cond_image_sameins.flatten(0, 1)          # (B*k, C, H, W)
+        cond_ins_embedding_flat = self.encoder_2(cond_image_sameins_flat)      # (B*k, seq_len, embed_dim)
+
+        cond_ins_embedding = cond_ins_embedding_flat.unflatten(0, (B, k))    # (B, k, seq_len, embed_dim)
+        cond_ins_embedding = cond_ins_embedding.flatten(1, 2)                # (B, k*seq_len, embed_dim)
+
+        cond_embedding = torch.cat([cond_gal_embedding, cond_ins_embedding], dim=1)
+        # (B, (1+k)*seq_len, embed_dim)
+
+        return self.velocity_model(
+            x_t,
+            timesteps,
+            encoder_hidden_states=cond_embedding,
+        ).sample
 
     def compute_loss(self, batch: tuple) -> torch.Tensor:
-        """Compute conditional flow matching loss."""
-        x_1, cond_image = batch
+        """Compute conditional flow matching loss.
+
+        Args:
+            Batch: (anchor_image, same_galaxy, same_instrument, metadata)
+
+        """
+        x_1, cond_image_samegal, cond_image_sameins, _ = batch
         batch_size = x_1.shape[0]
 
         x_0 = torch.randn_like(x_1)
@@ -268,7 +208,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         target_velocity = x_1 - x_0
 
-        predicted_velocity = self(x_t, t, cond_image)
+        predicted_velocity = self(x_t, t, cond_image_samegal, cond_image_sameins)
 
         loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
         return loss
@@ -340,27 +280,31 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.log("val/loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
 
         if batch_idx == 0:
-            self._val_cond_batch = batch[1][:self.num_sample_images].clone()
-            self._val_target_batch = batch[0][:self.num_sample_images].clone()
+            anchor_image, same_galaxy, same_instrument, _ = batch
+            self._val_anchor_batch = anchor_image[:self.num_sample_images].clone()
+            self._val_samegal_batch = same_galaxy[:self.num_sample_images].clone()
+            self._val_sameins_batch = same_instrument[:self.num_sample_images].clone()
 
         return loss
 
     @torch.no_grad()
     def sample(
         self,
-        cond_images: torch.Tensor,
+        cond_image_samegal: torch.Tensor,
+        cond_image_sameins: torch.Tensor,
         num_steps: Optional[int] = None,
     ) -> torch.Tensor:
         """
         Generate samples conditioned on input images using Euler integration.
 
         Args:
-            cond_images: Conditioning images (B, C, H, W)
+            cond_image_samegal: Same galaxy conditioning images (B, C, H, W)
+            cond_image_sameins: Same instrument conditioning images (B, k, C, H, W)
             num_steps: Number of integration steps
         """
         num_steps = num_steps or self.num_integration_steps
-        num_samples = cond_images.shape[0]
-        device = cond_images.device
+        num_samples = cond_image_samegal.shape[0]
+        device = cond_image_samegal.device
 
         x = torch.randn(
             num_samples, self.in_channels, self.image_size, self.image_size,
@@ -371,7 +315,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         for i in range(num_steps):
             t = torch.full((num_samples,), i * dt, device=device)
-            velocity = self(x, t, cond_images)
+            velocity = self(x, t, cond_image_samegal, cond_image_sameins)
             x = x + velocity * dt
 
         return x
@@ -388,18 +332,18 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         """Log sampled images as a grid to W&B.
 
         Creates a grid where each row corresponds to one conditioning image:
-        [Cond | Target | Sample1 | Sample2 | ... | SampleN | Mean]
+        [SameGal | SameIns (first) | Target | Sample1 | Sample2 | ... | SampleN | Mean]
         """
-        if not self.logger or not hasattr(self, "_val_cond_batch"):
+        if not self.logger or not hasattr(self, "_val_anchor_batch"):
             return
 
         import matplotlib.pyplot as plt
         import torch
         import wandb
 
-        num_cond_images = min(6, len(self._val_cond_batch))
+        num_cond_images = min(6, len(self._val_anchor_batch))
         num_samples_per_cond = 5
-        num_cols = 2 + num_samples_per_cond + 1  # cond + target + samples + mean
+        num_cols = 3 + num_samples_per_cond + 1  # samegal + sameins_first + target + samples + mean
 
         def _row_scale_rgb(x_chw: torch.Tensor, vmin, vmax) -> torch.Tensor:
             """
@@ -419,7 +363,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             figsize=(2 * num_cols, 2 * num_cond_images),
             squeeze=False,
         )
-        col_titles = ["Cond", "Target"] + [f"Sample {j+1}" for j in range(num_samples_per_cond)] + ["Mean"]
+        col_titles = ["SameGal", "SameIns (1st)", "Target"] + [f"Sample {j+1}" for j in range(num_samples_per_cond)] + ["Mean"]
         for j, title in enumerate(col_titles):
             axes_orig[0, j].set_title(title, fontsize=10)
 
@@ -433,29 +377,43 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             axes_row[0, j].set_title(title, fontsize=10)
 
         for i in range(num_cond_images):
-            cond = self._val_cond_batch[i : i + 1].to(self.device)
-            target = self._val_target_batch[i : i + 1].to(self.device)
+            samegal = self._val_samegal_batch[i : i + 1].to(self.device)
+            target = self._val_anchor_batch[i : i + 1].to(self.device)
+            sameins = self._val_sameins_batch[i : i + 1].to(self.device)  # (1, k, C, H, W)
+            sameins_first = sameins[:, 0:1]  # (1, 1, C, H, W) - first same instrument image
 
-            cond_repeated = cond.repeat(num_samples_per_cond, 1, 1, 1)
-            samples = self.sample(cond_repeated)
+            # Repeat samegal and sameins for multiple samples
+            samegal_repeated = samegal.repeat(num_samples_per_cond, 1, 1, 1)
+            sameins_repeated = sameins.repeat(num_samples_per_cond, 1, 1, 1, 1)  # (num_samples_per_cond, k, C, H, W)
+
+            samples = self.sample(samegal_repeated, sameins_repeated)
             mean_sample = samples.mean(dim=0, keepdim=True)
 
             # =========================
             # (A) ORIGINAL PLOTTING ROW
             # =========================
-            cond_rgb = self._normalize_for_vis(cond[0, :3]).cpu().permute(1, 2, 0).numpy()
-            axes_orig[i, 0].imshow(cond_rgb)
+            # SameGal column
+            samegal_rgb = self._normalize_for_vis(samegal[0, :3]).cpu().permute(1, 2, 0).numpy()
+            axes_orig[i, 0].imshow(samegal_rgb)
             axes_orig[i, 0].axis("off")
 
-            target_rgb = self._normalize_for_vis(target[0, :3]).cpu().permute(1, 2, 0).numpy()
-            axes_orig[i, 1].imshow(target_rgb)
+            # SameIns (first) column
+            sameins_first_rgb = self._normalize_for_vis(sameins_first[0, 0, :3]).cpu().permute(1, 2, 0).numpy()
+            axes_orig[i, 1].imshow(sameins_first_rgb)
             axes_orig[i, 1].axis("off")
 
+            # Target column
+            target_rgb = self._normalize_for_vis(target[0, :3]).cpu().permute(1, 2, 0).numpy()
+            axes_orig[i, 2].imshow(target_rgb)
+            axes_orig[i, 2].axis("off")
+
+            # Sample columns
             for j in range(num_samples_per_cond):
                 sample_rgb = self._normalize_for_vis(samples[j, :3]).cpu().permute(1, 2, 0).numpy()
-                axes_orig[i, 2 + j].imshow(sample_rgb)
-                axes_orig[i, 2 + j].axis("off")
+                axes_orig[i, 3 + j].imshow(sample_rgb)
+                axes_orig[i, 3 + j].axis("off")
 
+            # Mean column
             mean_rgb = self._normalize_for_vis(mean_sample[0, :3]).cpu().permute(1, 2, 0).numpy()
             axes_orig[i, -1].imshow(mean_rgb)
             axes_orig[i, -1].axis("off")
@@ -475,19 +433,28 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             # vmin = torch.quantile(flat, 0.01, dim=1)
             # vmax = torch.quantile(flat, 0.99, dim=1)
 
-            cond_vis = _row_scale_rgb(cond[0, :3], vmin, vmax).detach().cpu().numpy()
-            axes_row[i, 0].imshow(cond_vis)
+            # SameGal column
+            samegal_vis = _row_scale_rgb(samegal[0, :3], vmin, vmax).detach().cpu().numpy()
+            axes_row[i, 0].imshow(samegal_vis)
             axes_row[i, 0].axis("off")
 
-            target_vis = _row_scale_rgb(target[0, :3], vmin, vmax).detach().cpu().numpy()
-            axes_row[i, 1].imshow(target_vis)
+            # SameIns (first) column
+            sameins_first_vis = _row_scale_rgb(sameins_first[0, 0, :3], vmin, vmax).detach().cpu().numpy()
+            axes_row[i, 1].imshow(sameins_first_vis)
             axes_row[i, 1].axis("off")
 
+            # Target column
+            target_vis = _row_scale_rgb(target[0, :3], vmin, vmax).detach().cpu().numpy()
+            axes_row[i, 2].imshow(target_vis)
+            axes_row[i, 2].axis("off")
+
+            # Sample columns
             for j in range(num_samples_per_cond):
                 samp_vis = _row_scale_rgb(samples[j, :3], vmin, vmax).detach().cpu().numpy()
-                axes_row[i, 2 + j].imshow(samp_vis)
-                axes_row[i, 2 + j].axis("off")
+                axes_row[i, 3 + j].imshow(samp_vis)
+                axes_row[i, 3 + j].axis("off")
 
+            # Mean column
             mean_vis = _row_scale_rgb(mean_sample[0, :3], vmin, vmax).detach().cpu().numpy()
             axes_row[i, -1].imshow(mean_vis)
             axes_row[i, -1].axis("off")
@@ -514,36 +481,68 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
 if __name__ == "__main__":
     # Set up snapshot + tee logging before anything else in main runs
-    setup_run_snapshot()
 
     from pytorch_lightning.loggers import WandbLogger
     from torch.utils.data import DataLoader, TensorDataset
-    from data import HSCLegacyDataset
+    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn
 
     batch_size = 64
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
-    train_dataset = HSCLegacyDataset(
+    train_dataset = HSCLegacyTripletDataset(
         hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
         idx_list=list(range(95_000)),
     )
-    val_dataset = HSCLegacyDataset(
+    val_dataset = HSCLegacyTripletDataset(
         hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
         idx_list=list(range(95_000, 100_000)),
     )
 
-    # train_dataset = HSCLegacyDataset(
+    # train_dataset = HSCLegacyTripletDataset(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
     #     idx_list=list(range(5000)),
     # )
-    # val_dataset = HSCLegacyDataset(
+    # val_dataset = HSCLegacyTripletDataset(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
     #     idx_list=list(range(5000, 5140)),
     # )
 
+    # TODO: (Future) - Fix BalancedAnchorBatchSampler and use it here instead
+    # train_batch_sampler = BalancedAnchorBatchSampler(
+    #     num_samples=len(train_dataset),
+    #     batch_size=batch_size,
+    #     drop_last=True,
+    #     seed=0
+    # )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=4)
+    # val_batch_sampler = BalancedAnchorBatchSampler(
+    #     num_samples=len(val_dataset),
+    #     batch_size=batch_size,
+    #     drop_last=True,
+    #     seed=0
+    # )
+
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        # batch_sampler=train_batch_sampler,  # important: use batch_sampler, not batch_size/shuffle
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        collate_fn=custom_collate_fn,  # Use same collate function
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        # batch_sampler=val_batch_sampler,  # important: use batch_sampler, not batch_size/shuffle
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        collate_fn=custom_collate_fn,  # Use same collate function
+    )
+
 
     concat_conditioning = False
     model = ConditionalFlowMatchingModule(
@@ -556,14 +555,14 @@ if __name__ == "__main__":
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
         lr=1e-4,
-        num_sample_images=6,
+        num_sample_images=10,
         num_integration_steps=250,
     )
 
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="conditional-unet2d-resnet18"
+        name="double-encoder-resnet18-triplet"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
@@ -576,8 +575,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         accelerator="auto",
         devices=n_devices,
-        strategy="ddp_find_unused_parameters_true", #TODO: Remove this if not needed -- only to show that we get no conditioning if there's no cross-attention
-        log_every_n_steps=10,
+       log_every_n_steps=10,
         val_check_interval=1000,
         check_val_every_n_epoch=None,
     )

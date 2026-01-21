@@ -10,6 +10,7 @@ import random
 import math
 # import torch
 from torch.utils.data import Sampler
+from torch.utils.data._utils.collate import default_collate
 
 
 NORM_DICT = {
@@ -242,3 +243,21 @@ class BalancedAnchorBatchSampler(Sampler):
             # Pair each idx with its randomly assigned anchor_survey
             batch = [(idx, anchor_survey) for idx, anchor_survey in zip(batch_idxs, anchor_surveys_shuffled)]
             yield batch
+
+def custom_collate_fn(batch):
+    """
+    Custom collate function that handles metadata dictionaries properly.
+    """
+    # Separate tensors from metadata
+    anchor_images = [item[0] for item in batch]
+    same_galaxies = [item[1] for item in batch]
+    same_instruments = [item[2] for item in batch]
+    metadata_list = [item[3] for item in batch]
+
+    # Collate tensors normally
+    collated_anchor = default_collate(anchor_images)
+    collated_same_galaxy = default_collate(same_galaxies)
+    collated_same_instrument = default_collate(same_instruments)
+
+    # Keep metadata as a list of dicts (don't try to collate it)
+    return collated_anchor, collated_same_galaxy, collated_same_instrument, metadata_list
