@@ -4,10 +4,69 @@ import pytorch_lightning as pl
 import wandb
 import timm
 import time
+import sys
+import shutil
+import datetime
+from pathlib import Path
 from diffusers import UNet2DConditionModel, UNet2DModel
 from typing import Optional
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
+
+def setup_run_snapshot() -> Path:
+    """
+    Create a timestamped run directory, copy key source files into it,
+    and tee stdout/stderr into a log file while still printing to terminal.
+
+    Returns:
+        Path to the created run directory.
+    """
+
+    script_path = Path(__file__).resolve()
+    script_dir = script_path.parent
+
+    runs_dir = script_dir / "runs"
+    runs_dir.mkdir(exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = runs_dir / timestamp
+    run_dir.mkdir(exist_ok=True)
+
+    # Snapshot key source files
+    src_files = [
+        script_dir / "train_fm.py",
+        script_dir / "data.py",
+    ]
+    for src in src_files:
+        if src.exists():
+            shutil.copy2(src, run_dir / src.name)
+
+    # Set up tee-style logging
+    log_path = run_dir / "train.log"
+
+    class _Tee:
+        def __init__(self, stream, log_file):
+            self._stream = stream
+            self._log_file = log_file
+
+        def write(self, data):
+            self._stream.write(data)
+            self._log_file.write(data)
+
+        def flush(self):
+            self._stream.flush()
+            self._log_file.flush()
+
+    # Line-buffered text file for immediate writes
+    log_file = open(log_path, "a", buffering=1)
+    sys.stdout = _Tee(sys.stdout, log_file)
+    sys.stderr = _Tee(sys.stderr, log_file)
+
+    print(f"[run snapshot] Logging to {log_path}")
+    print(f"[run snapshot] Source snapshot stored in {run_dir}")
+
+    return run_dir
 
 
 class ResNetEncoder(nn.Module):
@@ -449,6 +508,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
 
 if __name__ == "__main__":
+    # Set up snapshot + tee logging before anything else in main runs
+    setup_run_snapshot()
+
     from pytorch_lightning.loggers import WandbLogger
     from torch.utils.data import DataLoader, TensorDataset
     from data import HSCLegacyDataset
@@ -457,18 +519,28 @@ if __name__ == "__main__":
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
     train_dataset = HSCLegacyDataset(
-        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
-        idx_list=list(range(5000)),
+        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+        idx_list=list(range(95_000)),
     )
     val_dataset = HSCLegacyDataset(
-        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
-        idx_list=list(range(5000, 5140)),
+        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+        idx_list=list(range(95_000, 100_000)),
     )
+
+    # train_dataset = HSCLegacyDataset(
+    #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
+    #     idx_list=list(range(5000)),
+    # )
+    # val_dataset = HSCLegacyDataset(
+    #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
+    #     idx_list=list(range(5000, 5140)),
+    # )
+
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=4)
 
-    concat_conditioning = True
+    concat_conditioning = False
     model = ConditionalFlowMatchingModule(
         in_channels=4,
         cond_channels=4,
@@ -499,6 +571,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         accelerator="auto",
         devices=n_devices,
+        # strategy="ddp_find_unused_parameters_true", #TODO: Remove this if not needed -- only to show that we get no conditioning if there's no cross-attention
         log_every_n_steps=10,
         val_check_interval=1000,
         check_val_every_n_epoch=None,
