@@ -334,12 +334,12 @@ if __name__ == "__main__":
     encoder = ResNetEncoder()
 
     print(f'Encoder model parameters: {sum(p.numel() for p in encoder.parameters()):,}')
-    print(encoder(dummy_image).shape)
-    image_size = 96
+    # print(encoder(dummy_image).shape)
+    image_size = 48
     in_channels = 4
     layers_per_block = 2
     block_out_channels = (128, 256, 512, 512)
-    cross_attention_dim = 256
+    cross_attention_dim = 512
     attention_head_dim = 8
 
     decoder = UNet2DConditionModel(
@@ -350,14 +350,19 @@ if __name__ == "__main__":
                 block_out_channels=block_out_channels,
                 down_block_types=(
                     "DownBlock2D",
-                    "CrossAttnDownBlock2D",
-                    "CrossAttnDownBlock2D",
+                    # "CrossAttnDownBlock2D",
+                    # "CrossAttnDownBlock2D",
+                    "DownBlock2D",
+                    "DownBlock2D",
                     "DownBlock2D",
                 ),
+                mid_block_type='UNetMidBlock2D',
                 up_block_types=(
                     "UpBlock2D",
-                    "CrossAttnUpBlock2D",
-                    "CrossAttnUpBlock2D",
+                    # "CrossAttnUpBlock2D",
+                    # "CrossAttnUpBlock2D",
+                    "UpBlock2D",
+                    "UpBlock2D",
                     "UpBlock2D",
                 ),
                 cross_attention_dim=cross_attention_dim,
@@ -384,6 +389,13 @@ if __name__ == "__main__":
             f"{count_params(block):,}")
 
 
-    print(torch.rand((10,4,96,96)).shape)
+    x = torch.rand(50,5,4,48,48)
+
+    z = encoder(x)
+
+    print(z.shape)
+
+
+    # print(torch.rand((10,4,48,48)).shape)
 #(48,48) returns (10,4,256)
 #(96,96) returns (10,9,256)
