@@ -197,7 +197,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             Batch: (anchor_image, same_galaxy, same_instrument, metadata)
 
         """
-        x_1, cond_image_samegal, cond_image_sameins, _ = batch
+        x_1, cond_image_samegal, cond_image_sameins, metadata = batch
+
         batch_size = x_1.shape[0]
 
         x_0 = torch.randn_like(x_1)
@@ -210,8 +211,30 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         predicted_velocity = self(x_t, t, cond_image_samegal, cond_image_sameins)
 
-        loss = nn.functional.mse_loss(predicted_velocity, target_velocity)
-        return loss
+        loss = nn.functional.mse_loss(predicted_velocity, target_velocity, reduction='none')
+
+        # Reduce to per-example losses: (B, C, H, W) -> (B,)
+        per_example_loss = loss.mean(dim=(1, 2, 3))
+
+        # Extract anchor_survey values
+        anchor_surveys = [m['anchor_survey'] for m in metadata]
+
+        # Create boolean masks (on the same device as your loss tensor)
+        is_hsc = torch.tensor([s == 'hsc' for s in anchor_surveys], device=per_example_loss.device)
+        is_legacy = torch.tensor([s == 'legacy' for s in anchor_surveys], device=per_example_loss.device)
+
+        # Compute mean losses for each group
+        loss_hsc = per_example_loss[is_hsc].mean() if is_hsc.any() else torch.tensor(float('nan'), device=per_example_loss.device)
+        loss_legacy = per_example_loss[is_legacy].mean() if is_legacy.any() else torch.tensor(float('nan'), device=per_example_loss.device)
+
+        # Total loss (scalar) for gradients
+        total_loss = per_example_loss.mean()
+
+        # Store separate losses for logging (detached to be explicit they're not used for gradients)
+        self._loss_hsc = loss_hsc.detach()
+        self._loss_legacy = loss_legacy.detach()
+
+        return total_loss
 
     #TODO: Remove time logging (added for debugging purposes)
     def _format_time_hms(self, seconds: float) -> str:
@@ -231,6 +254,12 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
         self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+
+        # Log separate losses for hsc and legacy anchors
+        if hasattr(self, '_loss_hsc'):
+            self.log("train/loss_hsc", self._loss_hsc, on_step=True, on_epoch=True, sync_dist=True)
+        if hasattr(self, '_loss_legacy'):
+            self.log("train/loss_legacy", self._loss_legacy, on_step=True, on_epoch=True, sync_dist=True)
 
         # Print time estimates periodically (every 100 steps)
         if self.global_step % 100 == 0 and hasattr(self, '_train_start_time') and self.global_step > 0:
@@ -278,6 +307,12 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
     def validation_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
         self.log("val/loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
+
+        # Log separate losses for hsc and legacy anchors
+        if hasattr(self, '_loss_hsc'):
+            self.log("val/loss_hsc", self._loss_hsc, on_epoch=True, sync_dist=True)
+        if hasattr(self, '_loss_legacy'):
+            self.log("val/loss_legacy", self._loss_legacy, on_epoch=True, sync_dist=True)
 
         if batch_idx == 0:
             anchor_image, same_galaxy, same_instrument, _ = batch
