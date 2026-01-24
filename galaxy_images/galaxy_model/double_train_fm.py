@@ -539,6 +539,11 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader, TensorDataset
     from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn
 
+    # Seed everything for reproducibility
+    seed = 42  # Set to None for non-deterministic behavior
+    if seed is not None:
+        pl.seed_everything(seed, workers=True)
+
     batch_size = 64
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
