@@ -328,23 +328,41 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         cond_image_samegal: torch.Tensor,
         cond_image_sameins: torch.Tensor,
         num_steps: Optional[int] = None,
+        x_noise: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Generate samples conditioned on input images using Euler integration.
+
+        If a noise sample is generated outside before calling this method, it should follow
+        x = torch.randn(
+                num_samples, self.in_channels, self.image_size, self.image_size,
+                device=device,
+            )
 
         Args:
             cond_image_samegal: Same galaxy conditioning images (B, C, H, W)
             cond_image_sameins: Same instrument conditioning images (B, k, C, H, W)
             num_steps: Number of integration steps
+            x_noise: Optional noise sample (B, C, H, W). If provided, must match batch size
+                and be on the same device as cond_image_samegal.
         """
         num_steps = num_steps or self.num_integration_steps
         num_samples = cond_image_samegal.shape[0]
         device = cond_image_samegal.device
 
-        x = torch.randn(
-            num_samples, self.in_channels, self.image_size, self.image_size,
-            device=device,
-        )
+        if x_noise is None:
+            x = torch.randn(
+                num_samples, self.in_channels, self.image_size, self.image_size,
+                device=device,
+            )
+        else:
+            # Ensure x_noise is on the correct device and has correct shape
+            x = x_noise.to(device)
+            expected_shape = (num_samples, self.in_channels, self.image_size, self.image_size)
+            if x.shape != expected_shape:
+                raise ValueError(
+                    f"x_noise shape {x.shape} does not match expected shape {expected_shape}"
+                )
 
         dt = 1.0 / num_steps
 
@@ -531,6 +549,7 @@ if __name__ == "__main__":
     val_dataset = HSCLegacyTripletDataset(
         hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
         idx_list=list(range(95_000, 100_000)),
+        deterministic_anchor_survey=True,  # Make validation batches consistent
     )
 
     # train_dataset = HSCLegacyTripletDataset(
@@ -540,6 +559,7 @@ if __name__ == "__main__":
     # val_dataset = HSCLegacyTripletDataset(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
     #     idx_list=list(range(5000, 5140)),
+    #     deterministic_anchor_survey=True,  # Make validation batches consistent
     # )
 
     # TODO: (Future) - Fix BalancedAnchorBatchSampler and use it here instead
@@ -586,7 +606,7 @@ if __name__ == "__main__":
         image_size=48,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
-        cross_attention_dim=512,
+        cross_attention_dim=64,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
         lr=1e-4,
@@ -597,7 +617,7 @@ if __name__ == "__main__":
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet"
+        name="double-encoder-resnet18-triplet-zdim64"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
