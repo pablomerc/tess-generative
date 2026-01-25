@@ -101,6 +101,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # Optimization params
         lr: float = 1e-4,
         num_sample_images: int = 8, # number of exmaples cached for first validation batch for W&B
+        num_mse_images: int = 64, # number of examples cached for MSE tracking
         num_integration_steps: int = 500,
     ):
         super().__init__()
@@ -108,6 +109,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         self.lr = lr
         self.num_sample_images = num_sample_images
+        self.num_mse_images = num_mse_images
         self.num_integration_steps = num_integration_steps
         self.in_channels = in_channels
         self.cond_channels = cond_channels
@@ -315,10 +317,17 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             self.log("val/loss_legacy", self._loss_legacy, on_epoch=True, sync_dist=True)
 
         if batch_idx == 0:
-            anchor_image, same_galaxy, same_instrument, _ = batch
+            anchor_image, same_galaxy, same_instrument, metadata = batch
             self._val_anchor_batch = anchor_image[:self.num_sample_images].clone()
             self._val_samegal_batch = same_galaxy[:self.num_sample_images].clone()
             self._val_sameins_batch = same_instrument[:self.num_sample_images].clone()
+
+            batch_size = anchor_image.shape[0]
+            num_mse_images = (self.num_mse_images if self.num_mse_images <= batch_size else batch_size)
+            self._val_mse_target_batch = anchor_image[:num_mse_images].clone()
+            self._val_mse_samegal_batch = same_galaxy[:num_mse_images].clone()
+            self._val_mse_sameins_batch = same_instrument[:num_mse_images].clone()
+            self._val_mse_metadata = metadata[:num_mse_images] if metadata else None
 
         return loss
 
@@ -372,6 +381,50 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             x = x + velocity * dt
 
         return x
+
+    @torch.no_grad()
+    def compute_mse(self, target_image, cond_image_samegal, cond_image_sameins, metadata=None):
+        '''Compute reconstruction MSE on a batch of given images
+        Args:
+            target_image (B,C,H,W)
+            cond_image_samegal (B,C,H,W)
+            cond_image_sameins (B,k,C,H,W)
+            metadata: Optional list of metadata dicts for HSC/Legacy separation
+        Returns:
+            mse_total: Total MSE across all samples
+            mse_hsc: MSE for HSC samples (if metadata provided and HSC samples exist)
+            mse_legacy: MSE for Legacy samples (if metadata provided and Legacy samples exist)
+        '''
+        samples = self.sample(cond_image_samegal, cond_image_sameins)
+
+        diff = target_image - samples
+        mse_total = torch.mean(diff**2)
+
+        mse_hsc = None
+        mse_legacy = None
+
+        if metadata is not None:
+            # Extract anchor_survey from metadata and compute separate MSEs
+            anchor_surveys = [m['anchor_survey'] for m in metadata]
+            device = diff.device
+            hsc_mask = torch.tensor([s == 'hsc' for s in anchor_surveys], device=device)
+            legacy_mask = torch.tensor([s == 'legacy' for s in anchor_surveys], device=device)
+
+            # Compute MSE for HSC samples
+            if hsc_mask.any():
+                diff_hsc = diff[hsc_mask]
+                mse_hsc = torch.mean(diff_hsc**2)
+            else:
+                mse_hsc = torch.tensor(float('nan'), device=device)
+
+            # Compute MSE for Legacy samples
+            if legacy_mask.any():
+                diff_legacy = diff[legacy_mask]
+                mse_legacy = torch.mean(diff_legacy**2)
+            else:
+                mse_legacy = torch.tensor(float('nan'), device=device)
+
+        return mse_total, mse_hsc, mse_legacy
 
     def _normalize_for_vis(self, img: torch.Tensor) -> torch.Tensor:
         """Normalize image to [0, 1] for visualization."""
@@ -526,6 +579,28 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         plt.close(fig_orig)
         plt.close(fig_row)
 
+        # Compute MSE metric
+        if hasattr(self, '_val_mse_target_batch') and hasattr(self, '_val_mse_samegal_batch') and hasattr(self, '_val_mse_sameins_batch'):
+            mse_start_time = time.time()
+            mse_total, mse_hsc, mse_legacy = self.compute_mse(
+                self._val_mse_target_batch.to(self.device),
+                self._val_mse_samegal_batch.to(self.device),
+                self._val_mse_sameins_batch.to(self.device),
+                self._val_mse_metadata
+            )
+            mse_time = time.time() - mse_start_time
+
+            # Print timing on first validation run
+            if not hasattr(self, '_mse_timing_logged'):
+                print(f"[MSE metric] Computation took {mse_time:.2f} seconds")
+                self._mse_timing_logged = True
+
+            self.log("val/mse", mse_total, sync_dist=True)
+            if mse_hsc is not None:
+                self.log("val/mse_hsc", mse_hsc, sync_dist=True)
+            if mse_legacy is not None:
+                self.log("val/mse_legacy", mse_legacy, sync_dist=True)
+
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.lr)
         scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
@@ -536,6 +611,7 @@ if __name__ == "__main__":
     # Set up snapshot + tee logging before anything else in main runs
 
     from pytorch_lightning.loggers import WandbLogger
+    from pytorch_lightning.callbacks import ModelCheckpoint
     from torch.utils.data import DataLoader, TensorDataset
     from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn
 
@@ -611,22 +687,40 @@ if __name__ == "__main__":
         image_size=48,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
-        cross_attention_dim=64,
+        cross_attention_dim=32,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
         lr=1e-4,
         num_sample_images=10,
+        num_mse_images=32,
         num_integration_steps=250,
     )
 
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-zdim64"
+        name="double-encoder-resnet18-triplet-zdim32"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
         log_model=False,
+    )
+
+    # Checkpoint callback for best model (based on validation loss)
+    best_checkpoint = ModelCheckpoint(
+        monitor="val/loss",
+        mode="min",
+        save_top_k=1,
+        filename="best-epoch={epoch:02d}-step={step}-val_loss={val/loss:.4f}",
+        auto_insert_metric_name=False,
+    )
+
+    # Checkpoint callback for periodic saves (every 1000 steps, replaces previous)
+    periodic_checkpoint = ModelCheckpoint(
+        every_n_train_steps=1000,
+        save_top_k=1,  # Only keep the latest one (replaces previous)
+        filename="latest-step={step}",
+        save_last=False,  # We're using every_n_train_steps instead
     )
 
     n_devices = 4
@@ -638,6 +732,7 @@ if __name__ == "__main__":
        log_every_n_steps=10,
         val_check_interval=1000,
         check_val_every_n_epoch=None,
+        callbacks=[best_checkpoint, periodic_checkpoint],
     )
 
     trainer.fit(model, train_loader, val_loader)
