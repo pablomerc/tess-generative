@@ -3,11 +3,13 @@ Dataset class for HSC and Legacy Survey images. Returns them normalized.
 """
 
 import torch
+import torch.nn.functional as F
 import h5py
 from pathlib import Path
 from torch.utils.data import Dataset
 import random
 import math
+import time
 # import torch
 from torch.utils.data import Sampler
 from torch.utils.data._utils.collate import default_collate
@@ -70,6 +72,7 @@ class HSCLegacyTripletDataset(Dataset):
         hdf5_path: str,
         norm_dict: dict = NORM_DICT,
         idx_list: list = None,
+        deterministic_anchor_survey: bool = False,
     ):
 
         hdf5_path = Path(hdf5_path)
@@ -78,6 +81,7 @@ class HSCLegacyTripletDataset(Dataset):
         self.hdf5_path = hdf5_path
         self.norm_dict = norm_dict
         self.idx_list = idx_list
+        self.deterministic_anchor_survey = deterministic_anchor_survey
         self.num_images = len(idx_list) if idx_list is not None else None
 
         with h5py.File(hdf5_path, 'r') as f:
@@ -133,9 +137,13 @@ class HSCLegacyTripletDataset(Dataset):
         mean_legacy, std_legacy = self.norm_dict['legacy']
         legacy_image = (legacy_image - mean_legacy) / std_legacy
 
-        # Use provided anchor_survey or randomly choose
+        # Use provided anchor_survey or choose deterministically/randomly
         if anchor_survey is None:
-            anchor_survey = random.choice(['hsc', 'legacy'])
+            if self.deterministic_anchor_survey:
+                # Deterministic assignment: even idx -> 'hsc', odd idx -> 'legacy'
+                anchor_survey = 'hsc' if idx % 2 == 0 else 'legacy'
+            else:
+                anchor_survey = random.choice(['hsc', 'legacy'])
 
 
         # TODO: Replace this by SNR-based matching
@@ -189,6 +197,141 @@ class HSCLegacyTripletDataset(Dataset):
         }
 
         return anchor_image, same_galaxy, same_instrument, metadata
+
+class HSCLegacyTripletDatasetZoom(Dataset):
+    def __init__(
+        self,
+        hdf5_path: str,
+        norm_dict: dict = NORM_DICT,
+        idx_list: list = None,
+        deterministic_anchor_survey: bool = False,
+    ):
+
+        hdf5_path = Path(hdf5_path)
+        if not hdf5_path.exists():
+            raise FileNotFoundError(f"HDF5 file not found:{hdf5_path}")
+        self.hdf5_path = hdf5_path
+        self.norm_dict = norm_dict
+        self.idx_list = idx_list
+        self.deterministic_anchor_survey = deterministic_anchor_survey
+        self.num_images = len(idx_list) if idx_list is not None else None
+
+        with h5py.File(hdf5_path, 'r') as f:
+            total_images = f.attrs['num_images']
+            self.crop_size = f.attrs['crop_size']
+            self.num_channels = f.attrs['num_channels']
+            if self.idx_list is not None:
+                self.hsc_images = torch.from_numpy(f['hsc_images'][self.idx_list]).float()
+                self.legacy_images = torch.from_numpy(f['legacy_images'][self.idx_list]).float()
+            else:
+                self.hsc_images = torch.from_numpy(f['hsc_images'][:total_images]).float()
+                self.legacy_images = torch.from_numpy(f['legacy_images'][:total_images]).float()
+        if self.idx_list is None:
+            self.num_images = total_images
+        print(f"Loaded {self.num_images} images into memory, "
+        f"shape: ({self.num_images}, {self.num_channels}, {self.crop_size}, {self.crop_size})")
+        print(f"Memory usage: ~{2 * self.hsc_images.numel() * 4 / (1024**3):.3f} GB")
+
+    def __len__(self):
+
+        return self.num_images
+
+    def __getitem__(self, idx):
+        """
+        Returns an example with anchor image, same galaxy on the other instrument, and k examples of same instrument with different galaxies.
+
+        Args:
+            idx: Either an int (dataset index) or a tuple (idx, anchor_survey) when using BalancedAnchorBatchSampler.
+                 If tuple, anchor_survey will be used instead of random choice.
+
+        Returns:
+            tuple: (anchor_image, same_galaxy, same_instrument, metadata)
+                - anchor_image: torch.Tensor, shape (C, H, W) - normalized anchor image
+                - same_galaxy: torch.Tensor, shape (C, H, W) - same galaxy from other instrument, normalized
+                - same_instrument: torch.Tensor, shape (k, C, H, W) - k different galaxies from same instrument, normalized
+                - metadata: dict with keys:
+                    - 'anchor_survey': str, either 'hsc' or 'legacy'
+                    - 'idx': int, the dataset index used
+                    - 'num_same_instrument': int, actual number of same_instrument examples (may be < k for small datasets)
+        """
+        # Handle tuple from BalancedAnchorBatchSampler: (idx, anchor_survey)
+        if isinstance(idx, tuple):
+            idx, anchor_survey = idx
+        else:
+            anchor_survey = None  # Will be randomly chosen below
+
+        if idx < 0 or idx >= self.num_images:
+            raise IndexError(f"Index {idx} out of range [0, {self.num_images})")
+        hsc_image = self.hsc_images[idx]
+        legacy_image = self.legacy_images[idx]
+        mean_hsc, std_hsc = self.norm_dict['hsc']
+        hsc_image = (hsc_image - mean_hsc) / std_hsc
+        mean_legacy, std_legacy = self.norm_dict['legacy']
+        legacy_image = (legacy_image - mean_legacy) / std_legacy
+        legacy_image = zoom_legacy_image(legacy_image)
+
+        # Use provided anchor_survey or choose deterministically/randomly
+        if anchor_survey is None:
+            if self.deterministic_anchor_survey:
+                # Deterministic assignment: even idx -> 'hsc', odd idx -> 'legacy'
+                anchor_survey = 'hsc' if idx % 2 == 0 else 'legacy'
+            else:
+                anchor_survey = random.choice(['hsc', 'legacy'])
+
+
+        # TODO: Replace this by SNR-based matching
+        k = 5
+        # Generate enough candidates to ensure we get k unique indices (excluding idx)
+        # Use a set to ensure uniqueness, and keep sampling until we have enough
+        different_indexes_set = set()
+        max_attempts = 100  # Prevent infinite loop
+        attempts = 0
+        while len(different_indexes_set) < k and attempts < max_attempts:
+            candidates = torch.randint(0, self.num_images, (k * 2,)).tolist()
+            for cand_idx in candidates:
+                if cand_idx != idx:
+                    different_indexes_set.add(cand_idx)
+                if len(different_indexes_set) >= k:
+                    break
+            attempts += 1
+
+        if len(different_indexes_set) < k:
+            # Fallback: if we can't get k unique indices, use what we have
+            # This can happen with very small datasets
+            different_indexes = torch.tensor(list(different_indexes_set), dtype=torch.long)
+        else:
+            different_indexes = torch.tensor(list(different_indexes_set)[:k], dtype=torch.long)
+
+        anchor_image = None
+        same_galaxy = None
+        same_instrument = None
+
+        if anchor_survey == 'hsc':
+            anchor_image = hsc_image
+            same_galaxy = legacy_image
+
+            # Normalize same_instrument images
+            same_instrument_raw = self.hsc_images[different_indexes]
+            same_instrument = (same_instrument_raw - mean_hsc) / std_hsc
+
+        elif anchor_survey == 'legacy':
+            anchor_image = legacy_image
+            same_galaxy = hsc_image
+
+            # Normalize same_instrument images
+            same_instrument_raw = self.legacy_images[different_indexes]
+            same_instrument = (same_instrument_raw - mean_legacy) / std_legacy
+
+        # Metadata dictionary for debugging, analysis, and logging
+        metadata = {
+            'anchor_survey': anchor_survey,
+            'idx': idx,
+            'num_same_instrument': len(different_indexes),
+        }
+
+        return anchor_image, same_galaxy, same_instrument, metadata
+
+
 
 
 class BalancedAnchorBatchSampler(Sampler):
@@ -261,3 +404,178 @@ def custom_collate_fn(batch):
 
     # Keep metadata as a list of dicts (don't try to collate it)
     return collated_anchor, collated_same_galaxy, collated_same_instrument, metadata_list
+
+
+
+def center_crop(image, crop_size: int=30):
+    _, _, height, width = image.shape
+    start_x = (width - crop_size) // 2
+    start_y = (height - crop_size) // 2
+    return image[
+        :, :, start_y : start_y + crop_size, start_x : start_x + crop_size
+    ]
+def zoom_legacy_image(leg_im: torch.Tensor, factor = 0.64) -> torch.Tensor:
+    """
+    Zoom in the legacy images to have the same FoV as HSC
+
+    Args:
+        leg_im: torch.Tensor, shape (C, H, W) or (N, C, H, W)
+        factor: zoom factor (default: 0.64)
+
+    Returns:
+        torch.Tensor with same shape as input, zoomed to match HSC FoV
+    """
+    # Handle both 3D (C, H, W) and 4D (N, C, H, W) inputs
+    is_3d = len(leg_im.shape) == 3
+    if is_3d:
+        leg_im = leg_im.unsqueeze(0)  # Add batch dimension
+
+    im_size = leg_im.shape[-1]
+    new_size = round(factor * im_size)
+
+    cropped_im = center_crop(leg_im, new_size)
+
+    y = F.interpolate(
+        cropped_im, size=(im_size, im_size),
+        mode="bilinear",
+        align_corners=False,
+        antialias=True,   # great for downsampling
+    )
+
+    if is_3d:
+        y = y.squeeze(0)  # Remove batch dimension
+
+    return y
+
+
+def calculate_legacy_stats_before_after_zoom(
+    hdf5_path: str,
+    zoom_factor: float = 0.64,
+    batch_size: int = 1000,
+):
+    """
+    Load all legacy images from a 48x48 dataset, calculate mean/std before zoom,
+    apply zoom, then calculate mean/std after zoom, and print both.
+
+    Args:
+        hdf5_path: Path to HDF5 file containing the dataset
+        zoom_factor: Factor to use for zoom_legacy_image (default: 0.64)
+        batch_size: Batch size for processing images (default: 1000)
+    """
+    hdf5_path = Path(hdf5_path)
+    if not hdf5_path.exists():
+        raise FileNotFoundError(f"HDF5 file not found: {hdf5_path}")
+
+    start_time = time.time()
+    print(f"Loading legacy images from {hdf5_path}")
+
+    # Load all legacy images
+    load_start = time.time()
+    with h5py.File(hdf5_path, 'r') as f:
+        total_images = f.attrs['num_images']
+        crop_size = f.attrs['crop_size']
+        num_channels = f.attrs['num_channels']
+
+        print(f"Dataset info: {total_images} images, {crop_size}x{crop_size}, {num_channels} channels")
+
+        # Load all legacy images
+        legacy_images = torch.from_numpy(f['legacy_images'][:total_images]).float()
+
+    load_time = time.time() - load_start
+    print(f"Loaded {total_images} legacy images in {load_time:.2f} seconds")
+    print(f"Image shape: {legacy_images.shape}")
+
+    # Calculate mean and std BEFORE zoom
+    stats_start = time.time()
+    mean_before = legacy_images.mean().item()
+    std_before = legacy_images.std().item()
+    stats_time = time.time() - stats_start
+
+    print(f"\n=== BEFORE ZOOM ===")
+    print(f"Mean: {mean_before:.6f}")
+    print(f"Std:  {std_before:.6f}")
+    print(f"(Calculated in {stats_time:.2f} seconds)")
+
+    # Apply zoom to all images in batches
+    print(f"\nApplying zoom with factor {zoom_factor}...")
+    zoomed_images = []
+
+    num_batches = (total_images + batch_size - 1) // batch_size
+    zoom_start = time.time()
+    batch_times = []
+
+    for batch_idx, i in enumerate(range(0, total_images, batch_size), 1):
+        batch_start = time.time()
+        end_idx = min(i + batch_size, total_images)
+        batch = legacy_images[i:end_idx]
+
+        # Apply zoom (batch is already 4D: (N, C, H, W))
+        batch_zoomed = zoom_legacy_image(batch, factor=zoom_factor)
+        zoomed_images.append(batch_zoomed)
+
+        batch_time = time.time() - batch_start
+        batch_times.append(batch_time)
+
+        # Calculate progress and time estimates
+        elapsed = time.time() - zoom_start
+        avg_time_per_batch = elapsed / batch_idx
+        remaining_batches = num_batches - batch_idx
+        estimated_remaining = avg_time_per_batch * remaining_batches
+
+        progress_pct = (end_idx / total_images) * 100
+
+        print(f"Batch {batch_idx}/{num_batches} ({progress_pct:.1f}%): "
+              f"Processed {end_idx}/{total_images} images | "
+              f"Elapsed: {elapsed:.1f}s | "
+              f"ETA: {estimated_remaining:.1f}s | "
+              f"Speed: {batch_size/batch_time:.1f} img/s")
+
+    # Concatenate all zoomed images
+    concat_start = time.time()
+    legacy_images_zoomed = torch.cat(zoomed_images, dim=0)
+    concat_time = time.time() - concat_start
+    zoom_total_time = time.time() - zoom_start
+    print(f"Zoomed images shape: {legacy_images_zoomed.shape}")
+    print(f"Zoom processing completed in {zoom_total_time:.2f} seconds (concat: {concat_time:.2f}s)")
+
+    # Calculate mean and std AFTER zoom
+    stats_start = time.time()
+    mean_after = legacy_images_zoomed.mean().item()
+    std_after = legacy_images_zoomed.std().item()
+    stats_time = time.time() - stats_start
+
+    print(f"\n=== AFTER ZOOM ===")
+    print(f"Mean: {mean_after:.6f}")
+    print(f"Std:  {std_after:.6f}")
+    print(f"(Calculated in {stats_time:.2f} seconds)")
+
+    total_time = time.time() - start_time
+
+    print(f"\n=== SUMMARY ===")
+    print(f"Before zoom - Mean: {mean_before:.6f}, Std: {std_before:.6f}")
+    print(f"After zoom  - Mean: {mean_after:.6f}, Std: {std_after:.6f}")
+    print(f"Mean change: {mean_after - mean_before:.6f}")
+    print(f"Std change:  {std_after - std_before:.6f}")
+    print(f"\n=== TIMING ===")
+    print(f"Total time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+    print(f"  - Loading: {load_time:.2f}s")
+    print(f"  - Zoom processing: {zoom_total_time:.2f}s")
+    print(f"  - Stats calculation: {stats_time:.2f}s")
+
+    return {
+        'mean_before': mean_before,
+        'std_before': std_before,
+        'mean_after': mean_after,
+        'std_after': std_after,
+    }
+
+
+if __name__ == "__main__":
+    # Default path to 48x48 dataset
+    hdf5_path = "/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5"
+
+    calculate_legacy_stats_before_after_zoom(
+        hdf5_path=hdf5_path,
+        zoom_factor=0.64,
+        batch_size=1000,
+    )
