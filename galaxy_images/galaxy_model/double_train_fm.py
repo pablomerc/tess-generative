@@ -12,7 +12,8 @@ from diffusers import UNet2DConditionModel, UNet2DModel
 from typing import Optional
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
-
+import geomloss
+import umap
 
 class ResNetEncoder(nn.Module):
     """
@@ -103,6 +104,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         num_sample_images: int = 8, # number of exmaples cached for first validation batch for W&B
         num_mse_images: int = 64, # number of examples cached for MSE tracking
         num_integration_steps: int = 500,
+        lambda_generative: float = 1.0, # weight for generative loss
+        lambda_geometric: float = 0.3, # weight for geometric loss
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -115,6 +118,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.cond_channels = cond_channels
         self.image_size = image_size
         self.concat_conditioning = concat_conditioning
+        self.lambda_generative = lambda_generative
+        self.lambda_geometric = lambda_geometric
 
         block_out_channels = tuple(model_channels * m for m in channel_mult)
 
@@ -230,11 +235,43 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         loss_legacy = per_example_loss[is_legacy].mean() if is_legacy.any() else torch.tensor(float('nan'), device=per_example_loss.device)
 
         # Total loss (scalar) for gradients
-        total_loss = per_example_loss.mean()
+        generative_loss = per_example_loss.mean()
 
         # Store separate losses for logging (detached to be explicit they're not used for gradients)
+        self._loss_generative_total = generative_loss.detach()
         self._loss_hsc = loss_hsc.detach()
         self._loss_legacy = loss_legacy.detach()
+
+
+        ### Geometric loss
+        # p = 2
+        # blur = 0.01
+        # debias = True
+
+        geom_loss_fn = geomloss.SamplesLoss(
+            loss='sinkhorn',
+            p=2,
+            blur=0.01,
+            backend='tensorized',
+            debias=True)
+
+        embeds_target = self.encoder_1(x_1).contiguous()  # (B, seq_len, embed_dim)
+        embeds_samegal = self.encoder_1(cond_image_samegal).contiguous()  # (B, seq_len, embed_dim)
+
+        # Compute geometric loss per sample
+        # Note: geomloss.SamplesLoss expects batched inputs, so we compute per-sample losses
+        loss_geom = geom_loss_fn(embeds_target, embeds_samegal)
+
+        loss_geom_hsc = loss_geom[is_hsc].mean() if is_hsc.any() else torch.tensor(float('nan'), device=per_example_loss.device)
+        loss_geom_legacy = loss_geom[is_legacy].mean() if is_legacy.any() else torch.tensor(float('nan'), device=per_example_loss.device)
+        total_geom_loss = loss_geom.mean()
+
+        # Store geometric losses for logging
+        self._loss_geom_total = total_geom_loss.detach()
+        self._loss_geom_hsc = loss_geom_hsc.detach()
+        self._loss_geom_legacy = loss_geom_legacy.detach()
+
+        total_loss = self.lambda_generative * generative_loss + self.lambda_geometric * total_geom_loss
 
         return total_loss
 
@@ -257,11 +294,21 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         loss = self.compute_loss(batch)
         self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
 
-        # Log separate losses for hsc and legacy anchors
+        # Log generative losses
+        if hasattr(self, '_loss_generative_total'):
+            self.log("train/loss_generative_total", self._loss_generative_total, on_step=True, on_epoch=True, sync_dist=True)
         if hasattr(self, '_loss_hsc'):
-            self.log("train/loss_hsc", self._loss_hsc, on_step=True, on_epoch=True, sync_dist=True)
+            self.log("train/loss_generative_hsc", self._loss_hsc, on_step=True, on_epoch=True, sync_dist=True)
         if hasattr(self, '_loss_legacy'):
-            self.log("train/loss_legacy", self._loss_legacy, on_step=True, on_epoch=True, sync_dist=True)
+            self.log("train/loss_generative_legacy", self._loss_legacy, on_step=True, on_epoch=True, sync_dist=True)
+
+        # Log geometric losses
+        if hasattr(self, '_loss_geom_total'):
+            self.log("train/loss_geom_total", self._loss_geom_total, on_step=True, on_epoch=True, sync_dist=True)
+        if hasattr(self, '_loss_geom_hsc'):
+            self.log("train/loss_geom_hsc", self._loss_geom_hsc, on_step=True, on_epoch=True, sync_dist=True)
+        if hasattr(self, '_loss_geom_legacy'):
+            self.log("train/loss_geom_legacy", self._loss_geom_legacy, on_step=True, on_epoch=True, sync_dist=True)
 
         # Print time estimates periodically (every 100 steps)
         if self.global_step % 100 == 0 and hasattr(self, '_train_start_time') and self.global_step > 0:
@@ -310,11 +357,21 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         loss = self.compute_loss(batch)
         self.log("val/loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
 
-        # Log separate losses for hsc and legacy anchors
+        # Log generative losses
+        if hasattr(self, '_loss_generative_total'):
+            self.log("val/loss_generative_total", self._loss_generative_total, on_epoch=True, sync_dist=True)
         if hasattr(self, '_loss_hsc'):
-            self.log("val/loss_hsc", self._loss_hsc, on_epoch=True, sync_dist=True)
+            self.log("val/loss_generative_hsc", self._loss_hsc, on_epoch=True, sync_dist=True)
         if hasattr(self, '_loss_legacy'):
-            self.log("val/loss_legacy", self._loss_legacy, on_epoch=True, sync_dist=True)
+            self.log("val/loss_generative_legacy", self._loss_legacy, on_epoch=True, sync_dist=True)
+
+        # Log geometric losses
+        if hasattr(self, '_loss_geom_total'):
+            self.log("val/loss_geom_total", self._loss_geom_total, on_epoch=True, sync_dist=True)
+        if hasattr(self, '_loss_geom_hsc'):
+            self.log("val/loss_geom_hsc", self._loss_geom_hsc, on_epoch=True, sync_dist=True)
+        if hasattr(self, '_loss_geom_legacy'):
+            self.log("val/loss_geom_legacy", self._loss_geom_legacy, on_epoch=True, sync_dist=True)
 
         if batch_idx == 0:
             anchor_image, same_galaxy, same_instrument, metadata = batch
@@ -607,37 +664,42 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
+
+
 if __name__ == "__main__":
     # Set up snapshot + tee logging before anything else in main runs
 
     from pytorch_lightning.loggers import WandbLogger
     from pytorch_lightning.callbacks import ModelCheckpoint
     from torch.utils.data import DataLoader, TensorDataset
-    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn
+    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn, HSCLegacyTripletDatasetZoom
 
     # Seed everything for reproducibility
     seed = 42  # Set to None for non-deterministic behavior
     if seed is not None:
         pl.seed_everything(seed, workers=True)
 
-    batch_size = 64
+    lambda_generative = 1
+    lambda_geometric = 0.3
+
+    batch_size = 128
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
-    train_dataset = HSCLegacyTripletDataset(
+    train_dataset = HSCLegacyTripletDatasetZoom(
         hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
         idx_list=list(range(95_000)),
     )
-    val_dataset = HSCLegacyTripletDataset(
+    val_dataset = HSCLegacyTripletDatasetZoom(
         hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
         idx_list=list(range(95_000, 100_000)),
         deterministic_anchor_survey=True,  # Make validation batches consistent
     )
 
-    # train_dataset = HSCLegacyTripletDataset(
+    # train_dataset = HSCLegacyTripletDatasetZoom(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
     #     idx_list=list(range(5000)),
     # )
-    # val_dataset = HSCLegacyTripletDataset(
+    # val_dataset = HSCLegacyTripletDatasetZoom(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
     #     idx_list=list(range(5000, 5140)),
     #     deterministic_anchor_survey=True,  # Make validation batches consistent
@@ -687,19 +749,21 @@ if __name__ == "__main__":
         image_size=48,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
-        cross_attention_dim=32,
+        cross_attention_dim=8,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
         lr=1e-4,
         num_sample_images=10,
         num_mse_images=32,
         num_integration_steps=250,
+        lambda_generative=lambda_generative,
+        lambda_geometric=lambda_geometric,
     )
 
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-zdim32"
+        name="double-encoder-resnet18-triplet-zdim64-zoom"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
