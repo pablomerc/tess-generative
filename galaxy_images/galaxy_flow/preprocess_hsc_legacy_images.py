@@ -6,7 +6,7 @@ This script:
 2. Applies the full preprocessing pipeline (crop, clamp, rescale, range compress)
 3. Saves both HSC and Legacy Survey images to HDF5 format for fast random access during training
 
-Note: Normalization to [-1, 1] range is handled in the training code, not here.
+Note: Normalization to [-1, 1] range or to mean 0 std 1 is handled in the training code, not here.
 """
 
 import os
