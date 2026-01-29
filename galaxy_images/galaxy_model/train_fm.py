@@ -1,3 +1,4 @@
+from numpy._core.numeric import False_
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
@@ -156,6 +157,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # Optimization params
         lr: float = 1e-4,
         num_sample_images: int = 8, # number of exmaples cached for first validation batch for W&B
+        num_mse_images: int = 64, # number of examples cached for MSE tracking
         num_integration_steps: int = 500,
     ):
         super().__init__()
@@ -163,6 +165,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         self.lr = lr
         self.num_sample_images = num_sample_images
+        self.num_mse_images = num_mse_images
         self.num_integration_steps = num_integration_steps
         self.in_channels = in_channels
         self.cond_channels = cond_channels
@@ -172,8 +175,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         block_out_channels = tuple(model_channels * m for m in channel_mult)
 
         if concat_conditioning:
-            self.encoder = None
-
+            # Don't create encoder attribute when using concatenation
+            # Setting it to None causes DDP parameter count inconsistencies
             self.velocity_model = UNet2DModel(
                 sample_size=image_size,
                 in_channels=in_channels + cond_channels,  # x_t + cond concatenated
@@ -330,6 +333,23 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             print(f"Total steps: {self.global_step}")
             print(f"{'='*60}\n")
 
+
+    @torch.no_grad()
+    def compute_mse(self, target_image, cond_image):
+        '''Compute reconstruction MSE on a batch of given images
+        Args:
+            target_image (B,C,H,W)
+            cond_image (B,C,H,W)
+        '''
+        samples = self.sample(cond_image)
+
+        diff = target_image - samples
+
+        mse_error = torch.mean(diff**2)
+
+        return mse_error
+
+
     def validation_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
         self.log("val/loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
@@ -337,6 +357,11 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         if batch_idx == 0:
             self._val_cond_batch = batch[1][:self.num_sample_images].clone()
             self._val_target_batch = batch[0][:self.num_sample_images].clone()
+
+            batch_size = batch[0].shape[0]
+            num_mse_images = (self.num_mse_images if self.num_mse_images <= batch_size else batch_size)
+            self._val_mse_cond_batch = batch[1][:num_mse_images].clone()
+            self._val_mse_target_batch = batch[0][:num_mse_images].clone()
 
         return loss
 
@@ -501,6 +526,24 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         plt.close(fig_orig)
         plt.close(fig_row)
 
+        # Compute MSE metric
+        if hasattr(self, '_val_mse_cond_batch') and hasattr(self, '_val_mse_target_batch'):
+            mse_start_time = time.time()
+            mse = self.compute_mse(
+                self._val_mse_target_batch.to(self.device),
+                self._val_mse_cond_batch.to(self.device)
+            )
+            mse_time = time.time() - mse_start_time
+
+            # Print timing on first validation run
+            if not hasattr(self, '_mse_timing_logged'):
+                print(f"[MSE metric] Computation took {mse_time:.2f} seconds")
+                self._mse_timing_logged = True
+
+            self.log("val/mse", mse, sync_dist=True)
+
+
+
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.lr)
         scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
@@ -540,7 +583,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=4)
 
-    concat_conditioning = False
+    concat_conditioning = True
     model = ConditionalFlowMatchingModule(
         in_channels=4,
         cond_channels=4,
@@ -556,9 +599,9 @@ if __name__ == "__main__":
     )
 
     if concat_conditioning:
-        name="conditional-unet2d-concatenated"
+        name="conditional-unet2d-concatenated-100k"
     else:
-        name="conditional-unet2d-resnet18"
+        name="conditional-unet2d-resnet18-100k-z_dim128"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
