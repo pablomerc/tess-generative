@@ -232,3 +232,14 @@ data/augmented/rotation_v2_augmented_mnist_train_images.npy
 
 galaxy_images/galaxy_model/galaxy-flow-matching/
 galaxy_images/galaxy_model/runs/
+
+#the .pt files
+*.pt
+
+# galaxy_images/galaxy_model/logs/
+galaxy_images/galaxy_model/logs/
+
+#flow_models/
+flow_models/
+.matplotlib_cache/
+plots-galaxy/
