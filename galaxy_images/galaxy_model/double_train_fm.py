@@ -106,6 +106,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         num_integration_steps: int = 500,
         lambda_generative: float = 1.0, # weight for generative loss
         lambda_geometric: float = 0.3, # weight for geometric loss
+        num_umap_batches: int = 8, # number of validation batches to collect for UMAP visualization
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -120,6 +121,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.concat_conditioning = concat_conditioning
         self.lambda_generative = lambda_generative
         self.lambda_geometric = lambda_geometric
+        self.num_umap_batches = num_umap_batches
 
         block_out_channels = tuple(model_channels * m for m in channel_mult)
 
@@ -159,6 +161,17 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 cross_attention_dim=cross_attention_dim,
                 attention_head_dim=attention_head_dim,
             )
+
+        # Initialize geometric loss function once (reused across all training steps)
+        if self.lambda_geometric > 0:
+            self.geom_loss_fn = geomloss.SamplesLoss(
+                loss='sinkhorn',
+                p=2,
+                blur=0.01,
+                backend='tensorized',
+                debias=True)
+        else:
+            self.geom_loss_fn = None
 
     def forward(
         self,
@@ -244,32 +257,23 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
 
         ### Geometric loss
-        # p = 2
-        # blur = 0.01
-        # debias = True
+        if self.lambda_geometric > 0:
+            embeds_target = self.encoder_1(x_1).contiguous()  # (B, seq_len, embed_dim)
+            embeds_samegal = self.encoder_1(cond_image_samegal).contiguous()  # (B, seq_len, embed_dim)
 
-        geom_loss_fn = geomloss.SamplesLoss(
-            loss='sinkhorn',
-            p=2,
-            blur=0.01,
-            backend='tensorized',
-            debias=True)
+            # Flatten embeddings before computing geometric loss
+            embeds_target = embeds_target.flatten(start_dim=1)  # (B, seq_len * embed_dim)
+            embeds_samegal = embeds_samegal.flatten(start_dim=1)  # (B, seq_len * embed_dim)
 
-        embeds_target = self.encoder_1(x_1).contiguous()  # (B, seq_len, embed_dim)
-        embeds_samegal = self.encoder_1(cond_image_samegal).contiguous()  # (B, seq_len, embed_dim)
+            # Compute geometric loss (scalar for the entire batch)
+            total_geom_loss = self.geom_loss_fn(embeds_target, embeds_samegal)
 
-        # Compute geometric loss per sample
-        # Note: geomloss.SamplesLoss expects batched inputs, so we compute per-sample losses
-        loss_geom = geom_loss_fn(embeds_target, embeds_samegal)
-
-        loss_geom_hsc = loss_geom[is_hsc].mean() if is_hsc.any() else torch.tensor(float('nan'), device=per_example_loss.device)
-        loss_geom_legacy = loss_geom[is_legacy].mean() if is_legacy.any() else torch.tensor(float('nan'), device=per_example_loss.device)
-        total_geom_loss = loss_geom.mean()
-
-        # Store geometric losses for logging
-        self._loss_geom_total = total_geom_loss.detach()
-        self._loss_geom_hsc = loss_geom_hsc.detach()
-        self._loss_geom_legacy = loss_geom_legacy.detach()
+            # Store geometric loss for logging
+            self._loss_geom_total = total_geom_loss.detach()
+        else:
+            # Skip computation when lambda_geometric is 0
+            total_geom_loss = torch.tensor(0.0, device=generative_loss.device, dtype=generative_loss.dtype)
+            self._loss_geom_total = total_geom_loss.detach()
 
         total_loss = self.lambda_generative * generative_loss + self.lambda_geometric * total_geom_loss
 
@@ -305,10 +309,6 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # Log geometric losses
         if hasattr(self, '_loss_geom_total'):
             self.log("train/loss_geom_total", self._loss_geom_total, on_step=True, on_epoch=True, sync_dist=True)
-        if hasattr(self, '_loss_geom_hsc'):
-            self.log("train/loss_geom_hsc", self._loss_geom_hsc, on_step=True, on_epoch=True, sync_dist=True)
-        if hasattr(self, '_loss_geom_legacy'):
-            self.log("train/loss_geom_legacy", self._loss_geom_legacy, on_step=True, on_epoch=True, sync_dist=True)
 
         # Print time estimates periodically (every 100 steps)
         if self.global_step % 100 == 0 and hasattr(self, '_train_start_time') and self.global_step > 0:
@@ -341,6 +341,12 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             epoch_str = self._format_time_hms(epoch_time)
             print(f"Epoch {self.current_epoch} completed in {epoch_str}")
 
+    def on_validation_epoch_start(self):
+        """Initialize lists for collecting batches for UMAP visualization."""
+        self._umap_hsc_batches = []
+        self._umap_legacy_batches = []
+        self._umap_batch_count = 0
+
     def on_train_end(self):
         """Print total training time at the end."""
         if hasattr(self, '_train_start_time'):
@@ -368,10 +374,6 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # Log geometric losses
         if hasattr(self, '_loss_geom_total'):
             self.log("val/loss_geom_total", self._loss_geom_total, on_epoch=True, sync_dist=True)
-        if hasattr(self, '_loss_geom_hsc'):
-            self.log("val/loss_geom_hsc", self._loss_geom_hsc, on_epoch=True, sync_dist=True)
-        if hasattr(self, '_loss_geom_legacy'):
-            self.log("val/loss_geom_legacy", self._loss_geom_legacy, on_epoch=True, sync_dist=True)
 
         if batch_idx == 0:
             anchor_image, same_galaxy, same_instrument, metadata = batch
@@ -385,6 +387,28 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             self._val_mse_samegal_batch = same_galaxy[:num_mse_images].clone()
             self._val_mse_sameins_batch = same_instrument[:num_mse_images].clone()
             self._val_mse_metadata = metadata[:num_mse_images] if metadata else None
+
+        # Collect batches for UMAP visualization
+        if (hasattr(self, '_umap_batch_count') and
+            self._umap_batch_count < self.num_umap_batches):
+            anchor_image, same_galaxy, same_instrument, metadata = batch
+
+            # Separate HSC and Legacy images based on anchor_survey
+            anchor_surveys = [m['anchor_survey'] for m in metadata]
+            hsc_mask = torch.tensor([s == 'hsc' for s in anchor_surveys], device=anchor_image.device)
+            legacy_mask = torch.tensor([s == 'legacy' for s in anchor_surveys], device=anchor_image.device)
+
+            # Collect HSC images (anchor_image when anchor_survey == 'hsc')
+            if hsc_mask.any():
+                hsc_images = anchor_image[hsc_mask]
+                self._umap_hsc_batches.append(hsc_images.cpu())
+
+            # Collect Legacy images (anchor_image when anchor_survey == 'legacy')
+            if legacy_mask.any():
+                legacy_images = anchor_image[legacy_mask]
+                self._umap_legacy_batches.append(legacy_images.cpu())
+
+            self._umap_batch_count += 1
 
         return loss
 
@@ -658,13 +682,214 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             if mse_legacy is not None:
                 self.log("val/mse_legacy", mse_legacy, sync_dist=True)
 
+        # Generate UMAP visualization if we collected enough batches
+        if (hasattr(self, '_umap_hsc_batches') and hasattr(self, '_umap_legacy_batches') and
+            len(self._umap_hsc_batches) > 0 and len(self._umap_legacy_batches) > 0):
+            try:
+                # Concatenate all collected batches
+                hsc_mega_batch = torch.cat(self._umap_hsc_batches, dim=0).to(self.device)
+                legacy_mega_batch = torch.cat(self._umap_legacy_batches, dim=0).to(self.device)
+
+                # Call plot_latent_space
+                umap_path = self.plot_latent_space(hsc_mega_batch, legacy_mega_batch)
+                print(f"[UMAP] Visualization saved to {umap_path}")
+            except Exception as e:
+                print(f"[UMAP] Error generating UMAP visualization: {e}")
+                import traceback
+                traceback.print_exc()
+
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.lr)
         scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
+    @torch.no_grad()
+    def plot_latent_space(self, hsc_batch, legacy_batch):
+        """
+        Generate UMAP visualizations for both encoders, showing token-specific and combined embeddings.
 
+        Creates a 5x2 grid:
+        - Rows 0-3: UMAP for each token position (0, 1, 2, 3)
+        - Row 4: Combined UMAP (all tokens flattened)
+        - Columns: Encoder 1 (Same Galaxy) and Encoder 2 (Same Instrument)
+
+        Args:
+            hsc_batch: HSC images (B, C, H, W)
+            legacy_batch: Legacy images (B, C, H, W)
+        """
+        import matplotlib.pyplot as plt
+
+        # Encode images with both encoders
+        hsc_embeddings_1 = self.encoder_1(hsc_batch)  # (B, seq_len, embed_dim)
+        legacy_embeddings_1 = self.encoder_1(legacy_batch)
+        hsc_embeddings_2 = self.encoder_2(hsc_batch)
+        legacy_embeddings_2 = self.encoder_2(legacy_batch)
+
+        num_hsc = hsc_embeddings_1.shape[0]
+        seq_len = hsc_embeddings_1.shape[1]
+
+        # Prepare embeddings for each encoder (keep token structure)
+        all_embeddings_1 = torch.concat([hsc_embeddings_1, legacy_embeddings_1], dim=0)  # (B_total, seq_len, embed_dim)
+        all_embeddings_2 = torch.concat([hsc_embeddings_2, legacy_embeddings_2], dim=0)  # (B_total, seq_len, embed_dim)
+
+        # Create figures directory
+        figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures')
+        figures_dir.mkdir(parents=True, exist_ok=True)
+
+        # UMAP parameters
+        umap_params = {
+            'n_neighbors': 15,
+            'min_dist': 0.1,
+            'n_components': 2,
+            'metric': 'euclidean',
+            'random_state': 42,
+        }
+
+        # Create figure with 5 rows (4 token positions + 1 combined) and 2 columns (encoder_1, encoder_2)
+        fig, axes = plt.subplots(5, 2, figsize=(16, 24))
+
+        # Process each token position (0, 1, 2, 3)
+        for token_idx in range(seq_len):
+            # Extract embeddings for this token position
+            token_embeddings_1 = all_embeddings_1[:, token_idx, :].cpu().numpy()  # (B_total, embed_dim)
+            token_embeddings_2 = all_embeddings_2[:, token_idx, :].cpu().numpy()
+
+            # Split into HSC and Legacy
+            hsc_token_1 = token_embeddings_1[:num_hsc]
+            legacy_token_1 = token_embeddings_1[num_hsc:]
+            hsc_token_2 = token_embeddings_2[:num_hsc]
+            legacy_token_2 = token_embeddings_2[num_hsc:]
+
+            # ===== Encoder 1 UMAP for this token =====
+            reducer_1 = umap.UMAP(**umap_params)
+            embedding_1_umap = reducer_1.fit_transform(token_embeddings_1)
+
+            hsc_embedding_1_umap = embedding_1_umap[:num_hsc]
+            legacy_embedding_1_umap = embedding_1_umap[num_hsc:]
+
+            # ===== Encoder 2 UMAP for this token =====
+            reducer_2 = umap.UMAP(**umap_params)
+            embedding_2_umap = reducer_2.fit_transform(token_embeddings_2)
+
+            hsc_embedding_2_umap = embedding_2_umap[:num_hsc]
+            legacy_embedding_2_umap = embedding_2_umap[num_hsc:]
+
+            # Plot Encoder 1 (left column)
+            ax1 = axes[token_idx, 0]
+            ax1.scatter(hsc_embedding_1_umap[:, 0], hsc_embedding_1_umap[:, 1],
+                        s=5, label='HSC', alpha=0.6, c='blue')
+            ax1.scatter(legacy_embedding_1_umap[:, 0], legacy_embedding_1_umap[:, 1],
+                        s=5, label='Legacy', alpha=0.6, c='orange')
+            ax1.set_title(f'Encoder 1 (Same Galaxy) - Token {token_idx}', fontsize=10)
+            ax1.set_xlabel('UMAP Component 1')
+            ax1.set_ylabel('UMAP Component 2')
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+
+            # Plot Encoder 2 (right column)
+            ax2 = axes[token_idx, 1]
+            ax2.scatter(hsc_embedding_2_umap[:, 0], hsc_embedding_2_umap[:, 1],
+                        s=5, label='HSC', alpha=0.6, c='blue')
+            ax2.scatter(legacy_embedding_2_umap[:, 0], legacy_embedding_2_umap[:, 1],
+                        s=5, label='Legacy', alpha=0.6, c='orange')
+            ax2.set_title(f'Encoder 2 (Same Instrument) - Token {token_idx}', fontsize=10)
+            ax2.set_xlabel('UMAP Component 1')
+            ax2.set_ylabel('UMAP Component 2')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+
+        # ===== Combined UMAP (Row 4) =====
+        # Flatten all tokens for combined visualization
+        all_embeddings_1_flat = all_embeddings_1.flatten(start_dim=1).cpu().numpy()  # (B_total, seq_len * embed_dim)
+        all_embeddings_2_flat = all_embeddings_2.flatten(start_dim=1).cpu().numpy()
+
+        # Encoder 1 combined UMAP
+        reducer_1_combined = umap.UMAP(**umap_params)
+        embedding_1_combined_umap = reducer_1_combined.fit_transform(all_embeddings_1_flat)
+        hsc_embedding_1_combined = embedding_1_combined_umap[:num_hsc]
+        legacy_embedding_1_combined = embedding_1_combined_umap[num_hsc:]
+
+        # Encoder 2 combined UMAP
+        reducer_2_combined = umap.UMAP(**umap_params)
+        embedding_2_combined_umap = reducer_2_combined.fit_transform(all_embeddings_2_flat)
+        hsc_embedding_2_combined = embedding_2_combined_umap[:num_hsc]
+        legacy_embedding_2_combined = embedding_2_combined_umap[num_hsc:]
+
+        # Plot combined Encoder 1 (left column, row 4)
+        ax1_combined = axes[4, 0]
+        ax1_combined.scatter(hsc_embedding_1_combined[:, 0], hsc_embedding_1_combined[:, 1],
+                             s=5, label='HSC', alpha=0.6, c='blue')
+        ax1_combined.scatter(legacy_embedding_1_combined[:, 0], legacy_embedding_1_combined[:, 1],
+                             s=5, label='Legacy', alpha=0.6, c='orange')
+        ax1_combined.set_title('Encoder 1 (Same Galaxy) - Combined (All Tokens)', fontsize=10)
+        ax1_combined.set_xlabel('UMAP Component 1')
+        ax1_combined.set_ylabel('UMAP Component 2')
+        ax1_combined.legend()
+        ax1_combined.grid(True, alpha=0.3)
+
+        # Plot combined Encoder 2 (right column, row 4)
+        ax2_combined = axes[4, 1]
+        ax2_combined.scatter(hsc_embedding_2_combined[:, 0], hsc_embedding_2_combined[:, 1],
+                             s=5, label='HSC', alpha=0.6, c='blue')
+        ax2_combined.scatter(legacy_embedding_2_combined[:, 0], legacy_embedding_2_combined[:, 1],
+                             s=5, label='Legacy', alpha=0.6, c='orange')
+        ax2_combined.set_title('Encoder 2 (Same Instrument) - Combined (All Tokens)', fontsize=10)
+        ax2_combined.set_xlabel('UMAP Component 1')
+        ax2_combined.set_ylabel('UMAP Component 2')
+        ax2_combined.legend()
+        ax2_combined.grid(True, alpha=0.3)
+
+        # Add column labels at the top
+        col_labels = ['Encoder 1 (Physics)', 'Encoder 2 (Instrument)']
+        for col_idx, label in enumerate(col_labels):
+            axes[0, col_idx].text(0.5, 1.15, label, transform=axes[0, col_idx].transAxes,
+                                  ha='center', va='bottom', fontsize=12, weight='bold')
+
+        plt.suptitle('UMAP Visualization by Token Position', fontsize=14, y=0.995)
+        plt.tight_layout()
+
+        # Add horizontal line separator between token-specific and combined plots
+        # Draw line across both columns between row 3 and row 4
+        # Get the position of axes[3, 0] (bottom of token plots) and axes[4, 0] (top of combined plot)
+        ax_bottom = axes[3, 0]
+        ax_top = axes[4, 0]
+
+        # Get positions in figure coordinates (after tight_layout)
+        bbox_bottom = ax_bottom.get_position()
+        bbox_top = ax_top.get_position()
+
+        # Calculate y position for the separator line (midpoint between bottom of row 3 and top of row 4)
+        y_separator = (bbox_bottom.y0 + bbox_top.y1) / 2
+
+        # Draw horizontal line across full width
+        line = plt.Line2D(
+            [0, 1],  # Full width in figure coordinates
+            [y_separator, y_separator],
+            transform=fig.transFigure,
+            color='black',
+            linewidth=2,
+            linestyle='--',
+            alpha=0.5,
+            zorder=10
+        )
+        fig.lines.append(line)
+
+        # Save figure
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        save_path = figures_dir / f'umap_latent_space_step{self.global_step}.png'
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        # Log to wandb if logger is available
+        if self.logger and hasattr(self.logger, 'experiment'):
+            import wandb
+            self.logger.experiment.log({
+                "latent_space/umap_grid": wandb.Image(str(save_path)),
+                "global_step": self.global_step,
+            })
+
+        return save_path
 
 if __name__ == "__main__":
     # Set up snapshot + tee logging before anything else in main runs
@@ -680,9 +905,9 @@ if __name__ == "__main__":
         pl.seed_everything(seed, workers=True)
 
     lambda_generative = 1
-    lambda_geometric = 0.3
+    lambda_geometric = 0.0075 # 0.075, 0.3, 0.0075 -- >
 
-    batch_size = 128
+    batch_size = 64
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
     train_dataset = HSCLegacyTripletDatasetZoom(
@@ -749,7 +974,7 @@ if __name__ == "__main__":
         image_size=48,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
-        cross_attention_dim=8,
+        cross_attention_dim=64,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
         lr=1e-4,
@@ -763,7 +988,7 @@ if __name__ == "__main__":
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-zdim64-zoom"
+        name="double-encoder-resnet18-triplet-zdim64-zoom-geom-l0p0075"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
