@@ -362,6 +362,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         print(f"Training started - Target: {self.trainer.max_steps} steps")
         print(f"{'='*60}\n")
 
+        # Explicitly log important hyperparameters to wandb
+        if self.logger and hasattr(self.logger, 'experiment'):
+            if hasattr(self.logger.experiment, 'config'):
+                self.logger.experiment.config.update({
+                    "encoder_output_dim": self.hparams.encoder_output_dim,
+                    "lambda_generative": self.lambda_generative,
+                    "lambda_geometric": self.lambda_geometric,
+                })
+
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
         self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
