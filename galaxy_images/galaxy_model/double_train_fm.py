@@ -294,6 +294,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         print(f"Training started - Target: {self.trainer.max_steps} steps")
         print(f"{'='*60}\n")
 
+        # Explicitly log important hyperparameters to wandb
+        if self.logger and hasattr(self.logger, 'experiment'):
+            if hasattr(self.logger.experiment, 'config'):
+                self.logger.experiment.config.update({
+                    "cross_attention_dim": self.hparams.cross_attention_dim,
+                    "lambda_generative": self.lambda_generative,
+                    "lambda_geometric": self.lambda_geometric,
+                })
+
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
         self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
@@ -905,7 +914,7 @@ if __name__ == "__main__":
         pl.seed_everything(seed, workers=True)
 
     lambda_generative = 1
-    lambda_geometric = 0.0075 # 0.075, 0.3, 0.0075 -- >
+    lambda_geometric = 7.5e-4 # 0.075, 0.3, 0.0075=7.5e-3, 0.00075=7.5e-4 -- >
 
     batch_size = 64
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
@@ -1018,7 +1027,8 @@ if __name__ == "__main__":
         logger=wandb_logger,
         accelerator="auto",
         devices=n_devices,
-       log_every_n_steps=10,
+        log_every_n_steps=10,
+        precision="16-mixed",
         val_check_interval=1000,
         check_val_every_n_epoch=None,
         callbacks=[best_checkpoint, periodic_checkpoint],
