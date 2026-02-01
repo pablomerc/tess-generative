@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import torch
 import importlib.util
 from torch.utils.data import DataLoader
-from data import HSCLegacyDataset
+from data import HSCLegacyDataset, HSCLegacyDatasetZoom
 import time
 
 import umap
@@ -49,21 +49,29 @@ def _load_no_attn_class():
 
 # Single no-attn checkpoint (update here if you want to try other runs)
 checkpoint_path = (
-    "/data/vision/billf/scratch/pablomer/projects/tess-generative/"
-    # "galaxy-flow-matching/p9tj82az/checkpoints/latest-step=step=75000.ckpt"
-    "galaxy-flow-matching/p9tj82az/checkpoints/best-epoch=161-step=60000-val_loss=0.2111.ckpt"
+    # '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/0kzdtop9/checkpoints/latest-step=step=75000.ckpt'
+    # '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/srj4opub/checkpoints/latest-step=step=75000.ckpt' # z_dim = 64 + geom
+    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/p9tj82az/checkpoints/latest-step=step=75000.ckpt' # z_dim = 64 no geom
+    # "/data/vision/billf/scratch/pablomer/projects/tess-generative/"
+    # # "galaxy-flow-matching/p9tj82az/checkpoints/latest-step=step=75000.ckpt"
+    # "galaxy-flow-matching/p9tj82az/checkpoints/best-epoch=161-step=60000-val_loss=0.2111.ckpt"
 )
 
 zoom = True
+zoom_val = zoom  # For consistency with load_pretrained_model.py pattern
 
-# Tag used in filenames
+# Suffix variables for filenames
+zdim_suffix = "_zdim64"  # Will be updated based on actual dim
+geom_suffix = "_nogeom"  # Add if using geometry features
+zoom_suffix = "_zoom" if zoom_val else ""
 mode_tag = "_noattn"
 
 # Control flags
 GENERATE_UMAP = True   # Set to False to skip UMAP generation and plotting
-GENERATE_PCA = True    # Set to False to skip PCA generation and plotting
-GENERATE_TSNE = True   # Set to False to skip t-SNE generation and plotting
-SHOW_PAIRS = True      # Set to False to skip marking pairs on the plots
+GENERATE_PCA = False   # Set to False to skip PCA generation and plotting
+GENERATE_TSNE = False   # Set to False to skip t-SNE generation and plotting
+SHOW_PAIRS = True     # Set to False to skip marking pairs on the plots
+GENERATE_SAMPLES = False  # Enable generation study
 
 
 def main():
@@ -101,11 +109,18 @@ def main():
 
     # Time dataset initialization
     dataset_start = time.perf_counter()
-    dataset = HSCLegacyDataset(
-        hdf5_path="/data/vision/billf/scratch/pablomer/legacysurvey_hsc/"
-        "preprocessed_hsc_legacy_48x48_all.h5",
-        idx_list=list(range(95_000, 97_048)),
-    )
+    if zoom_val:
+        dataset = HSCLegacyDatasetZoom(
+            hdf5_path="/data/vision/billf/scratch/pablomer/legacysurvey_hsc/"
+            "preprocessed_hsc_legacy_48x48_all.h5",
+            idx_list=list(range(95_000, 97_048)),
+        )
+    else:
+        dataset = HSCLegacyDataset(
+            hdf5_path="/data/vision/billf/scratch/pablomer/legacysurvey_hsc/"
+            "preprocessed_hsc_legacy_48x48_all.h5",
+            idx_list=list(range(95_000, 97_048)),
+        )
     dataset_time = time.perf_counter() - dataset_start
 
     # DataLoader
@@ -154,7 +169,10 @@ def main():
     num_hsc = hsc_embeddings_1.shape[0]
     dim = hsc_embeddings_1.shape[1]
 
-    # Output directory for this script
+    # Update zdim_suffix based on actual dimension
+    zdim_suffix = f"_zdim{dim}"
+
+    # Output directory for latent space visualizations
     figures_dir = (
         Path(
             "/data/vision/billf/scratch/pablomer/projects/tess-generative/"
@@ -188,9 +206,10 @@ def main():
         # Optionally highlight random HSC–Legacy pairs
         selected_indices = None
         pair_colors = None
+        pair_markers = None
         if SHOW_PAIRS:
             np.random.seed(42)
-            num_pairs_to_highlight = 5
+            num_pairs_to_highlight = 20
             selected_indices = np.random.choice(
                 num_hsc, size=num_pairs_to_highlight, replace=False
             )
@@ -198,9 +217,9 @@ def main():
                 f"\nSelected {num_pairs_to_highlight} random pairs to highlight: "
                 f"indices {selected_indices}"
             )
-            pair_colors = plt.cm.tab10(
-                np.linspace(0, 1, num_pairs_to_highlight)
-            )
+            # 5 colors and 4 shapes for 20 unique combinations
+            pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
+            pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
@@ -223,24 +242,27 @@ def main():
         )
         if SHOW_PAIRS and selected_indices is not None:
             for i, idx in enumerate(selected_indices):
-                color = pair_colors[i]
+                color = pair_colors[i % 5]  # Cycle through 5 colors
+                marker = pair_markers[i % 4]  # Cycle through 4 shapes
                 ax1.scatter(
                     hsc_embedding_1[idx, 0],
                     hsc_embedding_1[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
                 ax1.scatter(
                     legacy_embedding_1[idx, 0],
                     legacy_embedding_1[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
         ax1.set_title("Encoder 1 (Same Galaxy) - No-Attn UMAP")
         ax1.set_xlabel("UMAP Component 1")
@@ -267,24 +289,27 @@ def main():
         )
         if SHOW_PAIRS and selected_indices is not None:
             for i, idx in enumerate(selected_indices):
-                color = pair_colors[i]
+                color = pair_colors[i % 5]  # Cycle through 5 colors
+                marker = pair_markers[i % 4]  # Cycle through 4 shapes
                 ax2.scatter(
                     hsc_embedding_2[idx, 0],
                     hsc_embedding_2[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
                 ax2.scatter(
                     legacy_embedding_2[idx, 0],
                     legacy_embedding_2[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
         ax2.set_title("Encoder 2 (Same Instrument) - No-Attn UMAP")
         ax2.set_xlabel("UMAP Component 1")
@@ -293,10 +318,9 @@ def main():
         ax2.grid(True)
 
         plt.tight_layout()
-        zoom_suffix = "_zoom" if zoom else ""
         umap_path = (
             figures_dir
-            / f"umap_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}.png"
+            / f"umap_both_encoders{zdim_suffix}{geom_suffix}{mode_tag}{zoom_suffix}.png"
         )
         plt.savefig(umap_path, dpi=150)
         plt.close()
@@ -327,9 +351,10 @@ def main():
 
         selected_indices = None
         pair_colors = None
+        pair_markers = None
         if SHOW_PAIRS:
             np.random.seed(42)
-            num_pairs_to_highlight = 5
+            num_pairs_to_highlight = 20
             selected_indices = np.random.choice(
                 num_hsc, size=num_pairs_to_highlight, replace=False
             )
@@ -337,9 +362,9 @@ def main():
                 f"\n[PCA no-attn] Selected {num_pairs_to_highlight} random pairs to "
                 f"highlight: indices {selected_indices}"
             )
-            pair_colors = plt.cm.tab10(
-                np.linspace(0, 1, num_pairs_to_highlight)
-            )
+            # 5 colors and 4 shapes for 20 unique combinations
+            pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
+            pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
@@ -362,24 +387,27 @@ def main():
         )
         if SHOW_PAIRS and selected_indices is not None:
             for i, idx in enumerate(selected_indices):
-                color = pair_colors[i]
+                color = pair_colors[i % 5]  # Cycle through 5 colors
+                marker = pair_markers[i % 4]  # Cycle through 4 shapes
                 ax1.scatter(
                     hsc_embedding_1_pca[idx, 0],
                     hsc_embedding_1_pca[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
                 ax1.scatter(
                     legacy_embedding_1_pca[idx, 0],
                     legacy_embedding_1_pca[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
         ax1.set_title(
             "Encoder 1 (Same Galaxy) - No-Attn PCA\n"
@@ -409,24 +437,27 @@ def main():
         )
         if SHOW_PAIRS and selected_indices is not None:
             for i, idx in enumerate(selected_indices):
-                color = pair_colors[i]
+                color = pair_colors[i % 5]  # Cycle through 5 colors
+                marker = pair_markers[i % 4]  # Cycle through 4 shapes
                 ax2.scatter(
                     hsc_embedding_2_pca[idx, 0],
                     hsc_embedding_2_pca[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
                 ax2.scatter(
                     legacy_embedding_2_pca[idx, 0],
                     legacy_embedding_2_pca[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
         ax2.set_title(
             "Encoder 2 (Same Instrument) - No-Attn PCA\n"
@@ -438,10 +469,9 @@ def main():
         ax2.grid(True)
 
         plt.tight_layout()
-        zoom_suffix = "_zoom" if zoom else ""
         pca_path = (
             figures_dir
-            / f"pca_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}.png"
+            / f"pca_both_encoders{zdim_suffix}{geom_suffix}{mode_tag}{zoom_suffix}.png"
         )
         plt.savefig(pca_path, dpi=150)
         plt.close()
@@ -475,9 +505,10 @@ def main():
 
         selected_indices = None
         pair_colors = None
+        pair_markers = None
         if SHOW_PAIRS:
             np.random.seed(42)
-            num_pairs_to_highlight = 5
+            num_pairs_to_highlight = 20
             selected_indices = np.random.choice(
                 num_hsc, size=num_pairs_to_highlight, replace=False
             )
@@ -485,9 +516,9 @@ def main():
                 f"\n[t-SNE no-attn] Selected {num_pairs_to_highlight} random pairs "
                 f"to highlight: indices {selected_indices}"
             )
-            pair_colors = plt.cm.tab10(
-                np.linspace(0, 1, num_pairs_to_highlight)
-            )
+            # 5 colors and 4 shapes for 20 unique combinations
+            pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
+            pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
@@ -510,24 +541,27 @@ def main():
         )
         if SHOW_PAIRS and selected_indices is not None:
             for i, idx in enumerate(selected_indices):
-                color = pair_colors[i]
+                color = pair_colors[i % 5]  # Cycle through 5 colors
+                marker = pair_markers[i % 4]  # Cycle through 4 shapes
                 ax1.scatter(
                     hsc_embedding_1_tsne[idx, 0],
                     hsc_embedding_1_tsne[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
                 ax1.scatter(
                     legacy_embedding_1_tsne[idx, 0],
                     legacy_embedding_1_tsne[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
         ax1.set_title("Encoder 1 (Same Galaxy) - No-Attn t-SNE")
         ax1.set_xlabel("t-SNE Component 1")
@@ -554,24 +588,27 @@ def main():
         )
         if SHOW_PAIRS and selected_indices is not None:
             for i, idx in enumerate(selected_indices):
-                color = pair_colors[i]
+                color = pair_colors[i % 5]  # Cycle through 5 colors
+                marker = pair_markers[i % 4]  # Cycle through 4 shapes
                 ax2.scatter(
                     hsc_embedding_2_tsne[idx, 0],
                     hsc_embedding_2_tsne[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
                 ax2.scatter(
                     legacy_embedding_2_tsne[idx, 0],
                     legacy_embedding_2_tsne[idx, 1],
-                    marker="x",
+                    marker=marker,
                     s=200,
                     c=[color],
                     linewidths=3,
                     zorder=5,
+                    edgecolors='black',
                 )
         ax2.set_title("Encoder 2 (Same Instrument) - No-Attn t-SNE")
         ax2.set_xlabel("t-SNE Component 1")
@@ -580,10 +617,9 @@ def main():
         ax2.grid(True)
 
         plt.tight_layout()
-        zoom_suffix = "_zoom" if zoom else ""
         tsne_path = (
             figures_dir
-            / f"tsne_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}.png"
+            / f"tsne_both_encoders{zdim_suffix}{geom_suffix}{mode_tag}{zoom_suffix}.png"
         )
         plt.savefig(tsne_path, dpi=150)
         plt.close()
@@ -591,6 +627,201 @@ def main():
         print(f"\n[no-attn] Combined t-SNE plot saved to '{tsne_path}'")
         print(f"  HSC points: {num_hsc}")
         print(f"  Legacy points: {len(legacy_embedding_1_tsne)}")
+
+    # ===== Generation Study =====
+    if GENERATE_SAMPLES:
+        print('\n' + '='*60)
+        print('Generation Examples')
+        print('='*60)
+
+        # Configuration
+        N = 6  # Number of target examples
+        target_indices = [0, 100, 200, 300, 400, 500]
+
+        def _row_scale_rgb(x_chw: torch.Tensor, vmin, vmax) -> torch.Tensor:
+            """
+            Scale a (3,H,W) tensor to (H,W,3) in [0,1] using fixed per-channel vmin/vmax.
+            vmin/vmax: tensor-like shape (3,)
+            """
+            x = x_chw[:3]
+            vmin_t = torch.as_tensor(vmin, device=x.device, dtype=x.dtype).view(3, 1, 1)
+            vmax_t = torch.as_tensor(vmax, device=x.device, dtype=x.dtype).view(3, 1, 1)
+            y = (x - vmin_t) / (vmax_t - vmin_t + 1e-8)
+            y = y.clamp(0, 1)
+            return y.permute(1, 2, 0)
+
+        # Store all results for plotting
+        all_results = []
+
+        for target_idx in target_indices:
+            print(f'\n--- Processing Target {target_idx} ---')
+
+            # Target: hsc[target_idx] (the image we want to reconstruct)
+            target_image = hsc_images[target_idx:target_idx+1].to(device)  # (1, C, H, W)
+            target_type = "HSC"
+
+            # Same galaxy: legacy[target_idx] (same galaxy as target, different instrument)
+            samegal_image = legacy_images[target_idx:target_idx+1].to(device)  # (1, C, H, W)
+            samegal_type = "Legacy"
+
+            print(f"Target: {target_type}[{target_idx}]")
+            print(f"Same Galaxy: {samegal_type}[{target_idx}]")
+
+            # Generate noise once for this target (will be reused for all samples)
+            noise = torch.randn(
+                1, model.hparams.in_channels, model.hparams.image_size, model.hparams.image_size,
+                device=device,
+            )
+            print(f"Generated shared noise for all samples (shape: {noise.shape})")
+
+            # Generate 5 samples with different sameins conditions (all use 5 images as required by model)
+            samples = []
+            sample_descriptions = []
+
+            # Sample 1: 5 sameins images from hsc[target_idx+1:target_idx+6]
+            print('Sample 1: sameins hsc[{}:{}] (5 images)'.format(target_idx+1, target_idx+6))
+            sameins_1 = hsc_images[target_idx+1:target_idx+6].to(device).unsqueeze(0)  # (1, 5, C, H, W)
+            sample_1 = model.sample(cond_image_samegal=samegal_image, cond_image_sameins=sameins_1, x_noise=noise)
+            samples.append(sample_1[0])
+            sample_descriptions.append("Sample 1\nHSC[{}-{}] (5)".format(target_idx+1, target_idx+5))
+
+            # Sample 2: 5 sameins images from hsc[target_idx+6:target_idx+11]
+            print('Sample 2: sameins hsc[{}:{}] (5 images)'.format(target_idx+6, target_idx+11))
+            sameins_2 = hsc_images[target_idx+6:target_idx+11].to(device).unsqueeze(0)  # (1, 5, C, H, W)
+            sample_2 = model.sample(cond_image_samegal=samegal_image, cond_image_sameins=sameins_2, x_noise=noise)
+            samples.append(sample_2[0])
+            sample_descriptions.append("Sample 2\nHSC[{}-{}] (5)".format(target_idx+6, target_idx+10))
+
+            # Sample 3: 5 sameins images from hsc[target_idx+11:target_idx+16]
+            print('Sample 3: sameins hsc[{}:{}] (5 images)'.format(target_idx+11, target_idx+16))
+            sameins_3 = hsc_images[target_idx+11:target_idx+16].to(device).unsqueeze(0)  # (1, 5, C, H, W)
+            sample_3 = model.sample(cond_image_samegal=samegal_image, cond_image_sameins=sameins_3, x_noise=noise)
+            samples.append(sample_3[0])
+            sample_descriptions.append("Sample 3\nHSC[{}-{}] (5)".format(target_idx+11, target_idx+15))
+
+            # Sample 4: 5 sameins images from hsc[target_idx+16:target_idx+21]
+            print('Sample 4: sameins hsc[{}:{}] (5 images)'.format(target_idx+16, target_idx+21))
+            sameins_4 = hsc_images[target_idx+16:target_idx+21].to(device).unsqueeze(0)  # (1, 5, C, H, W)
+            sample_4 = model.sample(cond_image_samegal=samegal_image, cond_image_sameins=sameins_4, x_noise=noise)
+            samples.append(sample_4[0])
+            sample_descriptions.append("Sample 4\nHSC[{}-{}] (5)".format(target_idx+16, target_idx+20))
+
+            # Sample 5: 5 sameins images from legacy[target_idx+1:target_idx+6]
+            print('Sample 5: sameins legacy[{}:{}] (5 images)'.format(target_idx+1, target_idx+6))
+            sameins_5 = legacy_images[target_idx+1:target_idx+6].to(device).unsqueeze(0)  # (1, 5, C, H, W)
+            sample_5 = model.sample(cond_image_samegal=samegal_image, cond_image_sameins=sameins_5, x_noise=noise)
+            samples.append(sample_5[0])
+            sample_descriptions.append("Sample 5\nLegacy[{}-{}] (5)".format(target_idx+1, target_idx+5))
+
+            # Store results
+            all_results.append({
+                'target_idx': target_idx,
+                'target_image': target_image,
+                'target_type': target_type,
+                'samegal_image': samegal_image,
+                'samegal_type': samegal_type,
+                'samegal_idx': target_idx,
+                'samples': samples,
+                'sample_descriptions': sample_descriptions
+            })
+
+        print('\n' + '='*60)
+        print('Generation complete!')
+        print('='*60)
+
+        # Create visualization with vertical separators
+        print('\nCreating visualization...')
+
+        # Layout: target | samegal || sample1-4 | sample5 (legacy 5img)
+        # Total columns: 2 + 4 + 1 = 7 columns per row
+        num_cols = 7
+        num_rows = N
+
+        fig, axes = plt.subplots(num_rows, num_cols, figsize=(27, 3 * num_rows))
+
+        # If only one row, make axes 2D
+        if num_rows == 1:
+            axes = axes.reshape(1, -1)
+
+        for row_idx, result in enumerate(all_results):
+            target_image = result['target_image']
+            samegal_image = result['samegal_image']
+            samples = result['samples']
+            sample_descriptions = result['sample_descriptions']
+            target_idx = result['target_idx']
+
+            # Compute per-channel vmin/vmax from the TARGET for this row (row-scaled visualization)
+            target_chw = target_image[0, :3]  # (3,H,W)
+            vmin = target_chw.amin(dim=(1, 2))  # (3,)
+            vmax = target_chw.amax(dim=(1, 2))  # (3,)
+
+            # Column 0: Target
+            target_vis = _row_scale_rgb(target_image[0, :3], vmin, vmax).detach().cpu().numpy()
+            axes[row_idx, 0].imshow(target_vis)
+            axes[row_idx, 0].set_title(f'Target\n{result["target_type"]}[{target_idx}]', fontsize=9)
+            axes[row_idx, 0].axis('off')
+
+            # Column 1: Same Galaxy
+            samegal_vis = _row_scale_rgb(samegal_image[0, :3], vmin, vmax).detach().cpu().numpy()
+            axes[row_idx, 1].imshow(samegal_vis)
+            axes[row_idx, 1].set_title(f'SameGal\n{result["samegal_type"]}[{target_idx}]', fontsize=9)
+            axes[row_idx, 1].axis('off')
+
+            # Columns 2-5: Samples 1-4 (5 images each)
+            for i in range(4):
+                samp_vis = _row_scale_rgb(samples[i][:3], vmin, vmax).detach().cpu().numpy()
+                axes[row_idx, i + 2].imshow(samp_vis)
+                axes[row_idx, i + 2].set_title(sample_descriptions[i], fontsize=9)
+                axes[row_idx, i + 2].axis('off')
+
+            # Column 6: Sample 5 (5 legacy images)
+            samp_vis = _row_scale_rgb(samples[4][:3], vmin, vmax).detach().cpu().numpy()
+            axes[row_idx, 6].imshow(samp_vis)
+            axes[row_idx, 6].set_title(sample_descriptions[4], fontsize=9)
+            axes[row_idx, 6].axis('off')
+
+        # Add column labels at the top
+        col_labels = ['Target', 'SameGal', 'Sample 1', 'Sample 2', 'Sample 3', 'Sample 4', 'Sample 5']
+        for col_idx, label in enumerate(col_labels):
+            axes[0, col_idx].text(0.5, 1.15, label, transform=axes[0, col_idx].transAxes,
+                                  ha='center', va='bottom', fontsize=10, weight='bold')
+
+        plt.suptitle(f'Reconstructions: Multiple Targets with Different SameIns Conditions (No-Attn)',
+                     fontsize=14, y=0.995)
+        plt.tight_layout()
+
+        # Add vertical separator using figure coordinates
+        # Separator: between SameGal (col 1) and Sample 1 (col 2)
+        # Use the first row to determine separator position
+        bbox1 = axes[0, 1].get_position()
+        bbox2 = axes[0, 2].get_position()
+        separator_x1 = (bbox1.x1 + bbox2.x0) / 2
+
+        # Get the bottom and top of the figure (accounting for title)
+        bbox_bottom = axes[-1, 0].get_position().y0
+        bbox_top = axes[0, 0].get_position().y1
+
+        # Draw vertical line across all rows
+        fig.add_artist(plt.Line2D([separator_x1, separator_x1], [bbox_bottom, bbox_top],
+                                  transform=fig.transFigure, color='black', linewidth=2,
+                                  clip_on=False))
+
+        # Save figure (ensure figures_dir exists)
+        generation_figures_dir = (
+            Path(
+                "/data/vision/billf/scratch/pablomer/projects/tess-generative/"
+                "galaxy_images/galaxy_model/figures/generation_study"
+            )
+        )
+        generation_figures_dir.mkdir(parents=True, exist_ok=True)
+        reconstruction_path = (
+            generation_figures_dir
+            / f"reconstructions_comparison{zdim_suffix}{geom_suffix}{mode_tag}{zoom_suffix}.png"
+        )
+        plt.savefig(reconstruction_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        print(f"Reconstruction comparison saved to '{reconstruction_path}'")
 
 
 if __name__ == "__main__":

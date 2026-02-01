@@ -29,6 +29,7 @@ from sklearn.manifold import TSNE
 
 # checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/s39qr0v8/checkpoints/epoch=182-step=68000.ckpt' # model with latent space of 128
 checkpoints = [
+    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wu1csh99/checkpoints/latest-step=step=75000.ckpt', # z_dim = 16, geom
     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/twop8sfb/checkpoints/latest-step=step=44000.ckpt', # z_dim = 64 geom
     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/rach5aeu/checkpoints/latest-step=step=51000.ckpt',  # z_dim = 8
     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wdbsh3rc/checkpoints/latest-step=step=63000.ckpt',  # z_dim = 8 geom
@@ -45,23 +46,23 @@ zoom = True
 # ]
 # zoom = False
 
-z_dim_list = [64, 8, 8, 64]
-epochs = [180,190, 190, 190]
+z_dim_list = [16, 64, 8, 8, 64]
+epochs = [200, 180,190, 190, 190]
 # checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/r2cvid3f/checkpoints/epoch=158-step=59000.ckpt' # z_dim = 64
 
 # Dimension setting (used in plot file names)
 # dim = 64  # Set to 32, 64, 128, 256, 512, etc.
 
 idx = 0  # default to geom model
-mode = ['geom','', 'geom', '']
-zoom = [True, True, True, True]
+mode = ['geom','geom','', 'geom', '']
+zoom = [True, True, True, True, True]
 checkpoint_path, dim, epoch, mode_tag, zoom_val = checkpoints[idx], z_dim_list[idx], epochs[idx], mode[idx], zoom[idx]
 
 # Control flags
-GENERATE_UMAP = False   # Set to False to skip UMAP generation and plotting
+GENERATE_UMAP = False  # Set to False to skip UMAP generation and plotting
 GENERATE_PCA = False    # Set to False to skip PCA generation and plotting
 GENERATE_TSNE = False   # Set to False to skip t-SNE generation and plotting
-SHOW_PAIRS = False      # Set to False to skip marking pairs on the plots
+SHOW_PAIRS = False     # Set to False to skip marking pairs on the plots
 GENERATE_SAMPLES = True  # Disable generation study
 
 # Determine device: try to find a working GPU, fallback to CPU
@@ -245,16 +246,18 @@ print(f"   Space 2 (Instrument): {normalized_distance_2:.4f}")
 print("="*60)
 
 if GENERATE_UMAP:
-    # Randomly select ~5 pairs to highlight (if enabled)
+    # Randomly select 20 pairs to highlight (if enabled)
     selected_indices = None
     pair_colors = None
+    pair_markers = None
     if SHOW_PAIRS:
         np.random.seed(42)  # For reproducibility
-        num_pairs_to_highlight = 5
+        num_pairs_to_highlight = 20
         selected_indices = np.random.choice(num_hsc, size=num_pairs_to_highlight, replace=False)
         print(f"\nSelected {num_pairs_to_highlight} random pairs to highlight: indices {selected_indices}")
-        # Colors for each pair
-        pair_colors = plt.cm.tab10(np.linspace(0, 1, num_pairs_to_highlight))
+        # 5 colors and 4 shapes for 20 unique combinations
+        pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
+        pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
     # Create side-by-side figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
@@ -263,14 +266,15 @@ if GENERATE_UMAP:
     ax1.scatter(hsc_embedding_1[:, 0], hsc_embedding_1[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
     ax1.scatter(legacy_embedding_1[:, 0], legacy_embedding_1[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
 
-    # Mark selected pairs on Encoder 1 plot with matching colors (if enabled)
+    # Mark selected pairs on Encoder 1 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
         for i, idx in enumerate(selected_indices):
-            color = pair_colors[i]
+            color = pair_colors[i % 5]  # Cycle through 5 colors
+            marker = pair_markers[i % 4]  # Cycle through 4 shapes
             ax1.scatter(hsc_embedding_1[idx, 0], hsc_embedding_1[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
             ax1.scatter(legacy_embedding_1[idx, 0], legacy_embedding_1[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
 
     ax1.set_title(f'Encoder 1 (Same Galaxy) \n Physics Latent space (UMAP). Epoch {epoch}')
     ax1.set_xlabel('UMAP Component 1')
@@ -282,14 +286,15 @@ if GENERATE_UMAP:
     ax2.scatter(hsc_embedding_2[:, 0], hsc_embedding_2[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
     ax2.scatter(legacy_embedding_2[:, 0], legacy_embedding_2[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
 
-    # Mark selected pairs on Encoder 2 plot with matching colors (if enabled)
+    # Mark selected pairs on Encoder 2 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
         for i, idx in enumerate(selected_indices):
-            color = pair_colors[i]
+            color = pair_colors[i % 5]  # Cycle through 5 colors
+            marker = pair_markers[i % 4]  # Cycle through 4 shapes
             ax2.scatter(hsc_embedding_2[idx, 0], hsc_embedding_2[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
             ax2.scatter(legacy_embedding_2[idx, 0], legacy_embedding_2[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
 
     ax2.set_title(f'Encoder 2 (Same Instrument) \n Instrument Latent space (UMAP). Epoch {epoch}')
     ax2.set_xlabel('UMAP Component 1')
@@ -342,16 +347,18 @@ if GENERATE_PCA:
     hsc_embedding_2_pca = embedding_2_pca[:num_hsc]
     legacy_embedding_2_pca = embedding_2_pca[num_hsc:]
 
-    # Randomly select ~5 pairs to highlight (if enabled)
+    # Randomly select 20 pairs to highlight (if enabled)
     selected_indices = None
     pair_colors = None
+    pair_markers = None
     if SHOW_PAIRS:
         np.random.seed(42)  # For reproducibility
-        num_pairs_to_highlight = 5
+        num_pairs_to_highlight = 20
         selected_indices = np.random.choice(num_hsc, size=num_pairs_to_highlight, replace=False)
         print(f"\nSelected {num_pairs_to_highlight} random pairs to highlight: indices {selected_indices}")
-        # Colors for each pair
-        pair_colors = plt.cm.tab10(np.linspace(0, 1, num_pairs_to_highlight))
+        # 5 colors and 4 shapes for 20 unique combinations
+        pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
+        pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
     # Create side-by-side figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
@@ -360,14 +367,15 @@ if GENERATE_PCA:
     ax1.scatter(hsc_embedding_1_pca[:, 0], hsc_embedding_1_pca[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
     ax1.scatter(legacy_embedding_1_pca[:, 0], legacy_embedding_1_pca[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
 
-    # Mark selected pairs on Encoder 1 plot with matching colors (if enabled)
+    # Mark selected pairs on Encoder 1 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
         for i, idx in enumerate(selected_indices):
-            color = pair_colors[i]
+            color = pair_colors[i % 5]  # Cycle through 5 colors
+            marker = pair_markers[i % 4]  # Cycle through 4 shapes
             ax1.scatter(hsc_embedding_1_pca[idx, 0], hsc_embedding_1_pca[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
             ax1.scatter(legacy_embedding_1_pca[idx, 0], legacy_embedding_1_pca[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
 
     ax1.set_title(f'Encoder 1 (Same Galaxy) \n Physics Latent space (PCA). Epoch {epoch}\n'
                   f'Explained variance: {explained_variance_1.sum():.2%}')
@@ -380,14 +388,15 @@ if GENERATE_PCA:
     ax2.scatter(hsc_embedding_2_pca[:, 0], hsc_embedding_2_pca[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
     ax2.scatter(legacy_embedding_2_pca[:, 0], legacy_embedding_2_pca[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
 
-    # Mark selected pairs on Encoder 2 plot with matching colors (if enabled)
+    # Mark selected pairs on Encoder 2 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
         for i, idx in enumerate(selected_indices):
-            color = pair_colors[i]
+            color = pair_colors[i % 5]  # Cycle through 5 colors
+            marker = pair_markers[i % 4]  # Cycle through 4 shapes
             ax2.scatter(hsc_embedding_2_pca[idx, 0], hsc_embedding_2_pca[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
             ax2.scatter(legacy_embedding_2_pca[idx, 0], legacy_embedding_2_pca[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
 
     ax2.set_title(f'Encoder 2 (Same Instrument) \n Instrument Latent space (PCA). Epoch {epoch}\n'
                   f'Explained variance: {explained_variance_2.sum():.2%}')
@@ -439,16 +448,18 @@ if GENERATE_TSNE:
     hsc_embedding_2_tsne = embedding_2_tsne[:num_hsc]
     legacy_embedding_2_tsne = embedding_2_tsne[num_hsc:]
 
-    # Randomly select ~5 pairs to highlight (if enabled)
+    # Randomly select 20 pairs to highlight (if enabled)
     selected_indices = None
     pair_colors = None
+    pair_markers = None
     if SHOW_PAIRS:
         np.random.seed(42)  # For reproducibility
-        num_pairs_to_highlight = 5
+        num_pairs_to_highlight = 20
         selected_indices = np.random.choice(num_hsc, size=num_pairs_to_highlight, replace=False)
         print(f"\nSelected {num_pairs_to_highlight} random pairs to highlight: indices {selected_indices}")
-        # Colors for each pair
-        pair_colors = plt.cm.tab10(np.linspace(0, 1, num_pairs_to_highlight))
+        # 5 colors and 4 shapes for 20 unique combinations
+        pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
+        pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
     # Create side-by-side figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
@@ -457,14 +468,15 @@ if GENERATE_TSNE:
     ax1.scatter(hsc_embedding_1_tsne[:, 0], hsc_embedding_1_tsne[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
     ax1.scatter(legacy_embedding_1_tsne[:, 0], legacy_embedding_1_tsne[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
 
-    # Mark selected pairs on Encoder 1 plot with matching colors (if enabled)
+    # Mark selected pairs on Encoder 1 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
         for i, idx in enumerate(selected_indices):
-            color = pair_colors[i]
+            color = pair_colors[i % 5]  # Cycle through 5 colors
+            marker = pair_markers[i % 4]  # Cycle through 4 shapes
             ax1.scatter(hsc_embedding_1_tsne[idx, 0], hsc_embedding_1_tsne[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
             ax1.scatter(legacy_embedding_1_tsne[idx, 0], legacy_embedding_1_tsne[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
 
     ax1.set_title(f'Encoder 1 (Same Galaxy) \n Physics Latent space (t-SNE). Epoch {epoch}')
     ax1.set_xlabel('t-SNE Component 1')
@@ -476,14 +488,15 @@ if GENERATE_TSNE:
     ax2.scatter(hsc_embedding_2_tsne[:, 0], hsc_embedding_2_tsne[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
     ax2.scatter(legacy_embedding_2_tsne[:, 0], legacy_embedding_2_tsne[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
 
-    # Mark selected pairs on Encoder 2 plot with matching colors (if enabled)
+    # Mark selected pairs on Encoder 2 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
         for i, idx in enumerate(selected_indices):
-            color = pair_colors[i]
+            color = pair_colors[i % 5]  # Cycle through 5 colors
+            marker = pair_markers[i % 4]  # Cycle through 4 shapes
             ax2.scatter(hsc_embedding_2_tsne[idx, 0], hsc_embedding_2_tsne[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
             ax2.scatter(legacy_embedding_2_tsne[idx, 0], legacy_embedding_2_tsne[idx, 1],
-                        marker='x', s=200, c=[color], linewidths=3, zorder=5)
+                        marker=marker, s=200, c=[color], linewidths=3, zorder=5, edgecolors='black')
 
     ax2.set_title(f'Encoder 2 (Same Instrument) \n Instrument Latent space (t-SNE). Epoch {epoch}')
     ax2.set_xlabel('t-SNE Component 1')

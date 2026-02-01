@@ -48,9 +48,13 @@ params_to_visualize = ['EBV', 'FLUX_G', 'FLUX_I', 'FLUX_R', 'FLUX_W1',
                        'z_sdssshape_psf_shape12', 'z_sdssshape_psf_shape22', 'z_sdssshape_shape11', 'z_sdssshape_shape12',
                        'z_sdssshape_shape22']
 
-colorbar_scale = 'log' # 'log' or 'linear'
+colorbar_scale = 'linear' # 'log' or 'linear'
 
 model_type = 'attention_conditional' # 'attention_conditional' or 'class_conditional'
+
+geom_suffix = '_geom'
+
+try_random_order = False # True or False
 
 # UMAP parameters
 umap_params = {
@@ -80,7 +84,8 @@ if torch.cuda.is_available():
 # Import appropriate model class based on model_type
 if model_type == 'attention_conditional':
     from double_train_fm import ConditionalFlowMatchingModule
-    checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/4o2v012z/checkpoints/latest-step=step=75000.ckpt'
+    # checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/4o2v012z/checkpoints/latest-step=step=75000.ckpt'
+    checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wu1csh99/checkpoints/latest-step=step=75000.ckpt' # z_dim = 16 + geom
 elif model_type == 'class_conditional':
     # Handle hyphenated filename using importlib
     module_path = Path(__file__).parent.parent / 'double_train_fm_no-attn.py'
@@ -88,7 +93,8 @@ elif model_type == 'class_conditional':
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     ConditionalFlowMatchingModule = module.ConditionalFlowMatchingModule
-    checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/p9tj82az/checkpoints/latest-step=step=75000.ckpt'
+    # checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/p9tj82az/checkpoints/latest-step=step=75000.ckpt'
+    checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/srj4opub/checkpoints/latest-step=step=75000.ckpt'
 else:
     raise ValueError(f"Unknown model_type: {model_type}. Must be 'attention_conditional' or 'class_conditional'")
 
@@ -204,7 +210,7 @@ def compute_umap_embeddings():
     return hsc_embedding_1, legacy_embedding_1, hsc_embedding_2, legacy_embedding_2
 
 def create_large_combined_visualization(hsc_embedding_1, legacy_embedding_1, hsc_embedding_2, legacy_embedding_2,
-                                        all_param_data, param_names, title_suffix, colorbar_scale='linear', model_type='attention_conditional'):
+                                        all_param_data, param_names, title_suffix, colorbar_scale='linear', model_type='attention_conditional', geom_suffix=''):
     """Create one large figure with all parameters arranged in a grid."""
     print(f"\nCreating large combined visualization - {title_suffix}...")
     print(f"  Number of parameters: {len(param_names)}")
@@ -309,7 +315,7 @@ def create_large_combined_visualization(hsc_embedding_1, legacy_embedding_1, hsc
     figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures/umap_correlations')
     figures_dir.mkdir(parents=True, exist_ok=True)
     model_type_short = 'attn' if model_type == 'attention_conditional' else 'class'
-    output_path = figures_dir / f'umap_all_params_8k_{title_suffix.lower().replace(" ", "_")}_{colorbar_scale}_{model_type_short}.png'
+    output_path = figures_dir / f'umap_all_params_8k_{title_suffix.lower().replace(" ", "_")}_{colorbar_scale}_{model_type_short}{geom_suffix}.png'
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
 
@@ -342,14 +348,15 @@ for param_name in params_to_visualize:
 
 print(f"\nLoaded {len(valid_params)} valid parameters")
 
-# Create randomized data (shuffle each parameter independently)
-print("\nCreating randomized parameter data...")
+# Create randomized data (shuffle each parameter independently) - only if try_random_order is True
 all_param_data_randomized = {}
-np.random.seed(42)
-for param_name in valid_params:
-    param_random = all_param_data_ordered[param_name].copy()
-    np.random.shuffle(param_random)
-    all_param_data_randomized[param_name] = param_random
+if try_random_order:
+    print("\nCreating randomized parameter data...")
+    np.random.seed(42)
+    for param_name in valid_params:
+        param_random = all_param_data_ordered[param_name].copy()
+        np.random.shuffle(param_random)
+        all_param_data_randomized[param_name] = param_random
 
 # Create large combined figure for ordered indices
 print(f"\n{'='*60}")
@@ -358,22 +365,27 @@ print(f"{'='*60}")
 output_path_ordered = create_large_combined_visualization(
     hsc_embedding_1, legacy_embedding_1, hsc_embedding_2, legacy_embedding_2,
     all_param_data_ordered, valid_params, "Ordered Indices",
-    colorbar_scale=colorbar_scale, model_type=model_type
+    colorbar_scale=colorbar_scale, model_type=model_type, geom_suffix=geom_suffix
 )
 
-# Create large combined figure for randomized indices
-print(f"\n{'='*60}")
-print("Creating large combined figure - Randomized Indices")
-print(f"{'='*60}")
-output_path_randomized = create_large_combined_visualization(
-    hsc_embedding_1, legacy_embedding_1, hsc_embedding_2, legacy_embedding_2,
-    all_param_data_randomized, valid_params, "Randomized Indices",
-    colorbar_scale=colorbar_scale, model_type=model_type
-)
+# Create large combined figure for randomized indices - only if try_random_order is True
+output_path_randomized = None
+if try_random_order:
+    print(f"\n{'='*60}")
+    print("Creating large combined figure - Randomized Indices")
+    print(f"{'='*60}")
+    output_path_randomized = create_large_combined_visualization(
+        hsc_embedding_1, legacy_embedding_1, hsc_embedding_2, legacy_embedding_2,
+        all_param_data_randomized, valid_params, "Randomized Indices",
+        colorbar_scale=colorbar_scale, model_type=model_type, geom_suffix=geom_suffix
+    )
 
 print(f"\n{'='*60}")
 print("Summary - All visualizations completed!")
 print(f"{'='*60}")
 print(f"Output directory: /data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures/umap_correlations/")
 print(f"  - Ordered indices figure: {output_path_ordered}")
-print(f"  - Randomized indices figure: {output_path_randomized}")
+if try_random_order:
+    print(f"  - Randomized indices figure: {output_path_randomized}")
+else:
+    print(f"  - Randomized indices figure: Skipped (try_random_order=False)")
