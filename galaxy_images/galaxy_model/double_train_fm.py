@@ -15,6 +15,8 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import geomloss
 import umap
 
+
+
 class ResNetEncoder(nn.Module):
     """
     ResNet18 encoder from timm that produces spatial feature maps for conditioning.
@@ -63,6 +65,12 @@ class ResNetEncoder(nn.Module):
         B, D, H, W = feat.shape
         feat = feat.view(B, D, H * W).permute(0, 2, 1)
         return feat
+
+    def intermediate_states(self, x: torch.Tensor) -> list:
+        features = self.backbone(x)
+        for i, element in enumerate(features):
+            print(f'Shape of features element {i} is {element.shape}')
+        return features
 
 
 class ConditionalFlowMatchingModule(pl.LightningModule):
@@ -122,6 +130,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.lambda_generative = lambda_generative
         self.lambda_geometric = lambda_geometric
         self.num_umap_batches = num_umap_batches
+
+        # Detect H100 GPU
+        self.is_h100 = is_h100_gpu()
 
         block_out_channels = tuple(model_channels * m for m in channel_mult)
 
@@ -219,42 +230,51 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         """
         x_1, cond_image_samegal, cond_image_sameins, metadata = batch
 
-        batch_size = x_1.shape[0]
+        ### Generative loss
+        if self.lambda_generative > 0:
+            batch_size = x_1.shape[0]
 
-        x_0 = torch.randn_like(x_1)
-        t = torch.rand(batch_size, device=x_1.device)
+            x_0 = torch.randn_like(x_1)
+            t = torch.rand(batch_size, device=x_1.device)
 
-        t_expanded = t[:, None, None, None]
-        x_t = (1 - t_expanded) * x_0 + t_expanded * x_1
+            t_expanded = t[:, None, None, None]
+            x_t = (1 - t_expanded) * x_0 + t_expanded * x_1
 
-        target_velocity = x_1 - x_0
+            target_velocity = x_1 - x_0
 
-        predicted_velocity = self(x_t, t, cond_image_samegal, cond_image_sameins)
+            predicted_velocity = self(x_t, t, cond_image_samegal, cond_image_sameins)
 
-        loss = nn.functional.mse_loss(predicted_velocity, target_velocity, reduction='none')
+            loss = nn.functional.mse_loss(predicted_velocity, target_velocity, reduction='none')
 
-        # Reduce to per-example losses: (B, C, H, W) -> (B,)
-        per_example_loss = loss.mean(dim=(1, 2, 3))
+            # Reduce to per-example losses: (B, C, H, W) -> (B,)
+            per_example_loss = loss.mean(dim=(1, 2, 3))
 
-        # Extract anchor_survey values
-        anchor_surveys = [m['anchor_survey'] for m in metadata]
+            # Extract anchor_survey values
+            anchor_surveys = [m['anchor_survey'] for m in metadata]
 
-        # Create boolean masks (on the same device as your loss tensor)
-        is_hsc = torch.tensor([s == 'hsc' for s in anchor_surveys], device=per_example_loss.device)
-        is_legacy = torch.tensor([s == 'legacy' for s in anchor_surveys], device=per_example_loss.device)
+            # Create boolean masks (on the same device as your loss tensor)
+            is_hsc = torch.tensor([s == 'hsc' for s in anchor_surveys], device=per_example_loss.device)
+            is_legacy = torch.tensor([s == 'legacy' for s in anchor_surveys], device=per_example_loss.device)
 
-        # Compute mean losses for each group
-        loss_hsc = per_example_loss[is_hsc].mean() if is_hsc.any() else torch.tensor(float('nan'), device=per_example_loss.device)
-        loss_legacy = per_example_loss[is_legacy].mean() if is_legacy.any() else torch.tensor(float('nan'), device=per_example_loss.device)
+            # Compute mean losses for each group
+            loss_hsc = per_example_loss[is_hsc].mean() if is_hsc.any() else torch.tensor(float('nan'), device=per_example_loss.device)
+            loss_legacy = per_example_loss[is_legacy].mean() if is_legacy.any() else torch.tensor(float('nan'), device=per_example_loss.device)
 
-        # Total loss (scalar) for gradients
-        generative_loss = per_example_loss.mean()
+            # Total loss (scalar) for gradients
+            generative_loss = per_example_loss.mean()
 
-        # Store separate losses for logging (detached to be explicit they're not used for gradients)
-        self._loss_generative_total = generative_loss.detach()
-        self._loss_hsc = loss_hsc.detach()
-        self._loss_legacy = loss_legacy.detach()
-
+            # Store separate losses for logging (detached to be explicit they're not used for gradients)
+            self._loss_generative_total = generative_loss.detach()
+            self._loss_hsc = loss_hsc.detach()
+            self._loss_legacy = loss_legacy.detach()
+        else:
+            # Skip computation when lambda_generative is 0
+            device = x_1.device
+            dtype = x_1.dtype
+            generative_loss = torch.tensor(0.0, device=device, dtype=dtype)
+            self._loss_generative_total = generative_loss.detach()
+            self._loss_hsc = torch.tensor(float('nan'), device=device)
+            self._loss_legacy = torch.tensor(float('nan'), device=device)
 
         ### Geometric loss
         if self.lambda_geometric > 0:
@@ -272,7 +292,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             self._loss_geom_total = total_geom_loss.detach()
         else:
             # Skip computation when lambda_geometric is 0
-            total_geom_loss = torch.tensor(0.0, device=generative_loss.device, dtype=generative_loss.dtype)
+            device = x_1.device
+            dtype = x_1.dtype
+            total_geom_loss = torch.tensor(0.0, device=device, dtype=dtype)
             self._loss_geom_total = total_geom_loss.detach()
 
         total_loss = self.lambda_generative * generative_loss + self.lambda_geometric * total_geom_loss
@@ -292,6 +314,10 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self._train_start_time = time.time()
         print(f"\n{'='*60}")
         print(f"Training started - Target: {self.trainer.max_steps} steps")
+        print(f"H100 GPU detected: {self.is_h100}")
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
         print(f"{'='*60}\n")
 
         # Explicitly log important hyperparameters to wandb
@@ -301,6 +327,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                     "cross_attention_dim": self.hparams.cross_attention_dim,
                     "lambda_generative": self.lambda_generative,
                     "lambda_geometric": self.lambda_geometric,
+                    "is_h100": self.is_h100,
                 })
 
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
@@ -900,6 +927,25 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         return save_path
 
+
+def is_h100_gpu() -> bool:
+    """
+    Detect if any available GPU is an H100.
+
+    Returns:
+        True if at least one H100 GPU is detected, False otherwise.
+    """
+    if not torch.cuda.is_available():
+        return False
+
+    for i in range(torch.cuda.device_count()):
+        device_name = torch.cuda.get_device_name(i).lower()
+        if 'h100' in device_name:
+            return True
+
+    return False
+
+
 if __name__ == "__main__":
     # Set up snapshot + tee logging before anything else in main runs
 
@@ -916,7 +962,22 @@ if __name__ == "__main__":
     lambda_generative = 1
     lambda_geometric = 7.5e-4 # 0.075, 0.3, 0.0075=7.5e-3, 0.00075=7.5e-4 -- >
 
+    # Detect H100 for custom logic
+    is_h100 = is_h100_gpu()
+
+    # Set default values
     batch_size = 64
+    precision_setting = "16-mixed"
+    lr = 1e-4
+
+    # Override with H100-specific settings if detected
+    if is_h100:
+        print("H100 GPU detected - applying H100-specific settings")
+        batch_size = 64  # in the future try changing to 256
+        precision_setting = 'bf16-mixed'
+        lr = 1e-4
+        print(f"  Using batch_size={batch_size}, precision={precision_setting}")
+
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
     train_dataset = HSCLegacyTripletDatasetZoom(
@@ -960,7 +1021,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
         # batch_sampler=train_batch_sampler,  # important: use batch_sampler, not batch_size/shuffle
         shuffle=True,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         collate_fn=custom_collate_fn,  # Use same collate function
     )
@@ -970,7 +1031,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
         # batch_sampler=val_batch_sampler,  # important: use batch_sampler, not batch_size/shuffle
         shuffle=True,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         collate_fn=custom_collate_fn,  # Use same collate function
     )
@@ -983,10 +1044,10 @@ if __name__ == "__main__":
         image_size=48,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
-        cross_attention_dim=64,
+        cross_attention_dim=8,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
-        lr=1e-4,
+        lr=lr,
         num_sample_images=10,
         num_mse_images=32,
         num_integration_steps=250,
@@ -997,12 +1058,20 @@ if __name__ == "__main__":
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-zdim64-zoom-geom-l0p0075"
+        name="double-encoder-resnet18-triplet-zdim8-zoom-geom-7p5e-4"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
         log_model=False,
     )
+
+    # Log batch_size and precision_setting to wandb config
+    if wandb_logger.experiment:
+        wandb_logger.experiment.config.update({
+            "batch_size": batch_size,
+            "precision": precision_setting,
+            "is_h100": is_h100,
+        })
 
     # Checkpoint callback for best model (based on validation loss)
     best_checkpoint = ModelCheckpoint(
@@ -1027,8 +1096,9 @@ if __name__ == "__main__":
         logger=wandb_logger,
         accelerator="auto",
         devices=n_devices,
+        strategy="ddp_find_unused_parameters_true",  # Required when lambda_generative=0 (UNet/encoder_2 unused)
         log_every_n_steps=10,
-        precision="16-mixed",
+        precision=precision_setting,  # Use H100-specific precision if detected
         val_check_interval=1000,
         check_val_every_n_epoch=None,
         callbacks=[best_checkpoint, periodic_checkpoint],
