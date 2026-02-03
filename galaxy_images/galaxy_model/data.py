@@ -18,7 +18,10 @@ from torch.utils.data._utils.collate import default_collate
 NORM_DICT = {
     'hsc': [0.022, 0.05],
     'legacy': [0.023, 0.063],
-    'legacy_zoom': [0.045, 0.078]
+    'legacy_zoom': [0.045, 0.078],
+    'hsc96': [0.00897, 0.0312],
+    'legacy96': [0.0108, 0.050],
+    'legacy96_zoom': [0.0173, 0.053],
 }
 
 
@@ -28,6 +31,22 @@ NORM_DICT = {
 # After zoom  - Mean: 0.044522, Std: 0.077894
 # Mean change: 0.020075
 # Std change:  0.012059
+
+# For 96x96 images - based on 10k examples '/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5'
+# 'hsc96': [0.00897, 0.0312]
+# 'legacy96': [0.0108, 0.050]
+# 'legacy96_zoom': [0.0173, 0.053]
+
+#Maybe should change to per channel normalization
+# === BEFORE ZOOM ===
+# HSC Images 96x96 Mean (per channel): [0.004292047116905451, 0.007768720388412476, 0.010728799737989902, 0.013123715296387672]
+# HSC Images 96x96 Std (per channel): [0.01780957169830799, 0.027371028438210487, 0.03468557074666023, 0.03976300731301308]
+# Legacy Images 96x96 Mean (per channel): [0.005523075349628925, 0.009824461303651333, 0.013055658899247646, 0.014965437352657318]
+# Legacy Images 96x96 Std (per channel): [0.026880666613578796, 0.0409843772649765, 0.053803086280822754, 0.06831938773393631]
+
+# === AFTER ZOOM ===
+# Legacy Images 96x96 (zoomed) Mean (per channel): [0.008737790398299694, 0.01580115407705307, 0.020881297066807747, 0.02388158068060875]
+# Legacy Images 96x96 (zoomed) Std (per channel): [0.030721960589289665, 0.04676024243235588, 0.05805562436580658, 0.06820148229598999]
 
 
 class HSCLegacyDataset(Dataset):
@@ -82,6 +101,7 @@ class HSCLegacyDatasetZoom(Dataset):
         hdf5_path: str,
         norm_dict: dict = NORM_DICT,
         idx_list: list = None,
+        is96: bool = False,
     ):
         hdf5_path = Path(hdf5_path)
         if not hdf5_path.exists():
@@ -90,6 +110,7 @@ class HSCLegacyDatasetZoom(Dataset):
         self.norm_dict = norm_dict
         self.idx_list = idx_list
         self.num_images = len(idx_list) if idx_list is not None else None
+        self.is96 = is96
 
         with h5py.File(hdf5_path, 'r') as f:
             total_images = f.attrs['num_images']
@@ -116,11 +137,19 @@ class HSCLegacyDatasetZoom(Dataset):
             raise IndexError(f"Index {idx} out of range [0, {self.num_images})")
         hsc_image = self.hsc_images[idx]
         legacy_image = self.legacy_images[idx]
-        mean_hsc, std_hsc = self.norm_dict['hsc']
+
+        if self.is96:
+            mean_hsc, std_hsc = self.norm_dict['hsc96']
+        else:
+            mean_hsc, std_hsc = self.norm_dict['hsc']
         hsc_image = (hsc_image - mean_hsc) / std_hsc
+
         # Zoom legacy image and normalize with legacy_zoom stats
         legacy_image = zoom_legacy_image(legacy_image)
-        mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy_zoom']
+        if self.is96:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy96_zoom']
+        else:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy_zoom']
         legacy_image = (legacy_image - mean_legacy_zoom) / std_legacy_zoom
         return hsc_image, legacy_image
 
@@ -263,6 +292,7 @@ class HSCLegacyTripletDatasetZoom(Dataset):
         norm_dict: dict = NORM_DICT,
         idx_list: list = None,
         deterministic_anchor_survey: bool = False,
+        is96: bool = False,
     ):
 
         hdf5_path = Path(hdf5_path)
@@ -273,6 +303,7 @@ class HSCLegacyTripletDatasetZoom(Dataset):
         self.idx_list = idx_list
         self.deterministic_anchor_survey = deterministic_anchor_survey
         self.num_images = len(idx_list) if idx_list is not None else None
+        self.is96 = is96
 
         with h5py.File(hdf5_path, 'r') as f:
             total_images = f.attrs['num_images']
@@ -322,10 +353,18 @@ class HSCLegacyTripletDatasetZoom(Dataset):
             raise IndexError(f"Index {idx} out of range [0, {self.num_images})")
         hsc_image = self.hsc_images[idx]
         legacy_image = self.legacy_images[idx]
-        mean_hsc, std_hsc = self.norm_dict['hsc']
+
+        if self.is96:
+            mean_hsc, std_hsc = self.norm_dict['hsc96']
+        else:
+            mean_hsc, std_hsc = self.norm_dict['hsc']
+
         hsc_image = (hsc_image - mean_hsc) / std_hsc
         # mean_legacy, std_legacy = self.norm_dict['legacy']
-        mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy_zoom']
+        if self.is96:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy96_zoom']
+        else:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy_zoom']
         # legacy_image = (legacy_image - mean_legacy) / std_legacy
         legacy_image = zoom_legacy_image(legacy_image)
         legacy_image = (legacy_image - mean_legacy_zoom) / std_legacy_zoom
