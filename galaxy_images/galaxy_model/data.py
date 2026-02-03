@@ -432,6 +432,122 @@ class HSCLegacyTripletDatasetZoom(Dataset):
         return anchor_image, same_galaxy, same_instrument, metadata
 
 
+class HSCLegacyTripletDatasetMask(Dataset):
+    def __init__(
+        self,
+        hdf5_path: str,
+        norm_dict: dict = NORM_DICT,
+        idx_list: list = None,
+        deterministic_anchor_survey: bool = False,
+        is96: bool = True,
+    ):
+
+        hdf5_path = Path(hdf5_path)
+        if not hdf5_path.exists():
+            raise FileNotFoundError(f"HDF5 file not found:{hdf5_path}")
+        self.hdf5_path = hdf5_path
+        self.norm_dict = norm_dict
+        self.idx_list = idx_list
+        self.deterministic_anchor_survey = deterministic_anchor_survey
+        self.num_images = len(idx_list) if idx_list is not None else None
+        self.is96 = is96
+
+        with h5py.File(hdf5_path, 'r') as f:
+            total_images = f.attrs['num_images']
+            self.crop_size = f.attrs['crop_size']
+            self.num_channels = f.attrs['num_channels']
+            if self.idx_list is not None:
+                self.hsc_images = torch.from_numpy(f['hsc_images'][self.idx_list]).float()
+                self.legacy_images = torch.from_numpy(f['legacy_images'][self.idx_list]).float()
+            else:
+                self.hsc_images = torch.from_numpy(f['hsc_images'][:total_images]).float()
+                self.legacy_images = torch.from_numpy(f['legacy_images'][:total_images]).float()
+        if self.idx_list is None:
+            self.num_images = total_images
+        print(f"Loaded {self.num_images} images into memory, "
+        f"shape: ({self.num_images}, {self.num_channels}, {self.crop_size}, {self.crop_size})")
+        print(f"Memory usage: ~{2 * self.hsc_images.numel() * 4 / (1024**3):.3f} GB")
+
+    def __len__(self):
+
+        return self.num_images
+
+    def __getitem__(self, idx):
+        """
+        Returns an example with anchor image, same galaxy on the other instrument, and the anchor image with center masked.
+
+        Args:
+            idx: Either an int (dataset index) or a tuple (idx, anchor_survey) when using BalancedAnchorBatchSampler.
+                 If tuple, anchor_survey will be used instead of random choice.
+
+        Returns:
+            tuple: (anchor_image, same_galaxy, same_instrument, metadata)
+                - anchor_image: torch.Tensor, shape (C, H, W) - normalized anchor image
+                - same_galaxy: torch.Tensor, shape (C, H, W) - same galaxy from other instrument, normalized
+                - same_instrument: torch.Tensor, shape (C, H, W) - anchor image with center 32x32 pixels masked (set to 0)
+                - metadata: dict with keys:
+                    - 'anchor_survey': str, either 'hsc' or 'legacy'
+                    - 'idx': int, the dataset index used
+                    - 'num_same_instrument': int, always 1 for this dataset
+        """
+        # Handle tuple from BalancedAnchorBatchSampler: (idx, anchor_survey)
+        if isinstance(idx, tuple):
+            idx, anchor_survey = idx
+        else:
+            anchor_survey = None  # Will be randomly chosen below
+
+        if idx < 0 or idx >= self.num_images:
+            raise IndexError(f"Index {idx} out of range [0, {self.num_images})")
+        hsc_image = self.hsc_images[idx]
+        legacy_image = self.legacy_images[idx]
+
+        # Normalize HSC image
+        if self.is96:
+            mean_hsc, std_hsc = self.norm_dict['hsc96']
+        else:
+            mean_hsc, std_hsc = self.norm_dict['hsc']
+        hsc_image = (hsc_image - mean_hsc) / std_hsc
+
+        # Zoom and normalize legacy image
+        if self.is96:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy96_zoom']
+        else:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy_zoom']
+        legacy_image = zoom_legacy_image(legacy_image)
+        legacy_image = (legacy_image - mean_legacy_zoom) / std_legacy_zoom
+
+        # Use provided anchor_survey or choose deterministically/randomly
+        if anchor_survey is None:
+            if self.deterministic_anchor_survey:
+                # Deterministic assignment: even idx -> 'hsc', odd idx -> 'legacy'
+                anchor_survey = 'hsc' if idx % 2 == 0 else 'legacy'
+            else:
+                anchor_survey = random.choice(['hsc', 'legacy'])
+
+        anchor_image = None
+        same_galaxy = None
+        same_instrument = None
+
+        if anchor_survey == 'hsc':
+            anchor_image = hsc_image
+            same_galaxy = legacy_image
+            same_instrument = center_mask(anchor_image)
+
+        elif anchor_survey == 'legacy':
+            anchor_image = legacy_image
+            same_galaxy = hsc_image
+            same_instrument = center_mask(anchor_image)
+
+
+        # Metadata dictionary for debugging, analysis, and logging
+        metadata = {
+            'anchor_survey': anchor_survey,
+            'idx': idx,
+            'num_same_instrument': 1,
+        }
+
+        return anchor_image, same_galaxy, same_instrument, metadata
+
 
 
 class BalancedAnchorBatchSampler(Sampler):
@@ -514,6 +630,37 @@ def center_crop(image, crop_size: int=30):
     return image[
         :, :, start_y : start_y + crop_size, start_x : start_x + crop_size
     ]
+
+
+def center_mask(image, mask_size: int=32):
+    """
+    Masks the center region of an image by setting pixels to 0.
+
+    Args:
+        image: torch.Tensor, shape (C, H, W) or (N, C, H, W)
+        mask_size: int, size of the square mask (default: 32)
+
+    Returns:
+        torch.Tensor with same shape as input, with center region masked (set to 0)
+    """
+    # Handle both 3D (C, H, W) and 4D (N, C, H, W) inputs
+    is_3d = len(image.shape) == 3
+    if is_3d:
+        image = image.unsqueeze(0)  # Add batch dimension
+
+    _, _, height, width = image.shape
+    start_x = (width - mask_size) // 2
+    start_y = (height - mask_size) // 2
+
+    # Create a copy to avoid modifying the original
+    masked_image = image.clone()
+    masked_image[:, :, start_y : start_y + mask_size, start_x : start_x + mask_size] = 0
+
+    if is_3d:
+        masked_image = masked_image.squeeze(0)  # Remove batch dimension
+
+    return masked_image
+
 def zoom_legacy_image(leg_im: torch.Tensor, factor = 0.64) -> torch.Tensor:
     """
     Zoom in the legacy images to have the same FoV as HSC
