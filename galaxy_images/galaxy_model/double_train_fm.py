@@ -969,26 +969,52 @@ if __name__ == "__main__":
     batch_size = 64
     precision_setting = "16-mixed"
     lr = 1e-4
+    num_steps = 300_000
+    is96 = True
 
     # Override with H100-specific settings if detected
     if is_h100:
+        # print("H100 GPU detected - applying H100-specific settings")
+        # batch_size = 64  # in the future try changing to 256
+        # precision_setting = 'bf16-mixed'
+        # lr = 1e-4
+        # print(f"  Using batch_size={batch_size}, precision={precision_setting}")
         print("H100 GPU detected - applying H100-specific settings")
-        batch_size = 64  # in the future try changing to 256
+        multiplier = 1
+        batch_size = 64 * multiplier  # in the future try changing to 256
         precision_setting = 'bf16-mixed'
-        lr = 1e-4
-        print(f"  Using batch_size={batch_size}, precision={precision_setting}")
+        lr = 1e-4 * multiplier
+        num_steps = 300_000 / multiplier
+
+        print(f"  Using batch_size={batch_size}, precision={precision_setting}, num_steps={num_steps}")
 
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
-    train_dataset = HSCLegacyTripletDatasetZoom(
-        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
-        idx_list=list(range(95_000)),
-    )
-    val_dataset = HSCLegacyTripletDatasetZoom(
-        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
-        idx_list=list(range(95_000, 100_000)),
-        deterministic_anchor_survey=True,  # Make validation batches consistent
-    )
+
+
+
+    if not is96:
+        train_dataset = HSCLegacyTripletDatasetZoom(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+            idx_list=list(range(95_000)),
+        )
+        val_dataset = HSCLegacyTripletDatasetZoom(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+            idx_list=list(range(95_000, 100_000)),
+            deterministic_anchor_survey=True,  # Make validation batches consistent
+        )
+    else:
+        train_dataset = HSCLegacyTripletDatasetZoom(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5', #10280
+            idx_list=list(range(9_252)),
+            is96=True,  # Use 96x96 normalization values
+        )
+        val_dataset = HSCLegacyTripletDatasetZoom(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5',
+            idx_list=list(range(9_252, 10_280)),
+            deterministic_anchor_survey=True,  # Make validation batches consistent
+            is96=True,  # Use 96x96 normalization values
+        )
 
     # train_dataset = HSCLegacyTripletDatasetZoom(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
@@ -1038,13 +1064,15 @@ if __name__ == "__main__":
 
 
     concat_conditioning = False
+    # Set image_size based on is96 flag
+    image_size = 96 if is96 else 48
     model = ConditionalFlowMatchingModule(
         in_channels=4,
         cond_channels=4,
-        image_size=48,
+        image_size=image_size,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
-        cross_attention_dim=8,
+        cross_attention_dim=16,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
         lr=lr,
@@ -1058,7 +1086,7 @@ if __name__ == "__main__":
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-zdim8-zoom-geom-7p5e-4"
+        name="double-encoder-resnet18-triplet-zdim16-zoom-geom-7p5e-4"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
@@ -1092,7 +1120,7 @@ if __name__ == "__main__":
 
     n_devices = 4
     trainer = pl.Trainer(
-        max_steps=300_000/n_devices,
+        max_steps=num_steps/n_devices,
         logger=wandb_logger,
         accelerator="auto",
         devices=n_devices,
