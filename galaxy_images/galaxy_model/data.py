@@ -55,7 +55,7 @@ NORM_DICT = {
 
 
 # For lenses
-lense_indices = [3199, 3298, 4368, 4556, 8357, 9503, 19076, 20869, 26247, 40506, 51839, 53037, 60565, 60980, 64245, 72326, 74053, 77857, 99695]
+# lense_indices = [3199, 3298, 4368, 4556, 8357, 9503, 19076, 20869, 26247, 40506, 51839, 53037, 60565, 60980, 64245, 72326, 74053, 77857, 99695]
 
 
 class HSCLegacyDataset(Dataset):
@@ -448,7 +448,7 @@ class HSCLegacyTripletDatasetZoomLenses(Dataset):
         norm_dict: dict = NORM_DICT,
         idx_list: list = None,
         is96: bool = False,
-        lense_indices: list = lense_indices,
+        lense_indices: list = None,
     ):
 
         hdf5_path = Path(hdf5_path)
@@ -954,7 +954,9 @@ if __name__ == "__main__":
     #     batch_size=1000,
     # )
 
-    neighbors_path = "/data/vision/billf/scratch/pablomer/data/test_neighbours.h5"
+    # neighbors_path = "/data/vision/billf/scratch/pablomer/data/test_neighbours.h5"
+    # neighbors_path = "/data/vision/billf/scratch/pablomer/data/test_neighbours_v2.h5"
+    neighbors_path = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
 
     with h5py.File(neighbors_path, 'r') as f:
         print(f.keys())
