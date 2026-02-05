@@ -14,6 +14,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import geomloss
 import umap
+import numpy as np
 
 
 
@@ -339,6 +340,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                     "is_h100": self.is_h100,
                 })
 
+        # Cache lens batch from second val dataloader when present (for 48x48 lens validation)
+        val_loaders = getattr(self.trainer, 'val_dataloaders', None)
+        if val_loaders is not None and len(val_loaders) > 1:
+            self._lense_batch = next(iter(val_loaders[1]))
+            self._lense_batch_size = self._lense_batch[0].shape[0]
+        else:
+            self._lense_batch = None
+            self._lense_batch_size = 0
+
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
         self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
@@ -404,7 +414,17 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             print(f"Total steps: {self.global_step}")
             print(f"{'='*60}\n")
 
-    def validation_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
+    def validation_step(self, batch: tuple, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+        # Second dataloader (dataloader_idx=1) is the lens batch: only cache for row-scaled plot
+        if dataloader_idx == 1:
+            anchor_image, same_galaxy, same_instrument, metadata = batch
+            self._val_lens_anchor_batch = anchor_image.clone()
+            self._val_lens_samegal_batch = same_galaxy.clone()
+            self._val_lens_sameins_batch = same_instrument.clone()
+            loss = self.compute_loss(batch)
+            self.log("val/loss_lenses", loss, prog_bar=False, on_epoch=True, sync_dist=True)
+            return loss
+
         loss = self.compute_loss(batch)
         self.log("val/loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
 
@@ -712,6 +732,153 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         plt.close(fig_orig)
         plt.close(fig_row)
 
+        # Lens batch: extra row-scaled validation plot (when lens dataloader was used)
+        if hasattr(self, '_val_lens_anchor_batch') and hasattr(self, '_val_lens_samegal_batch') and hasattr(self, '_val_lens_sameins_batch'):
+            num_lens = min(6, len(self._val_lens_anchor_batch))
+            num_samples_per_cond = 5
+            num_cols = 3 + num_samples_per_cond + 1
+            col_titles = ["SameGal", "SameIns (1st)", "Target"] + [f"Sample {j+1}" for j in range(num_samples_per_cond)] + ["Mean"]
+
+            fig_lens, axes_lens = plt.subplots(
+                num_lens, num_cols,
+                figsize=(2 * num_cols, 2 * num_lens),
+                squeeze=False,
+            )
+            for j, title in enumerate(col_titles):
+                axes_lens[0, j].set_title(title, fontsize=10)
+
+            def _row_scale_rgb_lens(x_chw, vmin, vmax):
+                x = x_chw[:3]
+                vmin_t = torch.as_tensor(vmin, device=x.device, dtype=x.dtype).view(3, 1, 1)
+                vmax_t = torch.as_tensor(vmax, device=x.device, dtype=x.dtype).view(3, 1, 1)
+                y = (x - vmin_t) / (vmax_t - vmin_t + 1e-8)
+                y = y.clamp(0, 1)
+                return y.permute(1, 2, 0)
+
+            for i in range(num_lens):
+                samegal = self._val_lens_samegal_batch[i : i + 1].to(self.device)
+                target = self._val_lens_anchor_batch[i : i + 1].to(self.device)
+                sameins = self._val_lens_sameins_batch[i : i + 1].to(self.device)
+                sameins_first = sameins[:, 0:1]
+
+                samegal_repeated = samegal.repeat(num_samples_per_cond, 1, 1, 1)
+                sameins_repeated = sameins.repeat(num_samples_per_cond, 1, 1, 1, 1)
+                samples = self.sample(samegal_repeated, sameins_repeated)
+                mean_sample = samples.mean(dim=0, keepdim=True)
+
+                target_chw = target[0, :3]
+                vmin = target_chw.amin(dim=(1, 2))
+                vmax = target_chw.amax(dim=(1, 2))
+
+                samegal_vis = _row_scale_rgb_lens(samegal[0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, 0].imshow(samegal_vis)
+                axes_lens[i, 0].axis("off")
+                sameins_first_vis = _row_scale_rgb_lens(sameins_first[0, 0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, 1].imshow(sameins_first_vis)
+                axes_lens[i, 1].axis("off")
+                target_vis = _row_scale_rgb_lens(target[0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, 2].imshow(target_vis)
+                axes_lens[i, 2].axis("off")
+                for j in range(num_samples_per_cond):
+                    samp_vis = _row_scale_rgb_lens(samples[j, :3], vmin, vmax).detach().cpu().numpy()
+                    axes_lens[i, 3 + j].imshow(samp_vis)
+                    axes_lens[i, 3 + j].axis("off")
+                mean_vis = _row_scale_rgb_lens(mean_sample[0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, -1].imshow(mean_vis)
+                axes_lens[i, -1].axis("off")
+
+            plt.figure(fig_lens.number)
+            plt.tight_layout()
+            self.logger.experiment.log({
+                "val/sample_grid_row_scaled_lenses": wandb.Image(fig_lens),
+                "global_step": self.global_step,
+            })
+            plt.close(fig_lens)
+
+            # Lens triple comparison: Target | Sample | Legacy (same style as lenses_indeces.ipynb)
+            # 3 rows (Target HSC, Sample, Legacy samegal), 5 cols (4 bands + RGB), PercentileInterval + AsinhStretch
+            try:
+                from astropy.visualization import ImageNormalize, PercentileInterval, AsinhStretch
+
+                def _normed_imshow_lens(ax, data2d, interval_obj, stretch_obj, title=None):
+                    data = np.asarray(data2d, dtype=np.float32)
+                    mask = np.isfinite(data)
+                    if not np.any(mask):
+                        ax.axis("off")
+                        return
+                    vmin, vmax = interval_obj.get_limits(data[mask])
+                    norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch_obj, clip=True)
+                    ax.imshow(data, origin="lower", norm=norm, cmap="magma")
+                    if title:
+                        ax.set_title(title, fontsize=9, fontweight="bold")
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+
+                def make_rgb_lens(img, r, g, b, interval_obj, stretch_obj):
+                    # img (C, H, W)
+                    channels_available = img.shape[0]
+                    r, g, b = [min(x, channels_available - 1) for x in [r, g, b]]
+                    rgb = np.stack([img[r], img[g], img[b]], axis=-1).astype(np.float32)
+                    out = np.zeros_like(rgb)
+                    for k in range(3):
+                        ch = rgb[..., k]
+                        mask = np.isfinite(ch)
+                        if not np.any(mask):
+                            continue
+                        vmin, vmax = interval_obj.get_limits(ch[mask])
+                        norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch_obj, clip=True)
+                        out[..., k] = norm(ch)
+                    mx = np.nanmax(out)
+                    if mx > 0:
+                        out /= mx
+                    return np.clip(out, 0, 1)
+
+                interval_obj = PercentileInterval(99.5)
+                stretch_obj = AsinhStretch()
+                band_names = ["g", "r", "i", "z"]
+
+                # First lens: target, one sample, legacy (samegal)
+                samegal_0 = self._val_lens_samegal_batch[0:1].to(self.device)
+                target_0 = self._val_lens_anchor_batch[0:1].to(self.device)
+                sameins_0 = self._val_lens_sameins_batch[0:1].to(self.device)
+                sample_0 = self.sample(samegal_0, sameins_0)  # (1, C, H, W)
+                target_np = target_0[0].cpu().numpy()   # (C, H, W)
+                sample_np = sample_0[0].cpu().numpy()   # (C, H, W)
+                legacy_np = samegal_0[0].cpu().numpy() # (C, H, W)
+
+                fig_triple, gs = plt.subplots(3, 5, figsize=(14, 10), constrained_layout=True)
+                fig_triple.suptitle("Lens validation: Target (HSC) | Sample | Legacy (samegal)", fontsize=12, y=1.02)
+
+                # Row 0: Target
+                for c in range(4):
+                    _normed_imshow_lens(gs[0, c], target_np[c], interval_obj, stretch_obj, title=f"Target {band_names[c]}")
+                gs[0, 4].imshow(make_rgb_lens(target_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                gs[0, 4].set_title("Target RGB (irg)", fontsize=9, fontweight="bold")
+                gs[0, 4].axis("off")
+
+                # Row 1: Sample
+                for c in range(4):
+                    _normed_imshow_lens(gs[1, c], sample_np[c], interval_obj, stretch_obj, title=f"Sample {band_names[c]}")
+                gs[1, 4].imshow(make_rgb_lens(sample_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                gs[1, 4].set_title("Sample RGB (irg)", fontsize=9, fontweight="bold")
+                gs[1, 4].axis("off")
+
+                # Row 2: Legacy (samegal)
+                for c in range(4):
+                    _normed_imshow_lens(gs[2, c], legacy_np[c], interval_obj, stretch_obj, title=f"Legacy {band_names[c]}")
+                gs[2, 4].imshow(make_rgb_lens(legacy_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                gs[2, 4].set_title("Legacy RGB (irg)", fontsize=9, fontweight="bold")
+                gs[2, 4].axis("off")
+
+                self.logger.experiment.log({
+                    "val/lens_triple_target_sample_legacy": wandb.Image(fig_triple),
+                    "global_step": self.global_step,
+                })
+                plt.close(fig_triple)
+            except Exception as e:
+                if self.global_rank == 0:
+                    print(f"[Lens triple plot] Skipped (astropy or plot error): {e}")
+
         # Compute MSE metric (48x48 center = "MSE", 32x32 center = "MSE 32")
         if hasattr(self, '_val_mse_target_batch') and hasattr(self, '_val_mse_samegal_batch') and hasattr(self, '_val_mse_sameins_batch'):
             mse_start_time = time.time()
@@ -970,7 +1137,7 @@ if __name__ == "__main__":
     from pytorch_lightning.loggers import WandbLogger
     from pytorch_lightning.callbacks import ModelCheckpoint
     from torch.utils.data import DataLoader, TensorDataset
-    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn, HSCLegacyTripletDatasetZoom, HSCLegacyTripletDatasetMask
+    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn, HSCLegacyTripletDatasetZoom, HSCLegacyTripletDatasetMask, HSCLegacyTripletDatasetZoomLenses
 
     # Seed everything for reproducibility
     seed = 42  # Set to None for non-deterministic behavior
@@ -978,8 +1145,8 @@ if __name__ == "__main__":
         pl.seed_everything(seed, workers=True)
 
     lambda_generative = 1
-    # lambda_geometric = 7.5e-4 # 0.075, 0.3, 0.0075=7.5e-3, 0.00075=7.5e-4 -- >
-    lambda_geometric = 0
+    lambda_geometric = 7.5e-4 # 0.075, 0.3, 0.0075=7.5e-3, 0.00075=7.5e-4 -- >
+    # lambda_geometric = 0
 
     # Detect H100 for custom logic
     is_h100 = is_h100_gpu()
@@ -1011,9 +1178,7 @@ if __name__ == "__main__":
 
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
-
-
-
+    lense_dataset = None
     if image_size == 48:
         print("Not masking center and using 48x48 images")
         train_dataset = HSCLegacyTripletDatasetZoom(
@@ -1025,6 +1190,12 @@ if __name__ == "__main__":
             hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
             idx_list=list(range(95_000, 100_000)),
             deterministic_anchor_survey=True,  # Make validation batches consistent
+            is96=False,
+        )
+        lense_indices = [3199, 3298, 4368, 4556, 8357, 9503, 19076, 20869, 26247, 40506, 51839, 53037, 60565, 60980, 64245, 72326, 74053, 77857, 99695]
+        lense_dataset = HSCLegacyTripletDatasetZoomLenses(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+            lense_indices=lense_indices,
             is96=False,
         )
 
@@ -1148,6 +1319,18 @@ if __name__ == "__main__":
         collate_fn=custom_collate_fn,  # Use same collate function
     )
 
+    if lense_dataset is not None:
+        lense_loader = DataLoader(
+            lense_dataset,
+            batch_size=19,
+            shuffle=False,
+            num_workers=8,
+            pin_memory=True,
+            collate_fn=custom_collate_fn,
+        )
+        val_loaders = [val_loader, lense_loader]
+    else:
+        val_loaders = val_loader
 
     concat_conditioning = False
     model = ConditionalFlowMatchingModule(
@@ -1186,12 +1369,14 @@ if __name__ == "__main__":
             "is_h100": is_h100,
         })
 
-    # Checkpoint callback for best model (based on validation loss)
+    # Checkpoint callback for best model (based on validation loss).
+    # With multiple val dataloaders (e.g. main + lens), Lightning suffixes keys: val/loss -> val/loss/dataloader_idx_0
+    val_loss_monitor = "val/loss/dataloader_idx_0" if lense_dataset is not None else "val/loss"
     best_checkpoint = ModelCheckpoint(
-        monitor="val/loss",
+        monitor=val_loss_monitor,
         mode="min",
         save_top_k=1,
-        filename="best-epoch={epoch:02d}-step={step}-val_loss={val/loss:.4f}",
+        filename="best-epoch={epoch:02d}-step={step}",
         auto_insert_metric_name=False,
     )
 
@@ -1217,4 +1402,4 @@ if __name__ == "__main__":
         callbacks=[best_checkpoint, periodic_checkpoint],
     )
 
-    trainer.fit(model, train_loader, val_loader)
+    trainer.fit(model, train_loader, val_loaders)
