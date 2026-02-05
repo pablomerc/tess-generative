@@ -115,6 +115,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         lambda_generative: float = 1.0, # weight for generative loss
         lambda_geometric: float = 0.3, # weight for geometric loss
         num_umap_batches: int = 8, # number of validation batches to collect for UMAP visualization
+        mask_center: bool = False, # if true -> mask the center of the image
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -130,6 +131,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.lambda_generative = lambda_generative
         self.lambda_geometric = lambda_geometric
         self.num_umap_batches = num_umap_batches
+        self.mask_center = mask_center
 
         # Detect H100 GPU
         self.is_h100 = is_h100_gpu()
@@ -244,7 +246,14 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
             predicted_velocity = self(x_t, t, cond_image_samegal, cond_image_sameins)
 
-            loss = nn.functional.mse_loss(predicted_velocity, target_velocity, reduction='none')
+            if self.mask_center:
+                mask_size = 48
+                _, _, height, width = predicted_velocity.shape
+                start_x = (width - mask_size) // 2
+                start_y = (height - mask_size) // 2
+                loss = nn.functional.mse_loss(predicted_velocity[:, :, start_y:start_y+mask_size, start_x:start_x+mask_size], target_velocity[:, :, start_y:start_y+mask_size, start_x:start_x+mask_size], reduction='none')
+            else:
+                loss = nn.functional.mse_loss(predicted_velocity, target_velocity, reduction='none')
 
             # Reduce to per-example losses: (B, C, H, W) -> (B,)
             per_example_loss = loss.mean(dim=(1, 2, 3))
@@ -500,48 +509,55 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         return x
 
     @torch.no_grad()
-    def compute_mse(self, target_image, cond_image_samegal, cond_image_sameins, metadata=None):
-        '''Compute reconstruction MSE on a batch of given images
+    def compute_mse(self, target_image, cond_image_samegal, cond_image_sameins, metadata=None, mask_sizes=(48, 32)):
+        '''Compute reconstruction MSE on a batch of given images for one or more center crop sizes.
         Args:
             target_image (B,C,H,W)
             cond_image_samegal (B,C,H,W)
             cond_image_sameins (B,k,C,H,W)
             metadata: Optional list of metadata dicts for HSC/Legacy separation
+            mask_sizes: Tuple of center crop sizes for MSE (default 48 and 32).
         Returns:
-            mse_total: Total MSE across all samples
-            mse_hsc: MSE for HSC samples (if metadata provided and HSC samples exist)
-            mse_legacy: MSE for Legacy samples (if metadata provided and Legacy samples exist)
+            mse_by_size: Dict mapping mask size (int) -> total MSE over that center crop
+            mse_hsc: MSE for HSC samples with first mask size (if metadata provided and HSC samples exist)
+            mse_legacy: MSE for Legacy samples with first mask size (if metadata provided and Legacy samples exist)
         '''
         samples = self.sample(cond_image_samegal, cond_image_sameins)
-
         diff = target_image - samples
-        mse_total = torch.mean(diff**2)
+        _, _, height, width = diff.shape
+        device = diff.device
+
+        mse_by_size = {}
+        for mask_size in mask_sizes:
+            start_x = (width - mask_size) // 2
+            start_y = (height - mask_size) // 2
+            diff_crop = diff[:, :, start_y:start_y+mask_size, start_x:start_x+mask_size]
+            mse_by_size[mask_size] = torch.mean(diff_crop**2)
+
+        # HSC/Legacy breakdown using first mask size (e.g. 48)
+        primary_mask_size = mask_sizes[0]
+        start_x = (width - primary_mask_size) // 2
+        start_y = (height - primary_mask_size) // 2
+        diff_primary = diff[:, :, start_y:start_y+primary_mask_size, start_x:start_x+primary_mask_size]
 
         mse_hsc = None
         mse_legacy = None
-
         if metadata is not None:
-            # Extract anchor_survey from metadata and compute separate MSEs
             anchor_surveys = [m['anchor_survey'] for m in metadata]
-            device = diff.device
             hsc_mask = torch.tensor([s == 'hsc' for s in anchor_surveys], device=device)
             legacy_mask = torch.tensor([s == 'legacy' for s in anchor_surveys], device=device)
 
-            # Compute MSE for HSC samples
             if hsc_mask.any():
-                diff_hsc = diff[hsc_mask]
-                mse_hsc = torch.mean(diff_hsc**2)
+                mse_hsc = torch.mean(diff_primary[hsc_mask]**2)
             else:
                 mse_hsc = torch.tensor(float('nan'), device=device)
 
-            # Compute MSE for Legacy samples
             if legacy_mask.any():
-                diff_legacy = diff[legacy_mask]
-                mse_legacy = torch.mean(diff_legacy**2)
+                mse_legacy = torch.mean(diff_primary[legacy_mask]**2)
             else:
                 mse_legacy = torch.tensor(float('nan'), device=device)
 
-        return mse_total, mse_hsc, mse_legacy
+        return mse_by_size, mse_hsc, mse_legacy
 
     def _normalize_for_vis(self, img: torch.Tensor) -> torch.Tensor:
         """Normalize image to [0, 1] for visualization."""
@@ -696,14 +712,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         plt.close(fig_orig)
         plt.close(fig_row)
 
-        # Compute MSE metric
+        # Compute MSE metric (48x48 center = "MSE", 32x32 center = "MSE 32")
         if hasattr(self, '_val_mse_target_batch') and hasattr(self, '_val_mse_samegal_batch') and hasattr(self, '_val_mse_sameins_batch'):
             mse_start_time = time.time()
-            mse_total, mse_hsc, mse_legacy = self.compute_mse(
+            mse_by_size, mse_hsc, mse_legacy = self.compute_mse(
                 self._val_mse_target_batch.to(self.device),
                 self._val_mse_samegal_batch.to(self.device),
                 self._val_mse_sameins_batch.to(self.device),
-                self._val_mse_metadata
+                self._val_mse_metadata,
+                mask_sizes=(48, 32),
             )
             mse_time = time.time() - mse_start_time
 
@@ -712,7 +729,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 print(f"[MSE metric] Computation took {mse_time:.2f} seconds")
                 self._mse_timing_logged = True
 
-            self.log("val/mse", mse_total, sync_dist=True)
+            self.log("val/mse", mse_by_size[48], sync_dist=True)
+            self.log("val/mse_32", mse_by_size[32], sync_dist=True)
             if mse_hsc is not None:
                 self.log("val/mse_hsc", mse_hsc, sync_dist=True)
             if mse_legacy is not None:
@@ -952,7 +970,7 @@ if __name__ == "__main__":
     from pytorch_lightning.loggers import WandbLogger
     from pytorch_lightning.callbacks import ModelCheckpoint
     from torch.utils.data import DataLoader, TensorDataset
-    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn, HSCLegacyTripletDatasetZoom
+    from data import HSCLegacyTripletDataset, BalancedAnchorBatchSampler, custom_collate_fn, HSCLegacyTripletDatasetZoom, HSCLegacyTripletDatasetMask
 
     # Seed everything for reproducibility
     seed = 42  # Set to None for non-deterministic behavior
@@ -960,17 +978,20 @@ if __name__ == "__main__":
         pl.seed_everything(seed, workers=True)
 
     lambda_generative = 1
-    lambda_geometric = 7.5e-4 # 0.075, 0.3, 0.0075=7.5e-3, 0.00075=7.5e-4 -- >
+    # lambda_geometric = 7.5e-4 # 0.075, 0.3, 0.0075=7.5e-3, 0.00075=7.5e-4 -- >
+    lambda_geometric = 0
 
     # Detect H100 for custom logic
     is_h100 = is_h100_gpu()
 
     # Set default values
-    batch_size = 64
+    batch_size = 32
     precision_setting = "16-mixed"
     lr = 1e-4
     num_steps = 300_000
-    is96 = True
+    # image_size: 48 (default 48x48 behavior), 96 (96x96), or 64 (to be added)
+    image_size = 48
+    mask_center = False
 
     # Override with H100-specific settings if detected
     if is_h100:
@@ -993,28 +1014,93 @@ if __name__ == "__main__":
 
 
 
-    if not is96:
+    if image_size == 48:
+        print("Not masking center and using 48x48 images")
         train_dataset = HSCLegacyTripletDatasetZoom(
             hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
             idx_list=list(range(95_000)),
+            is96=False,
         )
         val_dataset = HSCLegacyTripletDatasetZoom(
             hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
             idx_list=list(range(95_000, 100_000)),
             deterministic_anchor_survey=True,  # Make validation batches consistent
+            is96=False,
         )
-    else:
+
+
+    elif image_size == 64 and not mask_center:
+        print("Not masking center and using 64x64 images")
         train_dataset = HSCLegacyTripletDatasetZoom(
-            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5', #10280
-            idx_list=list(range(9_252)),
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_64x64_half.h5',
+            idx_list=list(range(50_000)),
+            is96=False,
+        )
+        val_dataset = HSCLegacyTripletDatasetZoom(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_64x64_half.h5',
+            idx_list=list(range(50_000, 51_400)),
+            deterministic_anchor_survey=True,  # Make validation batches consistent
+            is96=False,
+        )
+
+
+    elif image_size == 64 and mask_center:
+        print("Masking center and using 64x64 images")
+        train_dataset = HSCLegacyTripletDatasetMask(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_64x64_half.h5',
+            idx_list=list(range(50_000)),
+            is96=False,
+        )
+        val_dataset = HSCLegacyTripletDatasetMask(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_64x64_half.h5',
+            idx_list=list(range(50_000, 51_400)),
+            deterministic_anchor_survey=True,  # Make validation batches consistent
+            is96=False,
+        )
+
+    elif image_size == 96 and mask_center:
+        # print("Masking center and using 96x96 images")
+        # train_dataset = HSCLegacyTripletDatasetMask(
+        #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_96x96_half.h5',
+        #     idx_list=list(range(50_000)),
+        #     is96=True,
+        # )
+        # val_dataset = HSCLegacyTripletDatasetMask(
+        #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_96x96_half.h5',
+        #     idx_list=list(range(50_000, 51_400)),
+        #     deterministic_anchor_survey=True,  # Make validation batches consistent
+        #     is96=True,
+        # )
+
+        print("Masking center and using 96x96 images")
+        train_dataset = HSCLegacyTripletDatasetMask(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_96x96_half.h5',
+            idx_list=list(range(30_000)),
+            is96=True,
+        )
+        val_dataset = HSCLegacyTripletDatasetMask(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_96x96_half.h5',
+            idx_list=list(range(30_000, 32_140)),
+            deterministic_anchor_survey=True,  # Make validation batches consistent
+            is96=True,
+        )
+
+    elif image_size == 96:
+        print("Not masking center and using 96x96 images")
+        train_dataset = HSCLegacyTripletDatasetZoom(
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_96x96_half.h5', #10280
+            idx_list=list(range(50_000)),
             is96=True,  # Use 96x96 normalization values
         )
         val_dataset = HSCLegacyTripletDatasetZoom(
-            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_laptop.h5',
-            idx_list=list(range(9_252, 10_280)),
+            hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_96x96_half.h5',
+            idx_list=list(range(50_000, 51_400)),
             deterministic_anchor_survey=True,  # Make validation batches consistent
             is96=True,  # Use 96x96 normalization values
         )
+
+    else:
+        raise NotImplementedError(f"image_size={image_size} not yet implemented; use 48, 96, or add support for 64")
 
     # train_dataset = HSCLegacyTripletDatasetZoom(
     #     hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/data/preprocessed_hsc_legacy_48x48_laptop.h5',
@@ -1064,8 +1150,6 @@ if __name__ == "__main__":
 
 
     concat_conditioning = False
-    # Set image_size based on is96 flag
-    image_size = 96 if is96 else 48
     model = ConditionalFlowMatchingModule(
         in_channels=4,
         cond_channels=4,
@@ -1081,12 +1165,13 @@ if __name__ == "__main__":
         num_integration_steps=250,
         lambda_generative=lambda_generative,
         lambda_geometric=lambda_geometric,
+        mask_center=mask_center,
     )
 
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-zdim16-zoom-geom-7p5e-4"
+        name="encoder-zoom-64x64-zdim16-masked-50kimages"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
