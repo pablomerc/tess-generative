@@ -54,6 +54,10 @@ NORM_DICT = {
 # Legacy Images 96x96 (zoomed) Std (per channel): [0.030721960589289665, 0.04676024243235588, 0.05805562436580658, 0.06820148229598999]
 
 
+# For lenses
+lense_indices = [3199, 3298, 4368, 4556, 8357, 9503, 19076, 20869, 26247, 40506, 51839, 53037, 60565, 60980, 64245, 72326, 74053, 77857, 99695]
+
+
 class HSCLegacyDataset(Dataset):
     def __init__(
         self,
@@ -426,6 +430,120 @@ class HSCLegacyTripletDatasetZoom(Dataset):
             same_instrument_raw = self.legacy_images[different_indexes]
             same_instrument = zoom_legacy_image(same_instrument_raw)
             same_instrument = (same_instrument - mean_legacy_zoom) / std_legacy_zoom
+
+        # Metadata dictionary for debugging, analysis, and logging
+        metadata = {
+            'anchor_survey': anchor_survey,
+            'idx': idx,
+            'num_same_instrument': len(different_indexes),
+        }
+
+        return anchor_image, same_galaxy, same_instrument, metadata
+
+
+class HSCLegacyTripletDatasetZoomLenses(Dataset):
+    def __init__(
+        self,
+        hdf5_path: str,
+        norm_dict: dict = NORM_DICT,
+        idx_list: list = None,
+        is96: bool = False,
+        lense_indices: list = lense_indices,
+    ):
+
+        hdf5_path = Path(hdf5_path)
+        if not hdf5_path.exists():
+            raise FileNotFoundError(f"HDF5 file not found:{hdf5_path}")
+        self.hdf5_path = hdf5_path
+        self.norm_dict = norm_dict
+        self.idx_list = idx_list
+        self.is96 = is96
+        self.lense_indices = lense_indices
+        self.num_images = len(self.lense_indices)
+
+        with h5py.File(hdf5_path, 'r') as f:
+
+            total_images = f.attrs['num_images']
+            self.crop_size = f.attrs['crop_size']
+            self.num_channels = f.attrs['num_channels']
+            self.hsc_images = torch.from_numpy(f['hsc_images'][self.lense_indices]).float()
+            self.legacy_images = torch.from_numpy(f['legacy_images'][self.lense_indices]).float()
+            self.hsc_pairs = torch.from_numpy(f['hsc_images'][:256]).float()
+        print(f"Loaded {len(self.lense_indices)} lens images into memory, "
+        f"shape: ({self.num_images}, {self.num_channels}, {self.crop_size}, {self.crop_size})")
+        print(f"Memory usage: ~{2 * self.hsc_images.numel() * 4 / (1024**3):.3f} GB")
+
+    def __len__(self):
+
+        return self.num_images
+
+    def __getitem__(self, idx):
+        """
+        Returns an example with anchor image, same galaxy on the other instrument, and k examples of same instrument with different galaxies.
+
+        Args:
+            idx: Either an int (dataset index) or a tuple (idx, anchor_survey) when using BalancedAnchorBatchSampler.
+                 If tuple, anchor_survey will be used instead of random choice.
+
+        Returns:
+            tuple: (anchor_image, same_galaxy, same_instrument, metadata)
+                - anchor_image: torch.Tensor, shape (C, H, W) - normalized anchor image
+                - same_galaxy: torch.Tensor, shape (C, H, W) - same galaxy from other instrument, normalized
+                - same_instrument: torch.Tensor, shape (k, C, H, W) - k different galaxies from same instrument, normalized
+                - metadata: dict with keys:
+                    - 'anchor_survey': str, either 'hsc' or 'legacy'
+                    - 'idx': int, the dataset index used
+                    - 'num_same_instrument': int, actual number of same_instrument examples (may be < k for small datasets)
+        """
+
+        if idx < 0 or idx >= len(self.lense_indices):
+            raise IndexError(f"Index {idx} out of range [0, {len(self.lense_indices)})")
+        hsc_image = self.hsc_images[idx]
+        legacy_image = self.legacy_images[idx]
+
+        if self.is96:
+            mean_hsc, std_hsc = self.norm_dict['hsc96']
+        else:
+            mean_hsc, std_hsc = self.norm_dict['hsc']
+
+        hsc_image = (hsc_image - mean_hsc) / std_hsc
+        # mean_legacy, std_legacy = self.norm_dict['legacy']
+        if self.is96:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy96_zoom']
+        else:
+            mean_legacy_zoom, std_legacy_zoom = self.norm_dict['legacy_zoom']
+        # legacy_image = (legacy_image - mean_legacy) / std_legacy
+        legacy_image = zoom_legacy_image(legacy_image)
+        legacy_image = (legacy_image - mean_legacy_zoom) / std_legacy_zoom
+
+        # Always HSC as anchor for lens dataset
+        anchor_survey = 'hsc'
+
+        # TODO: Replace this by SNR-based matching
+        k = 5
+        different_indexes = torch.randint(0, 256, (k,))
+
+        anchor_image = None
+        same_galaxy = None
+        same_instrument = None
+
+        if anchor_survey == 'hsc':
+            anchor_image = hsc_image
+            same_galaxy = legacy_image
+
+            # Normalize same_instrument images
+            same_instrument_raw = self.hsc_pairs[different_indexes]
+            same_instrument = (same_instrument_raw - mean_hsc) / std_hsc
+
+        elif anchor_survey == 'legacy':
+            raise NotImplementedError("Legacy anchor survey is not implemented")
+        #     anchor_image = legacy_image
+        #     same_galaxy = hsc_image
+
+        #     # Zoom and normalize same_instrument images
+        #     same_instrument_raw = self.hsc_pairs[different_indexes]
+        #     same_instrument = zoom_legacy_image(same_instrument_raw)
+        #     same_instrument = (same_instrument - mean_legacy_zoom) / std_legacy_zoom
 
         # Metadata dictionary for debugging, analysis, and logging
         metadata = {
@@ -828,10 +946,15 @@ def calculate_legacy_stats_before_after_zoom(
 
 if __name__ == "__main__":
     # Default path to 48x48 dataset
-    hdf5_path = "/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5"
+    # hdf5_path = "/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5"
 
-    calculate_legacy_stats_before_after_zoom(
-        hdf5_path=hdf5_path,
-        zoom_factor=0.64,
-        batch_size=1000,
-    )
+    # calculate_legacy_stats_before_after_zoom(
+    #     hdf5_path=hdf5_path,
+    #     zoom_factor=0.64,
+    #     batch_size=1000,
+    # )
+
+    neighbors_path = "/data/vision/billf/scratch/pablomer/data/test_neighbours.h5"
+
+    with h5py.File(neighbors_path, 'r') as f:
+        print(f.keys())
