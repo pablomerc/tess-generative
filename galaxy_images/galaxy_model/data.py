@@ -22,7 +22,12 @@ NORM_DICT = {
     'hsc96': [0.00897, 0.0312],
     'legacy96': [0.0108, 0.050],
     'legacy96_zoom': [0.0173, 0.053],
+    # 'hsc64': [0.022, 0.05], # TODO: actually measure these (for now using 48x48 stats)
+    # 'legacy64': [0.023, 0.063],
+    # 'legacy64_zoom': [0.045, 0.078],
 }
+
+# Note: for now the 48x48 stats are used for 64x64 images (TODO: actually measure these)
 
 
 
@@ -484,7 +489,7 @@ class HSCLegacyTripletDatasetMask(Dataset):
             tuple: (anchor_image, same_galaxy, same_instrument, metadata)
                 - anchor_image: torch.Tensor, shape (C, H, W) - normalized anchor image
                 - same_galaxy: torch.Tensor, shape (C, H, W) - same galaxy from other instrument, normalized
-                - same_instrument: torch.Tensor, shape (C, H, W) - anchor image with center 32x32 pixels masked (set to 0)
+                - same_instrument: torch.Tensor, shape (1, C, H, W) - anchor image with center 32x32 pixels masked (set to 0)
                 - metadata: dict with keys:
                     - 'anchor_survey': str, either 'hsc' or 'legacy'
                     - 'idx': int, the dataset index used
@@ -532,11 +537,15 @@ class HSCLegacyTripletDatasetMask(Dataset):
             anchor_image = hsc_image
             same_galaxy = legacy_image
             same_instrument = center_mask(anchor_image)
+            # Add dimension to match expected shape (k, C, H, W) where k=1
+            same_instrument = same_instrument.unsqueeze(0)  # (1, C, H, W)
 
         elif anchor_survey == 'legacy':
             anchor_image = legacy_image
             same_galaxy = hsc_image
             same_instrument = center_mask(anchor_image)
+            # Add dimension to match expected shape (k, C, H, W) where k=1
+            same_instrument = same_instrument.unsqueeze(0)  # (1, C, H, W)
 
 
         # Metadata dictionary for debugging, analysis, and logging
