@@ -197,33 +197,172 @@ def collate_neighbors(batch):
     )
 
 
+
+
+### OPTION 2: Load pre-computed batches into memory
+
+
+# --- The Dataset Class ---
+class NeighborsPrecomputedDataset(Dataset):
+    def __init__(self, hdf5_path):
+        """
+        Loads the entire dataset into RAM.
+        Expects keys: 'targets', 'samegals', 'sameins', 'neighbor_masks', 'meta_idx', etc.
+        """
+        print(f"Loading {hdf5_path} into RAM...")
+        t0 = time.time()
+
+        with h5py.File(hdf5_path, 'r') as f:
+            # 1. Load Tensors
+            # We use [:] to force reading the whole dataset into a numpy array
+            print("Reading targets...")
+            self.targets = torch.from_numpy(f['targets'][:])
+
+            print("Reading samegals...")
+            self.samegals = torch.from_numpy(f['samegals'][:])
+
+            print("Reading neighbors (this is the big one)...")
+            self.sameins = torch.from_numpy(f['sameins'][:])
+
+            print("Reading masks...")
+            self.masks = torch.from_numpy(f['neighbor_masks'][:])
+
+            # 2. Load Metadata (Optional, but good to have)
+            # We keep these as numpy/list to avoid overhead of converting to tensor if they are strings
+            if 'meta_idx' in f:
+                self.meta_idx = f['meta_idx'][:]
+            else:
+                self.meta_idx = np.zeros(len(self.targets))
+
+            if 'meta_survey' in f:
+                # Decode bytes to strings if necessary
+                raw_survey = f['meta_survey'][:]
+                self.meta_survey = [x.decode('utf-8') if isinstance(x, bytes) else str(x) for x in raw_survey]
+            else:
+                self.meta_survey = ["unknown"] * len(self.targets)
+
+            if 'meta_num_same_instrument' in f:
+                self.meta_num_same = f['meta_num_same_instrument'][:]
+            else:
+                self.meta_num_same = np.zeros(len(self.targets))
+
+        # 3. Validation
+        assert len(self.targets) == len(self.sameins)
+        print(f"Loaded {len(self.targets)} samples in {time.time() - t0:.2f}s.")
+        print(f"Tensors size in RAM: ~{self.sameins.element_size() * self.sameins.numel() / 1e9:.2f} GB (just for neighbors)")
+
+    def __len__(self):
+        return len(self.targets)
+
+    def __getitem__(self, idx):
+        # Access is instant since it's just array slicing
+
+        # Reconstruct the metadata dict to match your old format
+        metadata = {
+            "idx": self.meta_idx[idx],
+            "anchor_survey": self.meta_survey[idx],
+            "num_same_instrument": self.meta_num_same[idx]
+        }
+
+        return (
+            self.targets[idx],
+            self.samegals[idx],
+            self.sameins[idx],
+            self.masks[idx],
+            metadata
+        )
+
+# --- Collate Function ---
+# Since data is ALREADY padded in the file, we don't need complex logic.
+# We just stack them.
+def simple_collate(batch):
+    targets = torch.stack([b[0] for b in batch])
+    samegals = torch.stack([b[1] for b in batch])
+    sameins = torch.stack([b[2] for b in batch])
+    masks = torch.stack([b[3] for b in batch])
+    metadata = [b[4] for b in batch] # Keep as list of dicts
+
+    return targets, samegals, sameins, masks, metadata
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     import time
     from tqdm import tqdm
     from torch.utils.data import DataLoader
 
-    neighbors_dataset = NeighborsDataset(
-        hdf5_path="/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5",
-    )
-    batch_size = 8
-    num_warmup = 25
-    num_measure = 100
+    # neighbors_dataset = NeighborsDataset(
+    #     hdf5_path="/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5",
+    # )
+    # batch_size = 8
+    # num_warmup = 25
+    # num_measure = 100
 
+    # loader = DataLoader(
+    #     neighbors_dataset,
+    #     batch_size=batch_size,
+    #     shuffle=False,
+    #     num_workers=4,
+    #     collate_fn=collate_neighbors,
+    #     persistent_workers=True,
+    #     pin_memory=True,
+    #     worker_init_fn=worker_init_fn,
+    # )
+    # it = iter(loader)
+    # for _ in range(num_warmup):
+    #     next(it)
+    # start = time.time()
+    # for _ in tqdm(range(num_measure)):
+    #     next(it)
+    # elapsed = time.time() - start
+    # print(f"Average time per batch (steady state): {elapsed / num_measure:.4f}s")
+
+
+
+    # TESTING THE MEMORY LOADING OPTION
+        # CONFIGURATION
+    # Use the MERGED file path here
+    H5_PATH = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
+    BATCH_SIZE = 64
+
+    # 1. Init Dataset (Loads to RAM)
+    dataset = NeighborsPrecomputedDataset(H5_PATH)
+
+    # 2. Init Loader
+    # Note: num_workers=0 is usually FASTER for in-memory datasets because
+    # it avoids pickling overhead between processes.
     loader = DataLoader(
-        neighbors_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        collate_fn=collate_neighbors,
-        persistent_workers=True,
-        pin_memory=True,
-        worker_init_fn=worker_init_fn,
+        dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True, # We can shuffle freely now!
+        num_workers=0,
+        collate_fn=simple_collate
     )
-    it = iter(loader)
-    for _ in range(num_warmup):
-        next(it)
-    start = time.time()
-    for _ in tqdm(range(num_measure)):
-        next(it)
-    elapsed = time.time() - start
-    print(f"Average time per batch (steady state): {elapsed / num_measure:.4f}s")
+
+    print(f"\nStarting benchmark with Batch Size {BATCH_SIZE}...")
+
+    # Warmup
+    iter_loader = iter(loader)
+    for _ in range(5):
+        next(iter_loader)
+
+    # Timing
+    t_start = time.time()
+    NUM_BATCHES = 100
+
+    for i in tqdm(range(NUM_BATCHES)):
+        batch = next(iter_loader)
+        # simulate transfer to GPU
+        # [x.cuda() for x in batch if isinstance(x, torch.Tensor)]
+
+    t_end = time.time()
+    fps = (NUM_BATCHES * BATCH_SIZE) / (t_end - t_start)
+
+    print(f"\nDone.")
+    print(f"Throughput: {fps:.1f} samples/sec")
+    print(f"Time per batch: {(t_end - t_start)/NUM_BATCHES*1000:.2f} ms")
