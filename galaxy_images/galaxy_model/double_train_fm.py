@@ -592,6 +592,12 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         Creates a grid where each row corresponds to one conditioning image:
         [SameGal | SameIns (first) | Target | Sample1 | Sample2 | ... | SampleN | Mean]
+
+        Plot size knobs:
+          - num_cond_images: max rows in main grid (capped by batch size; currently min(6, ...)).
+          - num_samples_per_cond: number of generated sample columns (e.g. 5).
+          - Lens row-scaled grid: num_lens = min(6, ...) and num_samples_per_cond = 5 in that block.
+          - Astropy lens triple: num_astropy_lenses (each lens = 3 rows: Target | Sample | Legacy).
         """
         if not self.logger or not hasattr(self, "_val_anchor_batch"):
             return
@@ -601,7 +607,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         import wandb
 
         num_cond_images = min(6, len(self._val_anchor_batch))
-        num_samples_per_cond = 5
+        num_samples_per_cond = 5  # number of generated samples per row in main grid and lens grid
         num_cols = 3 + num_samples_per_cond + 1  # samegal + sameins_first + target + samples + mean
 
         def _row_scale_rgb(x_chw: torch.Tensor, vmin, vmax) -> torch.Tensor:
@@ -796,7 +802,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             plt.close(fig_lens)
 
             # Lens triple comparison: Target | Sample | Legacy (same style as lenses_indeces.ipynb)
-            # 3 rows (Target HSC, Sample, Legacy samegal), 5 cols (4 bands + RGB), PercentileInterval + AsinhStretch
+            # Per lens: 3 rows (Target HSC, Sample, Legacy samegal), 5 cols (4 bands + RGB). PercentileInterval + AsinhStretch.
+            # Set num_astropy_lenses to control how many lenses get one block of 3 rows (tall plot).
+            num_astropy_lenses = 4  # number of lenses in the astropy plot (each lens = 3 rows)
             try:
                 from astropy.visualization import ImageNormalize, PercentileInterval, AsinhStretch
 
@@ -837,38 +845,42 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 stretch_obj = AsinhStretch()
                 band_names = ["g", "r", "i", "z"]
 
-                # First lens: target, one sample, legacy (samegal)
-                samegal_0 = self._val_lens_samegal_batch[0:1].to(self.device)
-                target_0 = self._val_lens_anchor_batch[0:1].to(self.device)
-                sameins_0 = self._val_lens_sameins_batch[0:1].to(self.device)
-                sample_0 = self.sample(samegal_0, sameins_0)  # (1, C, H, W)
-                target_np = target_0[0].cpu().numpy()   # (C, H, W)
-                sample_np = sample_0[0].cpu().numpy()   # (C, H, W)
-                legacy_np = samegal_0[0].cpu().numpy() # (C, H, W)
-
-                fig_triple, gs = plt.subplots(3, 5, figsize=(14, 10), constrained_layout=True)
+                n_lens_triple = min(num_astropy_lenses, len(self._val_lens_anchor_batch))
+                n_rows = 3 * n_lens_triple  # 3 rows per lens: Target, Sample, Legacy
+                row_height = 10 / 3  # same aspect as original 3-row fig (height 10)
+                fig_triple, gs = plt.subplots(n_rows, 5, figsize=(14, row_height * n_rows), constrained_layout=True)
                 fig_triple.suptitle("Lens validation: Target (HSC) | Sample | Legacy (samegal)", fontsize=12, y=1.02)
+                if n_rows == 1:
+                    gs = gs.reshape(1, -1)
 
-                # Row 0: Target
-                for c in range(4):
-                    _normed_imshow_lens(gs[0, c], target_np[c], interval_obj, stretch_obj, title=f"Target {band_names[c]}")
-                gs[0, 4].imshow(make_rgb_lens(target_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
-                gs[0, 4].set_title("Target RGB (irg)", fontsize=9, fontweight="bold")
-                gs[0, 4].axis("off")
+                for L in range(n_lens_triple):
+                    samegal_L = self._val_lens_samegal_batch[L : L + 1].to(self.device)
+                    target_L = self._val_lens_anchor_batch[L : L + 1].to(self.device)
+                    sameins_L = self._val_lens_sameins_batch[L : L + 1].to(self.device)
+                    sample_L = self.sample(samegal_L, sameins_L)  # (1, C, H, W)
+                    target_np = target_L[0].cpu().numpy()
+                    sample_np = sample_L[0].cpu().numpy()
+                    legacy_np = samegal_L[0].cpu().numpy()
 
-                # Row 1: Sample
-                for c in range(4):
-                    _normed_imshow_lens(gs[1, c], sample_np[c], interval_obj, stretch_obj, title=f"Sample {band_names[c]}")
-                gs[1, 4].imshow(make_rgb_lens(sample_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
-                gs[1, 4].set_title("Sample RGB (irg)", fontsize=9, fontweight="bold")
-                gs[1, 4].axis("off")
-
-                # Row 2: Legacy (samegal)
-                for c in range(4):
-                    _normed_imshow_lens(gs[2, c], legacy_np[c], interval_obj, stretch_obj, title=f"Legacy {band_names[c]}")
-                gs[2, 4].imshow(make_rgb_lens(legacy_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
-                gs[2, 4].set_title("Legacy RGB (irg)", fontsize=9, fontweight="bold")
-                gs[2, 4].axis("off")
+                    base = L * 3
+                    # Row 0: Target
+                    for c in range(4):
+                        _normed_imshow_lens(gs[base + 0, c], target_np[c], interval_obj, stretch_obj, title=f"Target {band_names[c]}")
+                    gs[base + 0, 4].imshow(make_rgb_lens(target_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                    gs[base + 0, 4].set_title("Target RGB (irg)", fontsize=9, fontweight="bold")
+                    gs[base + 0, 4].axis("off")
+                    # Row 1: Sample
+                    for c in range(4):
+                        _normed_imshow_lens(gs[base + 1, c], sample_np[c], interval_obj, stretch_obj, title=f"Sample {band_names[c]}")
+                    gs[base + 1, 4].imshow(make_rgb_lens(sample_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                    gs[base + 1, 4].set_title("Sample RGB (irg)", fontsize=9, fontweight="bold")
+                    gs[base + 1, 4].axis("off")
+                    # Row 2: Legacy (samegal)
+                    for c in range(4):
+                        _normed_imshow_lens(gs[base + 2, c], legacy_np[c], interval_obj, stretch_obj, title=f"Legacy {band_names[c]}")
+                    gs[base + 2, 4].imshow(make_rgb_lens(legacy_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                    gs[base + 2, 4].set_title("Legacy RGB (irg)", fontsize=9, fontweight="bold")
+                    gs[base + 2, 4].axis("off")
 
                 self.logger.experiment.log({
                     "val/lens_triple_target_sample_legacy": wandb.Image(fig_triple),
