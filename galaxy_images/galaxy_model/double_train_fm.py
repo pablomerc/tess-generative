@@ -117,6 +117,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         lambda_geometric: float = 0.3, # weight for geometric loss
         num_umap_batches: int = 8, # number of validation batches to collect for UMAP visualization
         mask_center: bool = False, # if true -> mask the center of the image
+        all_attention: bool = False, # if true -> all blocks are CrossAttn; if false -> down, attn, attn, down / up, attn, attn, up
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -154,24 +155,40 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 pretrained=pretrained_encoder,
             )
 
+            if all_attention:
+                down_block_types = (
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                )
+                up_block_types = (
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                )
+            else:
+                down_block_types = (
+                    "DownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "DownBlock2D",
+                )
+                up_block_types = (
+                    "UpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "UpBlock2D",
+                )
             self.velocity_model = UNet2DConditionModel(
                 sample_size=image_size,
                 in_channels=in_channels,
                 out_channels=in_channels,
                 layers_per_block=layers_per_block,
                 block_out_channels=block_out_channels,
-                down_block_types=(
-                    "DownBlock2D",
-                    "CrossAttnDownBlock2D",
-                    "CrossAttnDownBlock2D",
-                    "DownBlock2D",
-                ),
-                up_block_types=(
-                    "UpBlock2D",
-                    "CrossAttnUpBlock2D",
-                    "CrossAttnUpBlock2D",
-                    "UpBlock2D",
-                ),
+                down_block_types=down_block_types,
+                up_block_types=up_block_types,
                 cross_attention_dim=cross_attention_dim,
                 attention_head_dim=attention_head_dim,
             )
@@ -338,6 +355,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                     "lambda_generative": self.lambda_generative,
                     "lambda_geometric": self.lambda_geometric,
                     "is_h100": self.is_h100,
+                    "all_attention": self.hparams.all_attention,
                 })
 
         # Cache lens batch from second val dataloader when present (for 48x48 lens validation)
@@ -1366,7 +1384,7 @@ if __name__ == "__main__":
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="encoder-zoom-64x64-zdim16-masked-50kimages"
+        name="encoder-zoom-48x48-zdim16-all-attn"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
