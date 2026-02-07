@@ -5,9 +5,9 @@ Use from a training script:
 
   from galaxy_images.galaxy_model.neighbors import (
       NeighborsDataset,
+      NeighborsDatasetRawRAM,
       collate_neighbors,
       NORM_DICT,
-      worker_init_fn,
   )
   train_dataset = NeighborsDataset(hdf5_path="path/to/neighbours.h5", ...)
   train_loader = DataLoader(
@@ -18,13 +18,13 @@ Use from a training script:
       collate_fn=collate_neighbors,
       persistent_workers=True,
       pin_memory=True,
-      worker_init_fn=worker_init_fn,
   )
   # Batch: (targets, samegals, padded_neighbors, neighbor_masks, metadata)
 """
 
 import os
 import sys
+import time
 
 _current_path = os.path.abspath(__file__)
 _root_dir = os.path.dirname(os.path.dirname(os.path.dirname(_current_path)))
@@ -38,6 +38,7 @@ import h5py
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 NORM_DICT = {
     "hsc": [0.022, 0.05],
@@ -61,12 +62,6 @@ def preprocess_raw_image(image, survey: str = "hsc", crop_size: int = 48, norm_d
         mean, std = norm_dict["hsc"]
     image = (image - mean) / std
     return image
-
-
-def worker_init_fn(worker_id: int) -> None:
-    """Use as DataLoader worker_init_fn to avoid thread oversubscription."""
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
 
 
 class NeighborsDataset(Dataset):
@@ -286,9 +281,188 @@ def simple_collate(batch):
 
 
 
+def plot_option2_first_batch(batch, save_path=None, num_samples=4, max_neighbors_show=5):
+    """
+    Plot targets, samegals, and neighbors for the first batch from NeighborsPrecomputedDataset.
+
+    batch: (targets, samegals, sameins, masks, metadata) from simple_collate.
+    save_path: where to save the figure (default: neighbors_option2_first_batch.png).
+    num_samples: number of dataset samples (rows) to show.
+    max_neighbors_show: max neighbor columns to display per sample.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    targets, samegals, sameins, masks, metadata = batch
+    # shapes: targets/samegals (B, C, H, W), sameins (B, N, C, H, W), masks (B, N)
+    B, N_max, C, H, W = sameins.shape
+    num_samples = min(num_samples, B)
+
+    def tensor_to_rgb(img):
+        """(C, H, W) -> (H, W, 3) scaled for display."""
+        x = img.detach().cpu().float().numpy()
+        if x.shape[0] >= 3:
+            x = x[:3]  # use first 3 channels as RGB
+        else:
+            x = np.stack([x[0]] * 3, axis=0)
+        x = np.transpose(x, (1, 2, 0))
+        lo, hi = np.percentile(x, (2, 98))
+        if hi > lo:
+            x = (x - lo) / (hi - lo)
+        x = np.clip(x, 0, 1)
+        return x
+
+    # For each sample we show: 1 target + 1 samegal + up to max_neighbors_show neighbors
+    n_cols = 2 + max_neighbors_show
+    fig, axes = plt.subplots(num_samples, n_cols, figsize=(2 * n_cols, 2 * num_samples))
+    if num_samples == 1:
+        axes = axes[None, :]
+    for i in range(num_samples):
+        axes[i, 0].imshow(tensor_to_rgb(targets[i]))
+        axes[i, 0].set_title("Target")
+        axes[i, 0].axis("off")
+
+        axes[i, 1].imshow(tensor_to_rgb(samegals[i]))
+        axes[i, 1].set_title("Same galaxy")
+        axes[i, 1].axis("off")
+
+        n_valid = int(masks[i].sum().item())
+        for j in range(max_neighbors_show):
+            ax = axes[i, 2 + j]
+            if j < n_valid:
+                ax.imshow(tensor_to_rgb(sameins[i, j]))
+                ax.set_title(f"Neighbor {j + 1}")
+            else:
+                ax.set_facecolor("0.9")
+                ax.set_title(f"Neighbor {j + 1}" if j < N_max else "—")
+            ax.axis("off")
+
+    meta = metadata[0]
+    fig.suptitle(
+        f"Option 2 first batch (survey={meta.get('anchor_survey', '?')}, "
+        f"batch_size={B}, {N_max} neighbor slots)",
+        fontsize=10,
+    )
+    plt.tight_layout()
+    out = save_path or "neighbors_option2_first_batch.png"
+    plt.savefig(out, dpi=120, bbox_inches="tight")
+    plt.close()
+    print(f"Saved visualization to {out}")
 
 
 
+
+
+## OPTION 3: NeighborsDatasetRawRAM (raw arrays in RAM, preprocess on the fly)
+
+
+class NeighborsDatasetRawRAM(Dataset):
+    """
+    Loads raw HDF5 image arrays and neighbor indices into RAM at init.
+    Preprocessing (crop, zoom, normalize) is done on the fly in __getitem__.
+    Use when the raw dataset fits in memory; you can use num_workers > 0
+    to parallelize preprocessing. Same batch format as NeighborsDataset
+    (works with collate_neighbors).
+    """
+
+    def __init__(self, hdf5_path, norm_dict=NORM_DICT, crop_size=48, max_neighbors=15):
+        self.norm_dict = norm_dict
+        self.crop_size = crop_size
+        self.max_neighbors = max_neighbors
+
+        print(f"Loading raw data from {hdf5_path} into RAM...")
+        t_start = time.time()
+
+        with h5py.File(hdf5_path, 'r') as f:
+            print("  - Loading images_hsc...")
+            self.images_hsc = f["images_hsc"][:]
+
+            print("  - Loading images_legacy...")
+            self.images_legacy = f["images_legacy"][:]
+
+            print("  - Loading neighbor indices...")
+            self.all_neigh_hsc = f["neighbor_idx_hsc"][:]
+            self.all_neigh_legacy = f["neighbor_idx_legacy"][:]
+
+            print("  - Filtering indices...")
+            sources = f["source_type"][:]
+            indexes_mmu = np.where(sources == 0)[0]
+
+            neigh_hsc_subset = self.all_neigh_hsc[indexes_mmu]
+            neigh_legacy_subset = self.all_neigh_legacy[indexes_mmu]
+
+            good_both = (~np.all(neigh_hsc_subset == -1, axis=1)) & (
+                ~np.all(neigh_legacy_subset == -1, axis=1)
+            )
+            self.indexes_mmu = indexes_mmu[good_both]
+
+            self.cached_neighbor_hsc = neigh_hsc_subset[good_both]
+            self.cached_neighbor_legacy = neigh_legacy_subset[good_both]
+
+        t_end = time.time()
+        print(f"Loaded {len(self.indexes_mmu)} samples. RAM Load Time: {t_end - t_start:.2f}s")
+        size_gb = (self.images_hsc.nbytes + self.images_legacy.nbytes) / 1e9
+        print(f"Raw Image Arrays Size: ~{size_gb:.2f} GB")
+
+    def __len__(self):
+        return len(self.indexes_mmu)
+
+    def __getitem__(self, idx):
+        index_mmu = self.indexes_mmu[idx]
+
+        anchor_is_hsc = (idx % 2 == 0)
+        anchor_survey = "hsc" if anchor_is_hsc else "legacy"
+
+        img_hsc = self.images_hsc[index_mmu]
+        img_legacy = self.images_legacy[index_mmu]
+
+        if anchor_is_hsc:
+            target_raw, samegal_raw = img_hsc, img_legacy
+            neighbor_ids = self.cached_neighbor_hsc[idx]
+            images_source = self.images_hsc
+            survey_key, pair_key = "hsc", "legacy"
+        else:
+            target_raw, samegal_raw = img_legacy, img_hsc
+            neighbor_ids = self.cached_neighbor_legacy[idx]
+            images_source = self.images_legacy
+            survey_key, pair_key = "legacy", "hsc"
+
+        neighbor_ids = neighbor_ids[neighbor_ids != -1][: self.max_neighbors]
+
+        if len(neighbor_ids) > 0:
+            neigh_imgs = images_source[neighbor_ids]
+            sameins_list = [
+                preprocess_raw_image(img, survey_key, self.crop_size, self.norm_dict)
+                for img in neigh_imgs
+            ]
+        else:
+            sameins_list = []
+
+        target = preprocess_raw_image(target_raw, survey_key, self.crop_size, self.norm_dict)
+        samegal = preprocess_raw_image(samegal_raw, pair_key, self.crop_size, self.norm_dict)
+
+        if anchor_is_hsc:
+            target = target[:4]
+            sameins = (
+                torch.stack(sameins_list, dim=0)[:, :4]
+                if sameins_list
+                else torch.empty(0, 4, self.crop_size, self.crop_size)
+            )
+        else:
+            samegal = samegal[:4]
+            sameins = (
+                torch.stack(sameins_list, dim=0)
+                if sameins_list
+                else torch.empty(0, 3, self.crop_size, self.crop_size)
+            )
+
+        metadata = {
+            "anchor_survey": anchor_survey,
+            "idx": int(idx),
+            "num_same_instrument": len(sameins_list),
+        }
+        return target, samegal, sameins, metadata
 
 
 if __name__ == "__main__":
@@ -311,7 +485,6 @@ if __name__ == "__main__":
     #     collate_fn=collate_neighbors,
     #     persistent_workers=True,
     #     pin_memory=True,
-    #     worker_init_fn=worker_init_fn,
     # )
     # it = iter(loader)
     # for _ in range(num_warmup):
@@ -323,11 +496,12 @@ if __name__ == "__main__":
     # print(f"Average time per batch (steady state): {elapsed / num_measure:.4f}s")
 
 
-
+    #######################################################
     # TESTING THE MEMORY LOADING OPTION
         # CONFIGURATION
     # Use the MERGED file path here
-    H5_PATH = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
+    # H5_PATH = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
+    H5_PATH = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbors_shard_0000.h5"
     BATCH_SIZE = 64
 
     # 1. Init Dataset (Loads to RAM)
@@ -344,25 +518,83 @@ if __name__ == "__main__":
         collate_fn=simple_collate
     )
 
-    print(f"\nStarting benchmark with Batch Size {BATCH_SIZE}...")
+    # Visualize first batch
+    first_batch = next(iter(loader))
+    plot_option2_first_batch(
+        first_batch,
+        save_path="neighbors_option2_first_batch.png",
+        num_samples=4,
+        max_neighbors_show=5,
+    )
 
-    # Warmup
+    num_batches_total = len(loader)  # may be small if using a single shard
+    NUM_BATCHES = min(100, num_batches_total)
+    print(f"\nStarting benchmark with Batch Size {BATCH_SIZE} ({num_batches_total} batches in dataset, timing {NUM_BATCHES})...")
+
+    # Warmup (don't exceed available batches)
     iter_loader = iter(loader)
-    for _ in range(5):
+    for _ in range(min(5, num_batches_total)):
         next(iter_loader)
 
-    # Timing
+    # Timing: run up to NUM_BATCHES or until iterator is exhausted
     t_start = time.time()
-    NUM_BATCHES = 100
-
-    for i in tqdm(range(NUM_BATCHES)):
-        batch = next(iter_loader)
+    count = 0
+    for i in tqdm(range(NUM_BATCHES), desc="Benchmark"):
+        try:
+            batch = next(iter_loader)
+        except StopIteration:
+            break
+        count += 1
         # simulate transfer to GPU
         # [x.cuda() for x in batch if isinstance(x, torch.Tensor)]
 
     t_end = time.time()
-    fps = (NUM_BATCHES * BATCH_SIZE) / (t_end - t_start)
+    if count == 0:
+        print("No batches to time.")
+    else:
+        total_samples = count * BATCH_SIZE
+        fps = total_samples / (t_end - t_start)
+        print(f"\nDone.")
+        print(f"Throughput: {fps:.1f} samples/sec")
+        print(f"Time per batch: {(t_end - t_start) / count * 1000:.2f} ms")
 
-    print(f"\nDone.")
-    print(f"Throughput: {fps:.1f} samples/sec")
-    print(f"Time per batch: {(t_end - t_start)/NUM_BATCHES*1000:.2f} ms")
+
+    # #########################################################
+    # # TESTING OPTION 3: NeighborsDatasetRawRAM
+    # SOURCE_H5 = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
+    # # Or test_neighbours.h5 for a quick check
+    # print("Initializing NeighborsDatasetRawRAM...")
+    # try:
+    #     dataset = NeighborsDatasetRawRAM(hdf5_path=SOURCE_H5, max_neighbors=5)
+    # except Exception as e:
+    #     print(f"Error loading dataset: {e}")
+    #     sys.exit(1)
+
+    # BATCH_SIZE = 64
+    # NUM_WORKERS = 4
+    # loader = DataLoader(
+    #     dataset,
+    #     batch_size=BATCH_SIZE,
+    #     shuffle=True,
+    #     num_workers=NUM_WORKERS,
+    #     collate_fn=collate_neighbors,
+    #     persistent_workers=(NUM_WORKERS > 0),
+    # )
+
+    # print(f"\nStarting benchmark on {len(dataset)} samples with {NUM_WORKERS} workers...")
+    # iter_loader = iter(loader)
+    # for _ in range(5):
+    #     next(iter_loader)
+
+    # t_start = time.time()
+    # count = 0
+    # for i, batch in enumerate(tqdm(loader)):
+    #     count += 1
+    #     if i >= 99:
+    #         break
+    # t_end = time.time()
+    # total_samples = count * BATCH_SIZE
+    # duration = t_end - t_start
+    # print(f"\n--- Results ---")
+    # print(f"Throughput: {total_samples / duration:.1f} samples/sec")
+    # print(f"Time per batch: {(duration / count) * 1000:.2f} ms")
