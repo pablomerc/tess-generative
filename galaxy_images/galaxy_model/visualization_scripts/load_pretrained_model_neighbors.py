@@ -1,6 +1,7 @@
 """
-Load a pretrained model and run inference on it.
-For the double-encoder model
+Load a pretrained neighbors model and run inference on it.
+Uses ConditionalFlowMatchingModule from double_train_fm_neighbors (trained with
+neighbours_train.py / double_train_fm_neighbors.py). Data from HSCLegacyDatasetZoom.
 """
 
 import sys
@@ -10,10 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import torch
-from double_train_fm import ConditionalFlowMatchingModule
-# from train_fm import ConditionalFlowMatchingModule
-from torch.utils.data import DataLoader, TensorDataset
-from data import HSCLegacyDataset, HSCLegacyDatasetZoom
+from double_train_fm_neighbors import ConditionalFlowMatchingModule
+from torch.utils.data import DataLoader
+from data import HSCLegacyDatasetZoom
 import time
 
 import umap
@@ -22,46 +22,42 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-# checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/epdlfvpg/checkpoints/epoch=123-step=46000.ckpt'
-# checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/33mo9r3n/checkpoints/epoch=201-step=75000.ckpt' # z_dim = 512
-
-# checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/22teteus/checkpoints/epoch=18-step=7000.ckpt'
-
-# checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/s39qr0v8/checkpoints/epoch=182-step=68000.ckpt' # model with latent space of 128
-checkpoints = [
-    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wu1csh99/checkpoints/latest-step=step=75000.ckpt', # z_dim = 16, geom
-    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/twop8sfb/checkpoints/latest-step=step=75000.ckpt', # z_dim = 64 geom
-    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/rach5aeu/checkpoints/latest-step=step=75000.ckpt',  # z_dim = 8
-    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wdbsh3rc/checkpoints/latest-step=step=75000.ckpt',  # z_dim = 8 geom
-    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/muia8i77/checkpoints/latest-step=step=75000.ckpt',  # z_dim = 64
+# Neighbors model checkpoints (trained with neighbours_train.py / double_train_fm_neighbors.py)
+# Format: (label, wandb_run_id, local_checkpoint_path, z_dim, geom, step_for_plots)
+CHECKPOINT_OPTIONS = [
+    ("64 no geo", "tess-ml/galaxy-flow-matching-neighbours/n8szckjq",
+     "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/n8szckjq/checkpoints/latest-step=step=56000.ckpt",
+     64, False, 56000),
+    ("64 geo", "tess-ml/galaxy-flow-matching-neighbours/lr451mnx",
+     "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/lr451mnx/checkpoints/latest-step=step=53000.ckpt",
+     64, True, 53000),
+    ("16 no geo", "tess-ml/galaxy-flow-matching-neighbours/g2g9kvr4",
+     "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/g2g9kvr4/checkpoints/latest-step=step=75000.ckpt",
+    # '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/g2g9kvr4/checkpoints/best-epoch=49-step=19000.ckpt',
+     16, False, 75000),
+    ("16 no geo", "tess-ml/galaxy-flow-matching-neighbours/x1xf4cym",
+    '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/x1xf4cym/checkpoints/latest-step=step=53000.ckpt',
+     16, False, 53000),
 ]
-zoom = True
 
-# checkpoints = [
-#     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/w6hjbkct/checkpoints/latest-step=step=67000.ckpt', # z_dim = 8
-#     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/27z357da/checkpoints/latest-step=step=70000.ckpt', # z_dim = 32
-#     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/r2cvid3f/checkpoints/epoch=201-step=75000.ckpt', # z_dim = 64
-#     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/s39qr0v8/checkpoints/epoch=201-step=75000.ckpt', # z_dim = 128
-#     '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/33mo9r3n/checkpoints/epoch=201-step=75000.ckpt', # z_dim = 512
-# ]
-# zoom = False
+idx = 1  # 0=64 no geo, 1=64 geo, 2=16 no geo
+_label, _wandb_id, checkpoint_path, dim, _geom, step = CHECKPOINT_OPTIONS[idx]
+mode_tag = "geom" if _geom else ""
+epoch = step  # used in plot titles
+zoom_val = True  # always use HSCLegacyDatasetZoom
+avg_latent_space = True
 
-z_dim_list = [16, 64, 8, 8, 64]
-epochs = [200, 180,190, 190, 190]
-# checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/galaxy-flow-matching/r2cvid3f/checkpoints/epoch=158-step=59000.ckpt' # z_dim = 64
+print(f"Checkpoint: {_label} (wandb {_wandb_id}), path={checkpoint_path}, dim={dim}, geom={_geom}, step={step}")
 
-# Dimension setting (used in plot file names)
-# dim = 64  # Set to 32, 64, 128, 256, 512, etc.
-
-idx = 4  # default to geom model
-mode = ['geom','geom','', 'geom', '']
-zoom = [True, True, True, True, True]
-checkpoint_path, dim, epoch, mode_tag, zoom_val = checkpoints[idx], z_dim_list[idx], epochs[idx], mode[idx], zoom[idx]
+# Output directories (relative to this script)
+NEIGHBORS_VIZ_DIR = Path(__file__).parent / 'neighbors_visualization'
+LATENT_SPACE_DIR = NEIGHBORS_VIZ_DIR / 'latent_space'
+GEN_STUDY_DIR = NEIGHBORS_VIZ_DIR / 'gen_study'
 
 # Control flags
 GENERATE_UMAP = True  # Set to False to skip UMAP generation and plotting
-GENERATE_PCA = False    # Set to False to skip PCA generation and plotting
-GENERATE_TSNE = False   # Set to False to skip t-SNE generation and plotting
+GENERATE_PCA = True    # Set to False to skip PCA generation and plotting
+GENERATE_TSNE = True   # Set to False to skip t-SNE generation and plotting
 SHOW_PAIRS = True     # Set to False to skip marking pairs on the plots
 GENERATE_SAMPLES = False  # Disable generation study
 
@@ -100,17 +96,12 @@ total_params = sum(p.numel() for p in model.parameters())
 
 
 # Time dataset initialization (loading from HDF5 into memory)
+# Always use HSCLegacyDatasetZoom (same normalization/zoom as neighbors training)
 dataset_start = time.perf_counter()
-if zoom_val:
-    dataset = HSCLegacyDatasetZoom(
-        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
-        idx_list=list(range(95_000, 97_048)),
-    )
-else:
-    dataset = HSCLegacyDataset(
-        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
-        idx_list=list(range(95_000, 97_048)),
-    )
+dataset = HSCLegacyDatasetZoom(
+    hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+    idx_list=list(range(95_000, 97_048)),
+)
 dataset_time = time.perf_counter() - dataset_start
 
 # Time DataLoader creation (very fast, usually negligible)
@@ -160,20 +151,25 @@ print(f"    - embed_dim = cross_attention_dim = {model.hparams.cross_attention_d
 
 # Prepare embeddings for encoder 1
 all_embeddings_1 = torch.concat([hsc_embeddings_1, legacy_embeddings_1], dim=0)
-all_embeddings_1 = all_embeddings_1.flatten(start_dim=1)
+if avg_latent_space:
+    all_embeddings_1 = torch.mean(all_embeddings_1, dim=1)
+else:
+    all_embeddings_1 = all_embeddings_1.flatten(start_dim=1)
 print(f"\nEncoder 1 flattened embeddings shape: {all_embeddings_1.shape}")
 
 # Prepare embeddings for encoder 2
 all_embeddings_2 = torch.concat([hsc_embeddings_2, legacy_embeddings_2], dim=0)
-all_embeddings_2 = all_embeddings_2.flatten(start_dim=1)
+if avg_latent_space:
+    all_embeddings_2 = torch.mean(all_embeddings_2, dim=1)
+else:
+    all_embeddings_2 = all_embeddings_2.flatten(start_dim=1)
 print(f"Encoder 2 flattened embeddings shape: {all_embeddings_2.shape}")
 
 
 num_hsc = hsc_embeddings_1.shape[0]
 
 if GENERATE_UMAP:
-    # Create figures directory
-    figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures')
+    figures_dir = LATENT_SPACE_DIR
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     # UMAP parameters
@@ -304,7 +300,8 @@ if GENERATE_UMAP:
 
     plt.tight_layout()
     zoom_suffix = '_zoom' if zoom_val else ''
-    combined_path = figures_dir / f'umap_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}.png'
+    latent_suffix = '_avg' if avg_latent_space else '_flat'
+    combined_path = figures_dir / f'umap_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}{latent_suffix}.png'
     plt.savefig(combined_path, dpi=150)
     plt.close()
 
@@ -315,8 +312,7 @@ if GENERATE_UMAP:
 
 # ===== PCA Visualization =====
 if GENERATE_PCA:
-    # Create figures directory
-    figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures')
+    figures_dir = LATENT_SPACE_DIR
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     # PCA parameters
@@ -418,8 +414,7 @@ if GENERATE_PCA:
 
 # ===== t-SNE Visualization =====
 if GENERATE_TSNE:
-    # Create figures directory
-    figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures')
+    figures_dir = LATENT_SPACE_DIR
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     # t-SNE parameters
@@ -506,7 +501,8 @@ if GENERATE_TSNE:
 
     plt.tight_layout()
     zoom_suffix = '_zoom' if zoom_val else ''
-    combined_path = figures_dir / f'tsne_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}.png'
+    latent_suffix = '_avg' if avg_latent_space else '_flat'
+    combined_path = figures_dir / f'tsne_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}{latent_suffix}.png'
     plt.savefig(combined_path, dpi=150)
     plt.close()
 
@@ -733,8 +729,7 @@ if GENERATE_SAMPLES:
                               transform=fig.transFigure, color='black', linewidth=2,
                               clip_on=False))
 
-    # Save figure (ensure figures_dir exists)
-    figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures/generation_study')
+    figures_dir = GEN_STUDY_DIR
     figures_dir.mkdir(parents=True, exist_ok=True)
     zoom_suffix = '_zoom' if zoom_val else ''
     reconstruction_path = figures_dir / f'reconstructions_comparison_zdim{dim}{mode_tag}{zoom_suffix}.png'
