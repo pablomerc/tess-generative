@@ -19,15 +19,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import torch
 import importlib.util
-from double_train_fm import ConditionalFlowMatchingModule
-# # Import module with hyphen in name using importlib
-# spec = importlib.util.spec_from_file_location(
-#     "double_train_fm_no_attn",
-#     Path(__file__).parent.parent / "double_train_fm_no-attn.py"
-# )
-# double_train_fm_no_attn = importlib.util.module_from_spec(spec)
-# spec.loader.exec_module(double_train_fm_no_attn)
-# ConditionalFlowMatchingModule = double_train_fm_no_attn.ConditionalFlowMatchingModule
+# from double_train_fm import ConditionalFlowMatchingModule
+# Import module with hyphen in name using importlib
+spec = importlib.util.spec_from_file_location(
+    "double_train_fm_no_attn",
+    Path(__file__).parent.parent / "double_train_fm_no-attn.py"
+)
+double_train_fm_no_attn = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(double_train_fm_no_attn)
+ConditionalFlowMatchingModule = double_train_fm_no_attn.ConditionalFlowMatchingModule
 
 
 from torch.utils.data import DataLoader
@@ -39,7 +39,11 @@ import matplotlib.pyplot as plt
 
 
 # Model checkpoint
-checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wu1csh99/checkpoints/latest-step=step=75000.ckpt'  # z_dim = 16, geom, attn
+# checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wu1csh99/checkpoints/latest-step=step=75000.ckpt'  # z_dim = 16, geom, attn
+
+checkpoint_path = '/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/srj4opub/checkpoints/latest-step=step=75000.ckpt' # z_dim = 64, class cond
+
+mode_suffix = 'classcond'
 
 # Determine device: try to find a working GPU, fallback to CPU
 device = torch.device('cpu')  # Default to CPU for safe loading
@@ -323,7 +327,7 @@ plt.tight_layout()
 # Save figure
 figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures')
 figures_dir.mkdir(parents=True, exist_ok=True)
-output_path = figures_dir / 're_encoding_umap_5examples.png'
+output_path = figures_dir / f're_encoding_umap_5examples_{mode_suffix}.png'
 plt.savefig(output_path, dpi=150, bbox_inches='tight')
 plt.close()
 
