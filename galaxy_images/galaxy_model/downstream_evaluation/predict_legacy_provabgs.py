@@ -1,15 +1,15 @@
 """
-Downstream evaluation for HSC ProvaBGS: predict galaxy parameters from embeddings.
-Uses H5 from prepare_hsc_provabgs.py (6 embedding types + labels).
+Downstream evaluation for Legacy ProvaBGS: predict galaxy parameters from embeddings.
+Uses H5 from prepare_legacy_provabgs.py (6 embedding types + labels/labels_repeated).
 
 Run a single experiment per run: legacy, legacy_hsc, or hsc.
-  python predict_hsc_provabgs.py --experiment legacy
-  python predict_hsc_provabgs.py --experiment legacy_hsc
-  python predict_hsc_provabgs.py --experiment hsc
+  python predict_legacy_provabgs.py --experiment legacy --single
+  python predict_legacy_provabgs.py --experiment legacy_hsc --single
+  python predict_legacy_provabgs.py --experiment hsc --single
 
-Run on a list of .h5 datasets (all experiments per dataset); saves plot + CSV per (dataset, experiment).
-  python predict_hsc_provabgs.py --datasets a.h5 b.h5 c.h5
-  python predict_hsc_provabgs.py   # uses default 3 H5s from prepare_hsc_provabgs
+Run on all generated latent sets (default: 3 trained H5s from prepare_legacy_provabgs); saves plot + CSV per (dataset, experiment) to r2_comparisons_legacy/.
+  python predict_legacy_provabgs.py
+  python predict_legacy_provabgs.py --datasets a.h5 b.h5 c.h5
 """
 import argparse
 import csv
@@ -29,95 +29,71 @@ import matplotlib.pyplot as plt
 
 _here = Path(__file__).resolve().parent
 
-# Default paths (HSC downstream H5s)
-DATASET_PATH = _here / "downstream_hsc_provabgs.h5"
-DATASET_PATH_UNTRAINED = _here / "downstream_hsc_provabgs_untrained.h5"
+# Default paths (Legacy downstream H5s)
+DATASET_PATH = _here / "downstream_legacy_provabgs.h5"
+DATASET_PATH_UNTRAINED = _here / "downstream_legacy_provabgs_untrained.h5"
 
-# Default list of trained H5s from prepare_hsc_provabgs.py (3 model configs)
+# Default list of trained H5s from prepare_legacy_provabgs.py (3 model configs)
 DEFAULT_DATASET_LIST = [
-    _here / "downstream_hsc_provabgs_zdim16_geom_neighbors.h5",
-    # _here / "downstream_hsc_provabgs_zdim16_nogeom_neighbors.h5",
-    # _here / "downstream_hsc_provabgs_zdim16_geom_old_dataloader.h5",
+    _here / "downstream_legacy_provabgs_zdim16_geom_neighbors.h5",
+    _here / "downstream_legacy_provabgs_zdim16_nogeom_neighbors.h5",
+    _here / "downstream_legacy_provabgs_zdim16_geom_old_dataloader.h5",
 ]
-R2_COMPARISONS_DIR = _here / "r2_comparisons"
+R2_COMPARISONS_LEGACY_DIR = _here / "r2_comparisons_legacy_DEC"
 
-# One experiment per run: which embedding pair to use
+# One experiment per run: which embedding pair to use (same keys as HSC)
 EXPERIMENTS = {
     "legacy": ("legacy_encoder1", "legacy_encoder2"),
     "legacy_hsc": ("hsc_legacy_encoder1", "hsc_legacy_encoder2"),
     "hsc": ("hsc_encoder1", "hsc_encoder2"),
 }
 
+# MLP architecture for downstream head (used in filenames)
+# MLP_HIDDEN = (512, 256, 128)
+MLP_HIDDEN = (256, 128)
+MLP_SUFFIX = "-".join(map(str, MLP_HIDDEN))  # "512-256-128"
 
-physics_columns = [
-    'sSFR',
-    'LOG_Z_MW',
-    'TAGE_MW',
-    'LOG_MSTAR',
-    'desi_Z',
-    # 'hsc_g_extendedness_value'
-]
-
-instrument_hsc_columns = [
-    # 'hsc_object_id',
-    # 'hsc_g_sdssshape_psf_shape11',
-    # 'hsc_g_sdssshape_psf_shape22',
-    # 'hsc_g_sdssshape_psf_shape12',
-    # 'hsc_r_sdssshape_psf_shape11',
-    # 'hsc_r_sdssshape_psf_shape22',
-    # 'hsc_r_sdssshape_psf_shape12',
-    # 'hsc_i_sdssshape_psf_shape11',
-    # 'hsc_i_sdssshape_psf_shape22',
-    # 'hsc_i_sdssshape_psf_shape12',
-    # 'hsc_z_sdssshape_psf_shape11',
-    # 'hsc_z_sdssshape_psf_shape22',
-    # 'hsc_z_sdssshape_psf_shape12',
-    # 'hsc_y_sdssshape_psf_shape11',
-    # 'hsc_y_sdssshape_psf_shape22',
-    # 'hsc_y_sdssshape_psf_shape12',
-    # 'hsc_g_cmodel_magerr',
-    # 'hsc_r_cmodel_magerr',
-    # 'hsc_i_cmodel_magerr',
-    # 'hsc_z_cmodel_magerr',
-    # 'hsc_y_cmodel_magerr'
-]
-
-metadata_columns = [
-    # 'TARGETID',
-    # 'RA',
-    # 'DEC'
-]
-
-DEFAULT_TARGETS = physics_columns + instrument_hsc_columns + metadata_columns
+# Default target columns for Legacy ProvaBGS (None = all numeric in H5)
+# DEFAULT_TARGETS = [
+#     "LOG_MSTAR", "Z_HP", "MAG_R", "sSFR", "TAGE_MW", "LOG_Z_MW", "desi_Z",
+#     "legacysurvey_SHAPE_R", "tok_shape_r", "TSNR2_BGS", "PROVABGS_W_FIBASSIGN",
+#     "desi_FLUX_IVAR_G", "desi_FLUX_IVAR_R", "desi_FLUX_IVAR_Z",
+# ]
+DEFAULT_TARGETS = ["desi_Z", "LOG_MSTAR", "TAGE_MW", "LOG_Z_MW", "sSFR", "hsc_g_extendedness_value", 'DEC']
 
 
-def load_h5(path, key1, key2):
+def load_legacy_provabgs_h5(path, key1, key2):
     """
-    Load two embedding arrays and numeric labels from HSC ProvaBGS H5.
-    Returns emb1, emb2, metadata (N, num_targets), param_names.
+    Load two embedding arrays and numeric labels from legacy ProvaBGS H5.
+    Returns embeddings_1, embeddings_2, metadata (numeric cols only), param_names.
+    Uses labels/ (N rows) when embedding length equals num_examples; labels_repeated/ (2N) only if length == 2*num_examples.
     """
-    with h5py.File(path, "r") as f:
+    with h5py.File(path, 'r') as f:
         emb1 = np.array(f[key1][:])
         emb2 = np.array(f[key2][:])
-        if emb1.shape[0] != emb2.shape[0]:
-            raise ValueError(f"Embedding length mismatch: {key1} {emb1.shape[0]} vs {key2} {emb2.shape[0]}")
-        raw_cols = f.attrs.get("label_columns", [])
+        n1, n2 = emb1.shape[0], emb2.shape[0]
+        if n1 != n2:
+            raise ValueError(f"Embedding length mismatch: {key1} has {n1}, {key2} has {n2}")
+        num_examples = int(f.attrs.get('num_examples', 0))
+        use_repeated = (num_examples > 0 and n1 == num_examples * 2)
+        label_prefix = 'labels_repeated/' if use_repeated else 'labels/'
+        raw_cols = f.attrs.get('label_columns', [])
         label_columns = []
-        for c in raw_cols if isinstance(raw_cols, (list, tuple)) else list(raw_cols):
-            label_columns.append(c.decode("utf-8") if isinstance(c, bytes) else c)
+        for c in (raw_cols if isinstance(raw_cols, (list, tuple)) else list(raw_cols)):
+            label_columns.append(c.decode('utf-8') if isinstance(c, bytes) else c)
         if not label_columns:
-            label_columns = [k.replace("labels/", "") for k in f.keys() if k.startswith("labels/")]
+            label_columns = [k[len(label_prefix):] for k in f.keys() if k.startswith(label_prefix)]
         meta_list = []
         param_names = []
         for col in label_columns:
-            key = "labels/" + col
+            key = label_prefix + col
             if key not in f:
                 continue
             arr = np.array(f[key][:])
-            if arr.dtype.kind in "fiu":
+            if arr.dtype.kind in 'fiu':
                 meta_list.append(arr.astype(np.float64))
                 param_names.append(col)
-            elif arr.dtype.kind in "SU":
+            elif arr.dtype.kind in 'SU':
                 continue
             else:
                 try:
@@ -132,6 +108,7 @@ def load_h5(path, key1, key2):
 
 
 def check_gpu():
+    """Check GPU availability and return device info."""
     if not torch.cuda.is_available():
         return False, "CUDA not available"
     try:
@@ -143,16 +120,13 @@ def check_gpu():
 
 
 def _standardize_with_stats(data, mean, std):
+    """Standardize data using precomputed mean and std."""
     std = np.where(std == 0, 1.0, std)
     return (np.asarray(data, dtype=np.float64) - mean) / (std + 1e-8)
 
 
-# MLP architecture for downstream head (used in filenames, e.g. 256-128)
-MLP_HIDDEN = (256, 128)
-MLP_SUFFIX = "-".join(map(str, MLP_HIDDEN))  # "256-128"
-
-
 class MLPRegressor(nn.Module):
+    """MLP regressor for predicting galaxy parameters from embeddings."""
     def __init__(self, in_dim, out_dim, hidden=None, dropout=0.2):
         if hidden is None:
             hidden = MLP_HIDDEN
@@ -175,10 +149,22 @@ class MLPRegressor(nn.Module):
 
 
 class LitRegressor(pl.LightningModule):
-    def __init__(self, in_dim, out_dim, hidden=None, dropout=0.2, lr=1e-3, weight_decay=1e-2, use_embedding=1):
+    """PyTorch Lightning module for regression training."""
+    def __init__(
+        self,
+        in_dim,
+        out_dim,
+        hidden=None,
+        dropout=0.2,
+        lr=1e-3,
+        weight_decay=1e-2,
+        use_embedding=1,
+    ):
         if hidden is None:
             hidden = MLP_HIDDEN
         super().__init__()
+        if use_embedding not in (1, 2):
+            raise ValueError("use_embedding must be 1 or 2")
         self.save_hyperparameters()
         self.model = MLPRegressor(in_dim=in_dim, out_dim=out_dim, hidden=hidden, dropout=dropout)
         self.loss_fn = nn.SmoothL1Loss(beta=1.0)
@@ -186,20 +172,38 @@ class LitRegressor(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
-    def _step(self, batch, stage):
+    def _shared_step(self, batch, stage: str):
         emb1, emb2, y = batch
         x = emb1 if self.hparams.use_embedding == 1 else emb2
+
         y_hat = self(x)
-        y_hat = torch.nan_to_num(y_hat, nan=0.0)
+
+        # Check for NaN in predictions
+        if torch.isnan(y_hat).any():
+            print(f"WARNING: NaN detected in predictions during {stage} step")
+            y_hat = torch.nan_to_num(y_hat, nan=0.0)
+
         loss = self.loss_fn(y_hat, y)
-        self.log(f"{stage}/loss", loss, on_epoch=True, prog_bar=True, batch_size=x.size(0))
+
+        # Check for NaN loss
+        if torch.isnan(loss):
+            print(f"WARNING: NaN loss detected during {stage} step")
+            # Use a fallback loss
+            loss = torch.mean((y_hat - y) ** 2)
+            if torch.isnan(loss):
+                loss = torch.tensor(1e6, device=loss.device, requires_grad=True)
+
+        mse = torch.mean((y_hat - y) ** 2)
+
+        self.log(f"{stage}/loss", loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=x.size(0))
+        self.log(f"{stage}/mse", mse, on_step=False, on_epoch=True, batch_size=x.size(0))
         return loss
 
     def training_step(self, batch, batch_idx):
-        return self._step(batch, "train")
+        return self._shared_step(batch, "train")
 
     def validation_step(self, batch, batch_idx):
-        self._step(batch, "val")
+        self._shared_step(batch, "val")
 
     def configure_optimizers(self):
         opt = AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
@@ -207,38 +211,84 @@ class LitRegressor(pl.LightningModule):
         return {"optimizer": opt, "lr_scheduler": sched}
 
     def on_before_optimizer_step(self, optimizer):
+        # Clip gradients to prevent exploding gradients that cause NaN
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
 
 
-def evaluate_per_target(model, loader, param_names, device, use_embedding=1):
+def evaluate_per_target(model, dataloader, param_names, device):
+    """Evaluate model and compute per-target metrics."""
     model.eval()
-    all_preds, all_targets = [], []
+    all_preds = []
+    all_targets = []
+
     with torch.no_grad():
-        for emb1, emb2, y in loader:
-            x = emb1 if use_embedding == 1 else emb2
-            x, y = x.to(device), y.to(device)
+        for batch in dataloader:
+            emb1, emb2, y = batch
+            x = emb1 if model.hparams.use_embedding == 1 else emb2
+            x = x.to(device)
+            y = y.to(device)
+
             y_hat = model(x)
             all_preds.append(y_hat.cpu().numpy())
             all_targets.append(y.cpu().numpy())
+
     all_preds = np.concatenate(all_preds, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)
 
+    # Check for NaN in predictions
+    nan_preds = np.isnan(all_preds).any(axis=0)
+    nan_targets = np.isnan(all_targets).any(axis=0)
+
+    if nan_preds.any():
+        print(f"WARNING: NaN values found in predictions for {nan_preds.sum()} targets")
+    if nan_targets.any():
+        print(f"WARNING: NaN values found in targets for {nan_targets.sum()} targets")
+
+    # Compute metrics for each target
     results = []
     for i in range(all_targets.shape[1]):
         y_true = all_targets[:, i]
         y_pred = all_preds[:, i]
-        valid = ~(np.isnan(y_true) | np.isnan(y_pred))
-        y_t = y_true[valid]
-        y_p = y_pred[valid]
-        if len(y_t) == 0:
-            r2, mae, rmse = np.nan, np.nan, np.nan
+
+        # Remove NaN values for this target
+        valid_mask = ~(np.isnan(y_true) | np.isnan(y_pred))
+        y_true_clean = y_true[valid_mask]
+        y_pred_clean = y_pred[valid_mask]
+
+        if len(y_true_clean) == 0:
+            # All values are NaN
+            r2 = np.nan
+            mae = np.nan
+            rmse = np.nan
         else:
-            r2 = np.nan if np.std(y_t) < 1e-6 else r2_score(y_t, y_p)
-            mae = mean_absolute_error(y_t, y_p)
-            rmse = np.sqrt(mean_squared_error(y_t, y_p))
-        name = param_names[i] if i < len(param_names) else f"target_{i}"
-        results.append({"target": name, "r2": r2, "mae": mae, "rmse": rmse, "n_valid": len(y_t)})
+            try:
+                # 3) Don't report R² for near-constant targets
+                if np.std(y_true_clean) < 1e-6:
+                    r2 = np.nan  # Near-constant target, R² is not meaningful
+                else:
+                    r2 = r2_score(y_true_clean, y_pred_clean)
+                mae = mean_absolute_error(y_true_clean, y_pred_clean)
+                rmse = np.sqrt(mean_squared_error(y_true_clean, y_pred_clean))
+            except Exception as e:
+                print(f"Warning: Error computing metrics for target {i}: {e}")
+                r2 = np.nan
+                mae = np.nan
+                rmse = np.nan
+
+        param_name = param_names[i] if i < len(param_names) else f"target_{i}"
+        results.append({
+            'target': param_name,
+            'r2': r2,
+            'mae': mae,
+            'rmse': rmse,
+            'n_valid': len(y_true_clean)
+        })
+
     return results
+
+
+SERIES = ["trained_emb1", "trained_emb2", "untrained_emb1", "untrained_emb2"]
+SERIES_LABELS = ["Physics (trained)", "Instrument (trained)", "Physics (untrained)", "Instrument (untrained)"]
 
 
 def save_results_csv(results, param_names, series, filepath):
@@ -263,6 +313,7 @@ def save_results_csv(results, param_names, series, filepath):
 
 
 def train_and_eval(use_embedding, train_loader, val_loader, param_names, emb_dim, out_dim, use_gpu, precision):
+    """Train and evaluate a single model with specified embedding. Returns list of per-target results."""
     model = LitRegressor(
         in_dim=emb_dim,
         out_dim=out_dim,
@@ -284,17 +335,13 @@ def train_and_eval(use_embedding, train_loader, val_loader, param_names, emb_dim
     trainer.fit(model, train_loader, val_loader)
     best = LitRegressor.load_from_checkpoint(ckpt.best_model_path) if ckpt.best_model_path else model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return evaluate_per_target(best.to(device), val_loader, param_names, device, use_embedding)
-
-
-SERIES = ["trained_emb1", "trained_emb2", "untrained_emb1", "untrained_emb2"]
-SERIES_LABELS = ["Physics (trained)", "Instrument (trained)", "Physics (untrained)", "Instrument (untrained)"]
+    return evaluate_per_target(best.to(device), val_loader, param_names, device)
 
 
 def run_one_experiment(dataset_path, experiment, dataset_untrained_path, target_columns, seed, use_gpu, precision):
     """Run training and evaluation for one (dataset, experiment). Returns (results dict, param_names list)."""
     key1, key2 = EXPERIMENTS[experiment]
-    emb1_tr, emb2_tr, meta_tr, param_names = load_h5(str(dataset_path), key1, key2)
+    emb1_tr, emb2_tr, meta_tr, param_names = load_legacy_provabgs_h5(str(dataset_path), key1, key2)
 
     if target_columns is not None:
         col_set = set(target_columns)
@@ -334,7 +381,7 @@ def run_one_experiment(dataset_path, experiment, dataset_untrained_path, target_
     emb_dim_2 = emb2_tr.shape[1]
     out_dim = meta_tr.shape[1]
 
-    emb1_u, emb2_u, meta_u, pn_u = load_h5(str(dataset_untrained_path), key1, key2)
+    emb1_u, emb2_u, meta_u, pn_u = load_legacy_provabgs_h5(str(dataset_untrained_path), key1, key2)
     col_idx_u = [pn_u.index(n) for n in param_names]
     meta_u = meta_u[finite][:, col_idx_u]
     meta_u = _standardize_with_stats(meta_u, mean, std)
@@ -390,7 +437,7 @@ def save_plot(results, param_names, experiment, filepath, dataset_stem=""):
         ax.bar(x + offsets[i], vals, width, label=lbl, color=colors[i], alpha=0.8)
     ax.set_xlabel("Target")
     ax.set_ylabel("R²")
-    title = f"HSC ProvaBGS — {dataset_stem} — {experiment}" if dataset_stem else f"HSC ProvaBGS — {experiment}"
+    title = f"Legacy ProvaBGS — {dataset_stem} — {experiment}" if dataset_stem else f"Legacy ProvaBGS — {experiment}"
     ax.set_title(title + ": Trained vs Untrained (Physics & Instrument)")
     ax.set_xticks(x)
     ax.set_xticklabels(targets, rotation=45, ha="right", fontsize=9)
@@ -405,17 +452,17 @@ def save_plot(results, param_names, experiment, filepath, dataset_stem=""):
 
 
 def main():
-    p = argparse.ArgumentParser(description="HSC ProvaBGS downstream prediction (single or batch over datasets)")
+    p = argparse.ArgumentParser(description="Legacy ProvaBGS downstream prediction (single or batch over datasets)")
     p.add_argument("--experiment", type=str, choices=list(EXPERIMENTS), default="legacy_hsc",
                    help="Embedding set (single-run mode): legacy, legacy_hsc, or hsc")
     p.add_argument("--dataset", type=str, default=str(DATASET_PATH), help="Path to trained-embeddings H5 (single-run mode)")
     p.add_argument("--datasets", type=str, nargs="*", default=None,
-                   help="List of .h5 paths; run all experiments on each. Default: run on the 3 H5s from prepare_hsc_provabgs. Pass --dataset and --experiment for single-run instead.")
+                   help="List of .h5 paths; run all experiments on each. Default: run on the 3 H5s from prepare_legacy_provabgs. Pass --dataset and --experiment with --single for single-run instead.")
     p.add_argument("--single", action="store_true",
                    help="Single-run mode: use --dataset and --experiment only (no batch over datasets).")
     p.add_argument("--dataset-untrained", type=str, default=str(DATASET_PATH_UNTRAINED), help="Path to untrained-embeddings H5")
-    p.add_argument("--out-dir", type=str, default=str(R2_COMPARISONS_DIR),
-                   help="Output directory for plots and CSVs (default: r2_comparisons)")
+    p.add_argument("--out-dir", type=str, default=str(R2_COMPARISONS_LEGACY_DIR),
+                   help="Output directory for plots and CSVs (default: r2_comparisons_legacy)")
     p.add_argument("--targets", type=str, nargs="*", default=None,
                    help="Target columns (default: use DEFAULT_TARGETS); empty = all numeric")
     p.add_argument("--seed", type=int, default=42)
@@ -462,7 +509,7 @@ def main():
     print(f"Experiment: {args.experiment} -> {key1}, {key2}")
     print(f"Dataset (trained):   {args.dataset}")
     print(f"Dataset (untrained): {args.dataset_untrained}")
-    emb1_tr, emb2_tr, meta_tr, param_names = load_h5(args.dataset, key1, key2)
+    emb1_tr, emb2_tr, meta_tr, param_names = load_legacy_provabgs_h5(args.dataset, key1, key2)
     print(f"  Loaded: emb1 {emb1_tr.shape}, emb2 {emb2_tr.shape}, labels {meta_tr.shape}, {len(param_names)} targets")
     if target_columns is not None:
         col_set = set(target_columns)
@@ -477,7 +524,7 @@ def main():
     print(f"  Using {len(param_names)} targets: {param_names}")
 
     results, param_names = run_one_experiment(
-        args.dataset, args.experiment, args.dataset_untrained,
+        Path(args.dataset), args.experiment, args.dataset_untrained,
         target_columns, args.seed, use_gpu, precision,
     )
     print_results_table(results, param_names, args.experiment)
