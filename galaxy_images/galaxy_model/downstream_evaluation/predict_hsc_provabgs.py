@@ -55,37 +55,37 @@ physics_columns = [
     'TAGE_MW',
     'LOG_MSTAR',
     'desi_Z',
-    'hsc_g_extendedness_value'
+    # 'hsc_g_extendedness_value'
 ]
 
 instrument_hsc_columns = [
-    'hsc_object_id',
-    'hsc_g_sdssshape_psf_shape11',
-    'hsc_g_sdssshape_psf_shape22',
-    'hsc_g_sdssshape_psf_shape12',
-    'hsc_r_sdssshape_psf_shape11',
-    'hsc_r_sdssshape_psf_shape22',
-    'hsc_r_sdssshape_psf_shape12',
-    'hsc_i_sdssshape_psf_shape11',
-    'hsc_i_sdssshape_psf_shape22',
-    'hsc_i_sdssshape_psf_shape12',
-    'hsc_z_sdssshape_psf_shape11',
-    'hsc_z_sdssshape_psf_shape22',
-    'hsc_z_sdssshape_psf_shape12',
-    'hsc_y_sdssshape_psf_shape11',
-    'hsc_y_sdssshape_psf_shape22',
-    'hsc_y_sdssshape_psf_shape12',
-    'hsc_g_cmodel_magerr',
-    'hsc_r_cmodel_magerr',
-    'hsc_i_cmodel_magerr',
-    'hsc_z_cmodel_magerr',
-    'hsc_y_cmodel_magerr'
+    # 'hsc_object_id',
+    # 'hsc_g_sdssshape_psf_shape11',
+    # 'hsc_g_sdssshape_psf_shape22',
+    # 'hsc_g_sdssshape_psf_shape12',
+    # 'hsc_r_sdssshape_psf_shape11',
+    # 'hsc_r_sdssshape_psf_shape22',
+    # 'hsc_r_sdssshape_psf_shape12',
+    # 'hsc_i_sdssshape_psf_shape11',
+    # 'hsc_i_sdssshape_psf_shape22',
+    # 'hsc_i_sdssshape_psf_shape12',
+    # 'hsc_z_sdssshape_psf_shape11',
+    # 'hsc_z_sdssshape_psf_shape22',
+    # 'hsc_z_sdssshape_psf_shape12',
+    # 'hsc_y_sdssshape_psf_shape11',
+    # 'hsc_y_sdssshape_psf_shape22',
+    # 'hsc_y_sdssshape_psf_shape12',
+    # 'hsc_g_cmodel_magerr',
+    # 'hsc_r_cmodel_magerr',
+    # 'hsc_i_cmodel_magerr',
+    # 'hsc_z_cmodel_magerr',
+    # 'hsc_y_cmodel_magerr'
 ]
 
 metadata_columns = [
-    'TARGETID',
-    'RA',
-    'DEC'
+    # 'TARGETID',
+    # 'RA',
+    # 'DEC'
 ]
 
 DEFAULT_TARGETS = physics_columns + instrument_hsc_columns + metadata_columns
@@ -147,8 +147,15 @@ def _standardize_with_stats(data, mean, std):
     return (np.asarray(data, dtype=np.float64) - mean) / (std + 1e-8)
 
 
+# MLP architecture for downstream head (used in filenames, e.g. 256-128)
+MLP_HIDDEN = (256, 128)
+MLP_SUFFIX = "-".join(map(str, MLP_HIDDEN))  # "256-128"
+
+
 class MLPRegressor(nn.Module):
-    def __init__(self, in_dim, out_dim, hidden=(512, 256, 128), dropout=0.2):
+    def __init__(self, in_dim, out_dim, hidden=None, dropout=0.2):
+        if hidden is None:
+            hidden = MLP_HIDDEN
         super().__init__()
         layers = []
         prev = in_dim
@@ -168,7 +175,9 @@ class MLPRegressor(nn.Module):
 
 
 class LitRegressor(pl.LightningModule):
-    def __init__(self, in_dim, out_dim, hidden=(512, 256, 128), dropout=0.2, lr=1e-3, weight_decay=1e-2, use_embedding=1):
+    def __init__(self, in_dim, out_dim, hidden=None, dropout=0.2, lr=1e-3, weight_decay=1e-2, use_embedding=1):
+        if hidden is None:
+            hidden = MLP_HIDDEN
         super().__init__()
         self.save_hyperparameters()
         self.model = MLPRegressor(in_dim=in_dim, out_dim=out_dim, hidden=hidden, dropout=dropout)
@@ -257,7 +266,7 @@ def train_and_eval(use_embedding, train_loader, val_loader, param_names, emb_dim
     model = LitRegressor(
         in_dim=emb_dim,
         out_dim=out_dim,
-        hidden=(512, 256, 128),
+        hidden=MLP_HIDDEN,
         dropout=0.2,
         lr=1e-3,
         weight_decay=1e-2,
@@ -441,8 +450,8 @@ def main():
                         target_columns, args.seed, use_gpu, precision,
                     )
                     print_results_table(results, param_names, experiment, stem)
-                    save_plot(results, param_names, experiment, out_dir / f"{stem}_{experiment}.png", stem)
-                    save_results_csv(results, param_names, SERIES, out_dir / f"{stem}_{experiment}.csv")
+                    save_plot(results, param_names, experiment, out_dir / f"{stem}_{experiment}_{MLP_SUFFIX}.png", stem)
+                    save_results_csv(results, param_names, SERIES, out_dir / f"{stem}_{experiment}_{MLP_SUFFIX}.csv")
                 except Exception as e:
                     print(f"  Error: {e}")
                     raise
@@ -473,8 +482,8 @@ def main():
     )
     print_results_table(results, param_names, args.experiment)
     stem = Path(args.dataset).stem
-    save_plot(results, param_names, args.experiment, out_dir / f"{stem}_{args.experiment}.png", stem)
-    save_results_csv(results, param_names, SERIES, out_dir / f"{stem}_{args.experiment}.csv")
+    save_plot(results, param_names, args.experiment, out_dir / f"{stem}_{args.experiment}_{MLP_SUFFIX}.png", stem)
+    save_results_csv(results, param_names, SERIES, out_dir / f"{stem}_{args.experiment}_{MLP_SUFFIX}.csv")
 
 
 if __name__ == "__main__":
