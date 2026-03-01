@@ -1,4 +1,3 @@
-from numpy._core.numeric import False_
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
@@ -13,6 +12,7 @@ from diffusers import UNet2DConditionModel, UNet2DModel
 from typing import Optional
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import numpy as np
 
 
 def setup_run_snapshot() -> Path:
@@ -284,6 +284,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self._train_start_time = time.time()
         print(f"\n{'='*60}")
         print(f"Training started - Target: {self.trainer.max_steps} steps")
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
         print(f"{'='*60}\n")
 
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
@@ -350,7 +353,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         return mse_error
 
 
-    def validation_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
+    def validation_step(self, batch: tuple, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+        # Second dataloader is lens (HSC, Legacy) pairs: cache for lens validation plot
+        if dataloader_idx == 1:
+            self._val_lens_cond_batch = batch[1].clone()   # Legacy
+            self._val_lens_target_batch = batch[0].clone() # HSC
+            loss = self.compute_loss(batch)
+            self.log("val/loss_lenses", loss, prog_bar=False, on_epoch=True, sync_dist=True)
+            return loss
+
         loss = self.compute_loss(batch)
         self.log("val/loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
 
@@ -526,6 +537,126 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         plt.close(fig_orig)
         plt.close(fig_row)
 
+        # Lens validation: row-scaled grid (Cond=Legacy, Target=HSC, Sample=generated HSC)
+        if hasattr(self, '_val_lens_cond_batch') and hasattr(self, '_val_lens_target_batch'):
+            num_lens = min(6, len(self._val_lens_target_batch))
+            num_samples_per_cond = 5
+            num_cols = 2 + num_samples_per_cond + 1  # cond + target + samples + mean
+            col_titles = ["Cond (Legacy)", "Target (HSC)"] + [f"Sample {j+1}" for j in range(num_samples_per_cond)] + ["Mean"]
+            fig_lens, axes_lens = plt.subplots(
+                num_lens, num_cols,
+                figsize=(2 * num_cols, 2 * num_lens),
+                squeeze=False,
+            )
+            for j, title in enumerate(col_titles):
+                axes_lens[0, j].set_title(title, fontsize=10)
+            for i in range(num_lens):
+                cond = self._val_lens_cond_batch[i : i + 1].to(self.device)
+                target = self._val_lens_target_batch[i : i + 1].to(self.device)
+                cond_repeated = cond.repeat(num_samples_per_cond, 1, 1, 1)
+                samples = self.sample(cond_repeated)
+                mean_sample = samples.mean(dim=0, keepdim=True)
+                target_chw = target[0, :3]
+                vmin = target_chw.amin(dim=(1, 2))
+                vmax = target_chw.amax(dim=(1, 2))
+                cond_vis = _row_scale_rgb(cond[0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, 0].imshow(cond_vis)
+                axes_lens[i, 0].axis("off")
+                target_vis = _row_scale_rgb(target[0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, 1].imshow(target_vis)
+                axes_lens[i, 1].axis("off")
+                for j in range(num_samples_per_cond):
+                    samp_vis = _row_scale_rgb(samples[j, :3], vmin, vmax).detach().cpu().numpy()
+                    axes_lens[i, 2 + j].imshow(samp_vis)
+                    axes_lens[i, 2 + j].axis("off")
+                mean_vis = _row_scale_rgb(mean_sample[0, :3], vmin, vmax).detach().cpu().numpy()
+                axes_lens[i, -1].imshow(mean_vis)
+                axes_lens[i, -1].axis("off")
+            plt.figure(fig_lens.number)
+            plt.tight_layout()
+            self.logger.experiment.log({
+                "val/sample_grid_row_scaled_lenses": wandb.Image(fig_lens),
+                "global_step": self.global_step,
+            })
+            plt.close(fig_lens)
+
+            # Lens triple plot (astropy style): Target HSC | Sample | Legacy, 3 rows x 5 cols (4 bands + RGB)
+            try:
+                from astropy.visualization import ImageNormalize, PercentileInterval, AsinhStretch
+
+                def _normed_imshow_lens(ax, data2d, interval_obj, stretch_obj, title=None):
+                    data = np.asarray(data2d, dtype=np.float32)
+                    mask = np.isfinite(data)
+                    if not np.any(mask):
+                        ax.axis("off")
+                        return
+                    vmin, vmax = interval_obj.get_limits(data[mask])
+                    norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch_obj, clip=True)
+                    ax.imshow(data, origin="lower", norm=norm, cmap="magma")
+                    if title:
+                        ax.set_title(title, fontsize=9, fontweight="bold")
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+
+                def make_rgb_lens(img, r, g, b, interval_obj, stretch_obj):
+                    channels_available = img.shape[0]
+                    r, g, b = [min(x, channels_available - 1) for x in [r, g, b]]
+                    rgb = np.stack([img[r], img[g], img[b]], axis=-1).astype(np.float32)
+                    out = np.zeros_like(rgb)
+                    for k in range(3):
+                        ch = rgb[..., k]
+                        mask = np.isfinite(ch)
+                        if not np.any(mask):
+                            continue
+                        vmin, vmax = interval_obj.get_limits(ch[mask])
+                        norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch_obj, clip=True)
+                        out[..., k] = norm(ch)
+                    mx = np.nanmax(out)
+                    if mx > 0:
+                        out /= mx
+                    return np.clip(out, 0, 1)
+
+                interval_obj = PercentileInterval(99.5)
+                stretch_obj = AsinhStretch()
+                band_names = ["g", "r", "i", "z"]
+
+                target_0 = self._val_lens_target_batch[0:1].to(self.device)
+                cond_0 = self._val_lens_cond_batch[0:1].to(self.device)
+                sample_0 = self.sample(cond_0)
+                target_np = target_0[0].cpu().numpy()
+                sample_np = sample_0[0].cpu().numpy()
+                legacy_np = cond_0[0].cpu().numpy()
+
+                fig_triple, gs = plt.subplots(3, 5, figsize=(14, 10), constrained_layout=True)
+                fig_triple.suptitle("Lens validation: Target (HSC) | Sample | Legacy (cond)", fontsize=12, y=1.02)
+
+                for c in range(4):
+                    _normed_imshow_lens(gs[0, c], target_np[c], interval_obj, stretch_obj, title=f"Target {band_names[c]}")
+                gs[0, 4].imshow(make_rgb_lens(target_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                gs[0, 4].set_title("Target RGB (irg)", fontsize=9, fontweight="bold")
+                gs[0, 4].axis("off")
+
+                for c in range(4):
+                    _normed_imshow_lens(gs[1, c], sample_np[c], interval_obj, stretch_obj, title=f"Sample {band_names[c]}")
+                gs[1, 4].imshow(make_rgb_lens(sample_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                gs[1, 4].set_title("Sample RGB (irg)", fontsize=9, fontweight="bold")
+                gs[1, 4].axis("off")
+
+                for c in range(4):
+                    _normed_imshow_lens(gs[2, c], legacy_np[c], interval_obj, stretch_obj, title=f"Legacy {band_names[c]}")
+                gs[2, 4].imshow(make_rgb_lens(legacy_np, 2, 1, 0, interval_obj, stretch_obj), origin="lower")
+                gs[2, 4].set_title("Legacy RGB (irg)", fontsize=9, fontweight="bold")
+                gs[2, 4].axis("off")
+
+                self.logger.experiment.log({
+                    "val/lens_triple_target_sample_legacy": wandb.Image(fig_triple),
+                    "global_step": self.global_step,
+                })
+                plt.close(fig_triple)
+            except Exception as e:
+                if getattr(self, "global_rank", 0) == 0:
+                    print(f"[Lens triple plot] Skipped (astropy or plot error): {e}")
+
         # Compute MSE metric
         if hasattr(self, '_val_mse_cond_batch') and hasattr(self, '_val_mse_target_batch'):
             mse_start_time = time.time()
@@ -550,6 +681,22 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
+def is_h100_gpu() -> bool:
+    """
+    Detect if any available GPU is an H100.
+
+    Returns:
+        True if at least one H100 GPU is detected, False otherwise.
+    """
+    if not torch.cuda.is_available():
+        return False
+    for i in range(torch.cuda.device_count()):
+        device_name = torch.cuda.get_device_name(i).lower()
+        if "h100" in device_name:
+            return True
+    return False
+
+
 if __name__ == "__main__":
     # Set up snapshot + tee logging before anything else in main runs
     setup_run_snapshot()
@@ -558,7 +705,23 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader, TensorDataset
     from data import HSCLegacyDataset
 
+    # Reproducibility
+    pl.seed_everything(42, workers=True)
+
+    # Detect H100 for settings
+    is_h100 = is_h100_gpu()
     batch_size = 64
+    precision_setting = "16-mixed"
+    lr = 1e-4
+    num_steps = 300_000
+    if is_h100:
+        print("H100 GPU detected - applying H100-specific settings")
+        batch_size = 64
+        precision_setting = "bf16-mixed"
+        lr = 1e-4
+        num_steps = 300_000
+        print(f"  Using batch_size={batch_size}, precision={precision_setting}, num_steps={num_steps}")
+
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
 
     train_dataset = HSCLegacyDataset(
@@ -568,6 +731,13 @@ if __name__ == "__main__":
     val_dataset = HSCLegacyDataset(
         hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
         idx_list=list(range(95_000, 100_000)),
+    )
+
+    # Lens validation: (HSC, Legacy) pairs only for lens indices
+    lense_indices = [3199, 3298, 4368, 4556, 8357, 9503, 19076, 20869, 26247, 40506, 51839, 53037, 60565, 60980, 64245, 72326, 74053, 77857, 99695]
+    lense_dataset = HSCLegacyDataset(
+        hdf5_path='/data/vision/billf/scratch/pablomer/legacysurvey_hsc/preprocessed_hsc_legacy_48x48_all.h5',
+        idx_list=lense_indices,
     )
 
     # train_dataset = HSCLegacyDataset(
@@ -582,6 +752,8 @@ if __name__ == "__main__":
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=4)
+    lense_loader = DataLoader(lense_dataset, batch_size=len(lense_indices), shuffle=False, num_workers=4)
+    val_loaders = [val_loader, lense_loader]
 
     concat_conditioning = True
     model = ConditionalFlowMatchingModule(
@@ -593,7 +765,7 @@ if __name__ == "__main__":
         cross_attention_dim=512,
         pretrained_encoder=False,
         concat_conditioning=concat_conditioning,
-        lr=1e-4,
+        lr=lr,
         num_sample_images=6,
         num_integration_steps=250,
     )
@@ -607,17 +779,24 @@ if __name__ == "__main__":
         name=name,
         log_model=False,
     )
+    if wandb_logger.experiment:
+        wandb_logger.experiment.config.update({
+            "batch_size": batch_size,
+            "precision": precision_setting,
+            "is_h100": is_h100,
+        })
 
     n_devices = 4
     trainer = pl.Trainer(
-        max_steps=300_000/n_devices,
+        max_steps=num_steps / n_devices,
         logger=wandb_logger,
         accelerator="auto",
         devices=n_devices,
         # strategy="ddp_find_unused_parameters_true", #TODO: Remove this if not needed -- only to show that we get no conditioning if there's no cross-attention
         log_every_n_steps=10,
+        precision=precision_setting,
         val_check_interval=1000,
         check_val_every_n_epoch=None,
     )
 
-    trainer.fit(model, train_loader, val_loader)
+    trainer.fit(model, train_loader, val_loaders)

@@ -35,17 +35,17 @@ DATASET_PATH_UNTRAINED = _here / "downstream_hsc_provabgs_untrained.h5"
 
 # Default list of trained H5s from prepare_hsc_provabgs.py (3 model configs)
 DEFAULT_DATASET_LIST = [
-    _here / "downstream_hsc_provabgs_zdim16_geom_neighbors.h5",
-    # _here / "downstream_hsc_provabgs_zdim16_nogeom_neighbors.h5",
+    # _here / "downstream_hsc_provabgs_zdim16_geom_neighbors.h5",
+    _here / "downstream_hsc_provabgs_zdim16_nogeom_neighbors.h5",
     # _here / "downstream_hsc_provabgs_zdim16_geom_old_dataloader.h5",
 ]
 R2_COMPARISONS_DIR = _here / "r2_comparisons"
 
 # One experiment per run: which embedding pair to use
 EXPERIMENTS = {
-    "legacy": ("legacy_encoder1", "legacy_encoder2"),
+    # "legacy": ("legacy_encoder1", "legacy_encoder2"),
     "legacy_hsc": ("hsc_legacy_encoder1", "hsc_legacy_encoder2"),
-    "hsc": ("hsc_encoder1", "hsc_encoder2"),
+    # "hsc": ("hsc_encoder1", "hsc_encoder2"),
 }
 
 
@@ -210,7 +210,8 @@ class LitRegressor(pl.LightningModule):
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
 
 
-def evaluate_per_target(model, loader, param_names, device, use_embedding=1):
+def get_predictions(model, loader, device, use_embedding=1):
+    """Run model on loader and return (all_preds, all_targets) as numpy arrays."""
     model.eval()
     all_preds, all_targets = [], []
     with torch.no_grad():
@@ -220,8 +221,11 @@ def evaluate_per_target(model, loader, param_names, device, use_embedding=1):
             y_hat = model(x)
             all_preds.append(y_hat.cpu().numpy())
             all_targets.append(y.cpu().numpy())
-    all_preds = np.concatenate(all_preds, axis=0)
-    all_targets = np.concatenate(all_targets, axis=0)
+    return np.concatenate(all_preds, axis=0), np.concatenate(all_targets, axis=0)
+
+
+def evaluate_per_target(model, loader, param_names, device, use_embedding=1):
+    all_preds, all_targets = get_predictions(model, loader, device, use_embedding)
 
     results = []
     for i in range(all_targets.shape[1]):
@@ -284,7 +288,9 @@ def train_and_eval(use_embedding, train_loader, val_loader, param_names, emb_dim
     trainer.fit(model, train_loader, val_loader)
     best = LitRegressor.load_from_checkpoint(ckpt.best_model_path) if ckpt.best_model_path else model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return evaluate_per_target(best.to(device), val_loader, param_names, device, use_embedding)
+    best = best.to(device)
+    results = evaluate_per_target(best, val_loader, param_names, device, use_embedding)
+    return results, best
 
 
 SERIES = ["trained_emb1", "trained_emb2", "untrained_emb1", "untrained_emb2"]
@@ -341,6 +347,7 @@ def run_one_experiment(dataset_path, experiment, dataset_untrained_path, target_
     train_loader_u, val_loader_u = make_loaders(emb1_u[finite], emb2_u[finite], meta_u)
 
     results = {}
+    best_trained_emb1 = None
     for (label, ld_tr, ld_va), emb_num, emb_dim in [
         (("trained", train_loader, val_loader), 1, emb_dim_1),
         (("trained", train_loader, val_loader), 2, emb_dim_2),
@@ -348,8 +355,11 @@ def run_one_experiment(dataset_path, experiment, dataset_untrained_path, target_
         (("untrained", train_loader_u, val_loader_u), 2, emb_dim_2),
     ]:
         key = f"{label}_emb{emb_num}"
-        results[key] = train_and_eval(emb_num, ld_tr, ld_va, param_names, emb_dim, out_dim, use_gpu, precision)
-    return results, param_names
+        res, best_model = train_and_eval(emb_num, ld_tr, ld_va, param_names, emb_dim, out_dim, use_gpu, precision)
+        results[key] = res
+        if key == "trained_emb1":
+            best_trained_emb1 = (best_model, val_loader, 1)
+    return results, param_names, best_trained_emb1, mean, std
 
 
 def print_results_table(results, param_names, experiment, dataset_stem=""):
@@ -404,6 +414,49 @@ def save_plot(results, param_names, experiment, filepath, dataset_stem=""):
     plt.close()
 
 
+def save_predicted_vs_true_plot(all_preds, all_targets, param_names, mean, std, filepath, dataset_stem="", experiment=""):
+    """Save a single figure with one subplot per physics column: predicted vs true (trained_emb1)."""
+    # Only plot physics columns that are in param_names
+    cols_to_plot = [c for c in physics_columns if c in param_names]
+    if not cols_to_plot:
+        return
+    indices = [param_names.index(c) for c in cols_to_plot]
+    n_plots = len(cols_to_plot)
+    n_cols = min(3, n_plots)
+    n_rows = (n_plots + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+    if n_plots == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+    mean = np.asarray(mean)
+    std = np.asarray(std)
+    for ax, idx, name in zip(axes, indices, cols_to_plot):
+        y_true_std = all_targets[:, idx]
+        y_pred_std = all_preds[:, idx]
+        valid = np.isfinite(y_true_std) & np.isfinite(y_pred_std)
+        y_t = y_true_std[valid] * std[idx] + mean[idx]
+        y_p = y_pred_std[valid] * std[idx] + mean[idx]
+        ax.scatter(y_t, y_p, alpha=0.3, s=8, c="#2E86AB")
+        lims = [min(y_t.min(), y_p.min()), max(y_t.max(), y_p.max())]
+        ax.plot(lims, lims, "k--", alpha=0.7, label="y=x")
+        r2 = r2_score(y_t, y_p) if np.std(y_t) >= 1e-6 else np.nan
+        ax.set_xlabel("True")
+        ax.set_ylabel("Predicted")
+        ax.set_title(f"{name}\nR² = {r2:.3f}" if not np.isnan(r2) else name)
+        ax.set_aspect("equal", adjustable="box")
+        ax.grid(alpha=0.3)
+    for j in range(n_plots, len(axes)):
+        axes[j].set_visible(False)
+    title = f"Predicted vs True — {dataset_stem} — {experiment}" if dataset_stem else f"Predicted vs True — {experiment}"
+    fig.suptitle(title + " (trained physics embedding)", fontsize=12)
+    plt.tight_layout()
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(filepath, dpi=150, bbox_inches="tight")
+    print(f"Predicted vs true plot saved: {filepath}")
+    plt.close()
+
+
 def main():
     p = argparse.ArgumentParser(description="HSC ProvaBGS downstream prediction (single or batch over datasets)")
     p.add_argument("--experiment", type=str, choices=list(EXPERIMENTS), default="legacy_hsc",
@@ -445,13 +498,22 @@ def main():
             for experiment in EXPERIMENTS:
                 print(f"\n--- Experiment: {experiment} ---")
                 try:
-                    results, param_names = run_one_experiment(
+                    results, param_names, best_trained_emb1, mean, std = run_one_experiment(
                         dataset_path, experiment, args.dataset_untrained,
                         target_columns, args.seed, use_gpu, precision,
                     )
                     print_results_table(results, param_names, experiment, stem)
                     save_plot(results, param_names, experiment, out_dir / f"{stem}_{experiment}_{MLP_SUFFIX}.png", stem)
                     save_results_csv(results, param_names, SERIES, out_dir / f"{stem}_{experiment}_{MLP_SUFFIX}.csv")
+                    if best_trained_emb1 is not None:
+                        model, val_loader, use_emb = best_trained_emb1
+                        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                        all_preds, all_targets = get_predictions(model, val_loader, device, use_emb)
+                        save_predicted_vs_true_plot(
+                            all_preds, all_targets, param_names, mean, std,
+                            out_dir / f"{stem}_{experiment}_{MLP_SUFFIX}_pred_vs_true.png",
+                            dataset_stem=stem, experiment=experiment,
+                        )
                 except Exception as e:
                     print(f"  Error: {e}")
                     raise
@@ -476,7 +538,7 @@ def main():
         param_names = [param_names[i] for i in indices]
     print(f"  Using {len(param_names)} targets: {param_names}")
 
-    results, param_names = run_one_experiment(
+    results, param_names, best_trained_emb1, mean, std = run_one_experiment(
         args.dataset, args.experiment, args.dataset_untrained,
         target_columns, args.seed, use_gpu, precision,
     )
@@ -484,6 +546,15 @@ def main():
     stem = Path(args.dataset).stem
     save_plot(results, param_names, args.experiment, out_dir / f"{stem}_{args.experiment}_{MLP_SUFFIX}.png", stem)
     save_results_csv(results, param_names, SERIES, out_dir / f"{stem}_{args.experiment}_{MLP_SUFFIX}.csv")
+    if best_trained_emb1 is not None:
+        model, val_loader, use_emb = best_trained_emb1
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        all_preds, all_targets = get_predictions(model, val_loader, device, use_emb)
+        save_predicted_vs_true_plot(
+            all_preds, all_targets, param_names, mean, std,
+            out_dir / f"{stem}_{args.experiment}_{MLP_SUFFIX}_pred_vs_true.png",
+            dataset_stem=stem, experiment=args.experiment,
+        )
 
 
 if __name__ == "__main__":

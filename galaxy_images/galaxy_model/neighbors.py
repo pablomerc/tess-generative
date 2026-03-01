@@ -465,6 +465,80 @@ class NeighborsDatasetRawRAM(Dataset):
         return target, samegal, sameins, metadata
 
 
+# Keys to exclude from NeighborsSimpleDataset metadata (images and neighbor arrays)
+NEIGHBORS_SIMPLE_EXCLUDE_KEYS = frozenset({
+    "source_type",
+    "images_hsc",
+    "images_legacy",
+    "neighbor_idx_hsc",
+    "neighbor_idx_legacy",
+    "neighbor_dist_hsc",
+    "neighbor_dist_legacy",
+})
+
+
+def _metadata_value_from_h5(val):
+    """Convert an HDF5/dataset slice to a Python type for metadata (scalars and small arrays)."""
+    if hasattr(val, "shape") and val.shape == ():
+        return val.item()
+    if np.isscalar(val):
+        if isinstance(val, (np.floating, np.float32, np.float64)):
+            return float(val)
+        if isinstance(val, (np.integer, np.int64, np.int32)):
+            return int(val)
+        if isinstance(val, np.bool_):
+            return bool(val)
+    if hasattr(val, "tolist"):
+        return val.tolist()
+    return val
+
+
+class NeighborsSimpleDataset(Dataset):
+    """
+    Returns samples from the HDF5: hsc image, legacy image, and metadata from all columns
+    except source_type, images_hsc, images_legacy, and neighbor_* (neighbor_idx_*, neighbor_dist_*).
+    """
+    def __init__(self, hdf5_path, norm_dict=NORM_DICT, crop_size=48):
+        self.hdf5_path = hdf5_path
+        self.norm_dict = norm_dict
+        self.crop_size = crop_size
+        self.file = None  # Handle for lazy loading
+
+        with h5py.File(self.hdf5_path, 'r') as f:
+            sources = f['source_type'][:]
+            indexes_mmu = np.where(sources == 0)[0]
+            self.indexes_mmu = indexes_mmu
+            self._meta_keys = [k for k in f.keys() if k not in NEIGHBORS_SIMPLE_EXCLUDE_KEYS]
+
+    def _open_file(self):
+        """Opens the HDF5 file once per worker process."""
+        if self.file is None:
+            self.file = h5py.File(self.hdf5_path, 'r', libver='latest', swmr=True)
+
+    def __len__(self):
+        return len(self.indexes_mmu)
+
+    def __getitem__(self, idx):
+        self._open_file()
+        index_mmu = self.indexes_mmu[idx]
+
+        img_hsc = self.file['images_hsc'][index_mmu]
+        img_legacy = self.file['images_legacy'][index_mmu]
+
+        img_hsc = preprocess_raw_image(img_hsc, 'hsc', self.crop_size, self.norm_dict)
+        img_legacy = preprocess_raw_image(img_legacy, 'legacy', self.crop_size, self.norm_dict)
+
+        img_hsc = img_hsc[:4]
+        img_legacy = img_legacy[:4]
+
+        metadata = {"idx": idx, "index_mmu": int(index_mmu)}
+        for key in self._meta_keys:
+            val = self.file[key][index_mmu]
+            metadata[key] = _metadata_value_from_h5(val)
+
+        return img_hsc, img_legacy, metadata
+
+
 if __name__ == "__main__":
     import time
     from tqdm import tqdm

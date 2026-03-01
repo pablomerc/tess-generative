@@ -67,7 +67,7 @@ NUM_WORKERS = 0
 DATALOADER_MODE = "precomputed"  # "precomputed" (NeighborsPrecomputedDataset + simple_collate) or "neighbors" (NeighborsDataset/RawRAM + collate_neighbors)
 
 VAL_RATIO = 0.05  # 5% for validation
-NUM_STEPS = 300_000
+NUM_STEPS = 300_000 * 5
 IMAGE_SIZE = 48
 LR = 1e-4
 LAMBDA_GENERATIVE = 1.0
@@ -89,7 +89,6 @@ def main():
     if is_h100:
         batch_size = 64
         precision_setting = "bf16-mixed"
-        num_steps = 300_000
         print(f"H100 detected: batch_size={batch_size}, precision={precision_setting}")
 
     # Single dataset, then train/val split by index
@@ -145,7 +144,7 @@ def main():
     # Pass config here; Lightning handles DDP so only rank 0 gets real wandb (avoids .config.update() on placeholder)
     wandb_logger = WandbLogger(
         project=WANDB_PROJECT,
-        name="neighbours-48x48-zdim16-nogeom",
+        name="neighbours-48x48-zdim64-geom0.0-longtraining",
         log_model=False,
         config={
             "batch_size": batch_size,

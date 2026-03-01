@@ -389,7 +389,7 @@ if __name__ == "__main__":
             f"{count_params(block):,}")
 
 
-    x = torch.rand(50,5,4,48,48)
+    x = torch.rand(50,4,96,96)
 
     z = encoder(x)
 

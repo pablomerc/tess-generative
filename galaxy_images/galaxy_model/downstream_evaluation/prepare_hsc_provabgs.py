@@ -80,8 +80,8 @@ FITS_TRAIN_PATH = "/data/vision/billf/scratch/pablomer/data/provabgs_hsc_train_v
 # Three model configs: (output suffix, checkpoint path, module filename for model class)
 # Neighbors models use double_train_fm_neighbors.py; old dataloader uses double_train_fm.py.
 HSC_MODEL_CONFIGS = [
-    ("zdim16_geom_neighbors", "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/03mwpijx/checkpoints/latest-step=step=66000.ckpt", "double_train_fm_neighbors.py"),
-    # ("zdim16_nogeom_neighbors", "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/g2g9kvr4/checkpoints/latest-step=step=75000.ckpt", "double_train_fm_neighbors.py"),
+    # ("zdim16_geom_neighbors", "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/03mwpijx/checkpoints/latest-step=step=66000.ckpt", "double_train_fm_neighbors.py"),
+    ("zdim16_nogeom_neighbors", "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching-neighbours/g2g9kvr4/checkpoints/latest-step=step=75000.ckpt", "double_train_fm_neighbors.py"),
     # ("zdim16_geom_old_dataloader", "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy-flow-matching/wu1csh99/checkpoints/latest-step=step=75000.ckpt", "double_train_fm.py"),
 ]
 

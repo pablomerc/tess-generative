@@ -78,14 +78,14 @@ class RescaleToLegacySurvey:
 
     def forward(self, image, survey):
         """Rescale image by dividing by zeropoint scale factor."""
-        zpscale = self.convert_zeropoint(27.0) if survey == "HSC" else 1.0
+        zpscale = self.convert_zeropoint(27.0) if (survey and survey.upper() == "HSC") else 1.0
         image = image.clone()  # Avoid in-place modification
         image /= zpscale
         return image
 
     def backward(self, image, survey):
         """Reverse rescale by multiplying by zeropoint scale factor."""
-        zpscale = self.convert_zeropoint(27.0) if survey == "HSC" else 1.0
+        zpscale = self.convert_zeropoint(27.0) if (survey and survey.upper() == "HSC") else 1.0
         image = image.clone()  # Avoid in-place modification
         image *= zpscale
         return image
@@ -206,6 +206,69 @@ def preprocess_image(
             mult_factor=mult_factor,
         )
         processed = range_compressor.forward(processed.clone())
+
+    return processed
+
+
+
+# Define ordered band lists for v2 lookup
+HSC_BANDS = ["HSC-G", "HSC-R", "HSC-I", "HSC-Z", "HSC-Y"]
+LEGACY_BANDS = ["DES-G", "DES-R", "DES-I", "DES-Z"]
+
+
+def preprocess_image_v2(image: torch.Tensor, crop_size: int = 96, survey: str = "hsc") -> torch.Tensor:
+    """
+    Simplified preprocessing pipeline (V2).
+
+    Automatically infers bands based on survey name ('hsc' or 'legacy').
+    Expects input shape (C, 160, 160) or (B, C, 160, 160).
+    """
+    # 1. Standardize inputs
+    survey_key = survey.lower().strip()
+
+    # Handle dimensions: Ensure [Batch, Channel, H, W] for the classes
+    is_batched = image.ndim == 4
+    if not is_batched:
+        if image.ndim == 3:
+            image = image.unsqueeze(0) # [C, H, W] -> [1, C, H, W]
+        else:
+            raise ValueError(f"Image must be 3D or 4D tensor, got shape {image.shape}")
+
+    # 2. Determine bands and validate channel count
+    if survey_key == 'hsc':
+        bands = HSC_BANDS
+        expected_channels = 5
+    elif survey_key == 'legacy':
+        bands = LEGACY_BANDS
+        expected_channels = 4
+    else:
+        raise ValueError(f"Unknown survey: '{survey}'. Supported: 'hsc', 'legacy'")
+
+    if image.shape[1] != expected_channels:
+        raise ValueError(f"Survey '{survey}' expects {expected_channels} channels, but got input with {image.shape[1]}")
+
+    # 3. Pipeline Execution
+
+    # Crop (Default 96)
+    cropper = CenterCrop(crop_size=crop_size)
+    processed = cropper(image)
+
+    # Clamp
+    clamper = Clamp()
+    processed = clamper(processed.clone(), bands)
+
+    # Rescale (Uses survey string to decide logic)
+    rescaler = RescaleToLegacySurvey()
+    processed = rescaler.forward(processed.clone(), survey)
+
+    # Range Compress (Defaults)
+    range_compressor = RangeCompress()
+    processed = range_compressor.forward(processed.clone())
+
+    # 4. Output handling
+    # If input was not batched (3D), return 3D. If batched, return 4D.
+    if not is_batched:
+        processed = processed.squeeze(0)
 
     return processed
 

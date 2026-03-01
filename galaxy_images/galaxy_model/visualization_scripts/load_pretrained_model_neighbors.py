@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 from data import HSCLegacyDatasetZoom
 import time
 
+import json
 import umap
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,12 +41,12 @@ CHECKPOINT_OPTIONS = [
      16, False, 53000),
 ]
 
-idx = 1  # 0=64 no geo, 1=64 geo, 2=16 no geo
+idx = 2  # 0=64 no geo, 1=64 geo, 2=16 no geo
 _label, _wandb_id, checkpoint_path, dim, _geom, step = CHECKPOINT_OPTIONS[idx]
 mode_tag = "geom" if _geom else ""
 epoch = step  # used in plot titles
 zoom_val = True  # always use HSCLegacyDatasetZoom
-avg_latent_space = True
+avg_latent_space = False
 
 print(f"Checkpoint: {_label} (wandb {_wandb_id}), path={checkpoint_path}, dim={dim}, geom={_geom}, step={step}")
 
@@ -53,6 +54,10 @@ print(f"Checkpoint: {_label} (wandb {_wandb_id}), path={checkpoint_path}, dim={d
 NEIGHBORS_VIZ_DIR = Path(__file__).parent / 'neighbors_visualization'
 LATENT_SPACE_DIR = NEIGHBORS_VIZ_DIR / 'latent_space'
 GEN_STUDY_DIR = NEIGHBORS_VIZ_DIR / 'gen_study'
+
+# HSC/Legacy colors (match downstream_evaluation/final/aion_vs_ours_all.py)
+COLOR_HSC = '#e8c4a0'
+COLOR_LEGACY = '#8eb8e8'
 
 # Control flags
 GENERATE_UMAP = True  # Set to False to skip UMAP generation and plotting
@@ -255,12 +260,37 @@ if GENERATE_UMAP:
         pair_colors = plt.cm.tab10(np.linspace(0, 1, 5))  # 5 colors
         pair_markers = ['x', 's', 'o', '^']  # 4 shapes: X, square, circle, triangle
 
+    # Save UMAP data to same directory as plots for quick tuned plotting
+    zoom_suffix = '_zoom' if zoom_val else ''
+    latent_suffix = '_avg' if avg_latent_space else '_flat'
+    umap_stem = f'umap_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}{latent_suffix}'
+    umap_data_path = figures_dir / f'{umap_stem}_data.npz'
+    umap_meta_path = figures_dir / f'{umap_stem}_metadata.json'
+    np.savez_compressed(
+        umap_data_path,
+        hsc_umap_1=hsc_embedding_1,
+        legacy_umap_1=legacy_embedding_1,
+        hsc_umap_2=hsc_embedding_2,
+        legacy_umap_2=legacy_embedding_2,
+        selected_indices=selected_indices if selected_indices is not None else np.array([], dtype=np.int64),
+    )
+    with open(umap_meta_path, 'w') as f:
+        json.dump({
+            'epoch': int(epoch),
+            'dim': int(dim),
+            'mode_tag': mode_tag,
+            'zoom_val': zoom_val,
+            'avg_latent_space': avg_latent_space,
+            'num_hsc': int(num_hsc),
+        }, f, indent=2)
+    print(f"UMAP data saved to '{umap_data_path}' and metadata to '{umap_meta_path}'")
+
     # Create side-by-side figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
     # Encoder 1 plot
-    ax1.scatter(hsc_embedding_1[:, 0], hsc_embedding_1[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
-    ax1.scatter(legacy_embedding_1[:, 0], legacy_embedding_1[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
+    ax1.scatter(hsc_embedding_1[:, 0], hsc_embedding_1[:, 1], s=5, label='HSC', alpha=0.6, c=COLOR_HSC)
+    ax1.scatter(legacy_embedding_1[:, 0], legacy_embedding_1[:, 1], s=5, label='Legacy', alpha=0.6, c=COLOR_LEGACY)
 
     # Mark selected pairs on Encoder 1 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
@@ -279,8 +309,8 @@ if GENERATE_UMAP:
     ax1.grid(True)
 
     # Encoder 2 plot
-    ax2.scatter(hsc_embedding_2[:, 0], hsc_embedding_2[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
-    ax2.scatter(legacy_embedding_2[:, 0], legacy_embedding_2[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
+    ax2.scatter(hsc_embedding_2[:, 0], hsc_embedding_2[:, 1], s=5, label='HSC', alpha=0.6, c=COLOR_HSC)
+    ax2.scatter(legacy_embedding_2[:, 0], legacy_embedding_2[:, 1], s=5, label='Legacy', alpha=0.6, c=COLOR_LEGACY)
 
     # Mark selected pairs on Encoder 2 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
@@ -299,9 +329,7 @@ if GENERATE_UMAP:
     ax2.grid(True)
 
     plt.tight_layout()
-    zoom_suffix = '_zoom' if zoom_val else ''
-    latent_suffix = '_avg' if avg_latent_space else '_flat'
-    combined_path = figures_dir / f'umap_both_encoders_zdim{dim}{mode_tag}{zoom_suffix}{latent_suffix}.png'
+    combined_path = figures_dir / f'{umap_stem}.png'
     plt.savefig(combined_path, dpi=150)
     plt.close()
 
@@ -360,8 +388,8 @@ if GENERATE_PCA:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
     # Encoder 1 plot
-    ax1.scatter(hsc_embedding_1_pca[:, 0], hsc_embedding_1_pca[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
-    ax1.scatter(legacy_embedding_1_pca[:, 0], legacy_embedding_1_pca[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
+    ax1.scatter(hsc_embedding_1_pca[:, 0], hsc_embedding_1_pca[:, 1], s=5, label='HSC', alpha=0.6, c=COLOR_HSC)
+    ax1.scatter(legacy_embedding_1_pca[:, 0], legacy_embedding_1_pca[:, 1], s=5, label='Legacy', alpha=0.6, c=COLOR_LEGACY)
 
     # Mark selected pairs on Encoder 1 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
@@ -381,8 +409,8 @@ if GENERATE_PCA:
     ax1.grid(True)
 
     # Encoder 2 plot
-    ax2.scatter(hsc_embedding_2_pca[:, 0], hsc_embedding_2_pca[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
-    ax2.scatter(legacy_embedding_2_pca[:, 0], legacy_embedding_2_pca[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
+    ax2.scatter(hsc_embedding_2_pca[:, 0], hsc_embedding_2_pca[:, 1], s=5, label='HSC', alpha=0.6, c=COLOR_HSC)
+    ax2.scatter(legacy_embedding_2_pca[:, 0], legacy_embedding_2_pca[:, 1], s=5, label='Legacy', alpha=0.6, c=COLOR_LEGACY)
 
     # Mark selected pairs on Encoder 2 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
@@ -460,8 +488,8 @@ if GENERATE_TSNE:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
     # Encoder 1 plot
-    ax1.scatter(hsc_embedding_1_tsne[:, 0], hsc_embedding_1_tsne[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
-    ax1.scatter(legacy_embedding_1_tsne[:, 0], legacy_embedding_1_tsne[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
+    ax1.scatter(hsc_embedding_1_tsne[:, 0], hsc_embedding_1_tsne[:, 1], s=5, label='HSC', alpha=0.6, c=COLOR_HSC)
+    ax1.scatter(legacy_embedding_1_tsne[:, 0], legacy_embedding_1_tsne[:, 1], s=5, label='Legacy', alpha=0.6, c=COLOR_LEGACY)
 
     # Mark selected pairs on Encoder 1 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:
@@ -480,8 +508,8 @@ if GENERATE_TSNE:
     ax1.grid(True)
 
     # Encoder 2 plot
-    ax2.scatter(hsc_embedding_2_tsne[:, 0], hsc_embedding_2_tsne[:, 1], s=5, label='HSC', alpha=0.6, c='blue')
-    ax2.scatter(legacy_embedding_2_tsne[:, 0], legacy_embedding_2_tsne[:, 1], s=5, label='Legacy', alpha=0.6, c='orange')
+    ax2.scatter(hsc_embedding_2_tsne[:, 0], hsc_embedding_2_tsne[:, 1], s=5, label='HSC', alpha=0.6, c=COLOR_HSC)
+    ax2.scatter(legacy_embedding_2_tsne[:, 0], legacy_embedding_2_tsne[:, 1], s=5, label='Legacy', alpha=0.6, c=COLOR_LEGACY)
 
     # Mark selected pairs on Encoder 2 plot with matching colors and shapes (if enabled)
     if SHOW_PAIRS and selected_indices is not None:

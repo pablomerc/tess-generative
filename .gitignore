@@ -243,3 +243,23 @@ galaxy_images/galaxy_model/logs/
 flow_models/
 .matplotlib_cache/
 plots-galaxy/
+
+# Generated data/artifact files
+*.h5
+*.png
+*.pdf
+*.ipynb
+*.csv
+*.parquet
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.ckpt
+*.hdf5
+*.fits
+*.fits.gz
+lightning_logs/
+**/lightning_logs/
+r2_comparisons*/
+**/r2_comparisons*/

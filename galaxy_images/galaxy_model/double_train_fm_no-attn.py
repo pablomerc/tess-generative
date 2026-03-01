@@ -226,6 +226,17 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 projection_class_embeddings_input_dim=encoder_output_dim * (1 + num_same_instrument),  # encoder_1 (1) + encoder_2 (k) concatenated
             )
 
+        # Initialize geometric loss function once (reused across all training steps)
+        if self.lambda_geometric > 0:
+            self.geom_loss_fn = geomloss.SamplesLoss(
+                loss='sinkhorn',
+                p=2,
+                blur=0.01,
+                backend='tensorized',
+                debias=True)
+        else:
+            self.geom_loss_fn = None
+
     def forward(
         self,
         x_t: torch.Tensor,
@@ -323,18 +334,11 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         ### Geometric loss
         if self.lambda_geometric > 0:
-            geom_loss_fn = geomloss.SamplesLoss(
-                loss='sinkhorn',
-                p=2,
-                blur=0.01,
-                backend='tensorized',
-                debias=True)
-
-            embeds_target = self.encoder_1(x_1).contiguous()  # (B, 512)
-            embeds_samegal = self.encoder_1(cond_image_samegal).contiguous()  # (B, 512)
+            embeds_target = self.encoder_1(x_1).contiguous()  # (B, encoder_output_dim)
+            embeds_samegal = self.encoder_1(cond_image_samegal).contiguous()  # (B, encoder_output_dim)
 
             # Compute geometric loss (scalar for the entire batch)
-            total_geom_loss = geom_loss_fn(embeds_target, embeds_samegal)
+            total_geom_loss = self.geom_loss_fn(embeds_target, embeds_samegal)
 
             # Store geometric loss for logging
             self._loss_geom_total = total_geom_loss.detach()
@@ -896,7 +900,7 @@ if __name__ == "__main__":
         pl.seed_everything(seed, workers=True)
 
     lambda_generative = 1
-    lambda_geometric = 0  # 0.075
+    lambda_geometric = 7.5e-4  # 0.075, 0
 
     batch_size = 64
     wandb_project = "galaxy-flow-matching"  # Change this to your desired wandb project name
@@ -976,12 +980,13 @@ if __name__ == "__main__":
         num_integration_steps=250,
         lambda_generative=lambda_generative,
         lambda_geometric=lambda_geometric,
+        num_umap_batches=16,  # Increase this to collect more batches for UMAP visualization
     )
 
     if concat_conditioning:
         name="conditional-unet2d-concatenated"
     else:
-        name="double-encoder-resnet18-triplet-no-attn-zoom-geom"
+        name="double-encoder-resnet18-triplet-no-attn-zoom_zdim64"
     wandb_logger = WandbLogger(
         project=wandb_project,
         name=name,
@@ -1012,6 +1017,7 @@ if __name__ == "__main__":
         accelerator="auto",
         devices=n_devices,
         log_every_n_steps=10,
+        precision="16-mixed",
         val_check_interval=1000,
         check_val_every_n_epoch=None,
         callbacks=[best_checkpoint, periodic_checkpoint],
