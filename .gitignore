@@ -238,6 +238,10 @@ galaxy_images/galaxy_model/runs/
 
 # galaxy_images/galaxy_model/logs/
 galaxy_images/galaxy_model/logs/
+logs/
+**/logs/
+*.out
+*.err
 
 #flow_models/
 flow_models/
