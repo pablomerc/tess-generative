@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 class ConditionalFlowMatchingModule(pl.LightningModule):
     """
     Conditional Flow Matching model using optimal transport conditional paths.
-    Conditions on 4 scalar values (injected into time embeddings).
+    Conditions on 4 scalar values by concatenating scalar feature maps
+    to the UNet input channels.
     """
 
     def __init__(
@@ -21,7 +22,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # DATA PARAMS
         in_channels: int = 4,
         cond_channels: int = 4, # Number of input scalars
-        image_size: int = 64,
+        img_height: int = 64,
+        img_width: int = 64,
         # UNET PARAMS
         model_channels: int = 128,
         channel_mult: tuple = (1, 2, 4, 4),
@@ -41,14 +43,17 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.num_integration_steps = num_integration_steps
         self.in_channels = in_channels
         self.cond_channels = cond_channels
-        self.image_size = image_size
+        self.image_height, self.image_width = self._validate_image_size(
+            img_height, img_width
+        )
+        self.image_size = (self.image_height, self.image_width)
 
         block_out_channels = tuple(model_channels * m for m in channel_mult)
 
 
         self.velocity_model = UNet2DModel(
-            sample_size=image_size,
-            in_channels=in_channels,
+            sample_size=self.image_size,
+            in_channels=in_channels + cond_channels,
             out_channels=in_channels,
             layers_per_block=layers_per_block,
             block_out_channels=block_out_channels,
@@ -67,11 +72,6 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 "UpBlock2D",
             ),
             attention_head_dim=attention_head_dim,
-
-            # CONDITIONING HAPPENS HERE
-            # "projection": Projects scalars via an MLP and adds to time embedding
-            class_embed_type="projection",
-            projection_class_embeddings_input_dim=cond_channels, # 4
         )
 
         #You might need to change it for:
@@ -90,6 +90,23 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         #         ),
         # but im not sure
 
+    @staticmethod
+    def _validate_image_size(img_height: int, img_width: int):
+        if not isinstance(img_height, int) or not isinstance(img_width, int):
+            raise ValueError("img_height and img_width must be integers.")
+
+        if img_height <= 0 or img_width <= 0:
+            raise ValueError("img_height and img_width must be positive.")
+
+        # With 4 down/up blocks, dimensions should be divisible by 2^(4-1)=8.
+        if img_height % 8 != 0 or img_width % 8 != 0:
+            raise ValueError(
+                "img_height and img_width must both be divisible by 8 for this UNet config, "
+                f"got {(img_height, img_width)}."
+            )
+
+        return img_height, img_width
+
     def forward(
         self,
         x_t: torch.Tensor,
@@ -102,12 +119,14 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # UNet2DModel expects timesteps to be scaled roughly to 0-1000 range usually
         # but pure Flow Matching often works with [0,1]. Diffusers defaults usually prefer larger ints.
         timesteps = t * 1000
+        batch_size, _, height, width = x_t.shape
+        cond_scalars = cond_scalars.to(dtype=x_t.dtype)
+        cond_map = cond_scalars[:, :, None, None].expand(
+            batch_size, self.cond_channels, height, width
+        )
+        model_input = torch.cat([x_t, cond_map], dim=1)
 
-        return self.velocity_model(
-            x_t,
-            timesteps,
-            class_labels=cond_scalars, # Pass scalars here directly
-        ).sample
+        return self.velocity_model(model_input, timesteps).sample
 
     def compute_loss(self, batch: tuple) -> torch.Tensor:
         x_1, cond_scalars = batch # Expects (Image, Scalars)
@@ -149,7 +168,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         # Start from Noise
         x = torch.randn(
-            num_samples, self.in_channels, self.image_size, self.image_size,
+            num_samples, self.in_channels, self.image_height, self.image_width,
             device=device,
         )
 
@@ -258,7 +277,8 @@ if __name__ == "__main__":
     model = ConditionalFlowMatchingModule(
         in_channels=4,
         cond_channels=4,
-        image_size=48,
+        img_height=48,
+        img_width=48,
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
         lr=1e-4,
