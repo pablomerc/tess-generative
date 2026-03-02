@@ -5,6 +5,7 @@ Train dual-encoder contrastive baseline on precomputed neighbors data.
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Avoid matplotlib trying to write to non-writable $HOME/.config on cluster nodes.
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -63,6 +64,10 @@ def main():
     seed = 42
     pl.seed_everything(seed, workers=True)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    checkpoint_run_dir = os.path.join(CHECKPOINT_DIR, f"{RUN_NAME}_{run_stamp}")
+    os.makedirs(checkpoint_run_dir, exist_ok=True)
+    print(f"[checkpoint] run directory: {checkpoint_run_dir}", flush=True)
 
     is_h100 = is_h100_gpu()
     precision_setting = "bf16-mixed" if is_h100 else "16-mixed"
@@ -127,7 +132,7 @@ def main():
     )
 
     best_checkpoint = VerboseModelCheckpoint(
-        dirpath=CHECKPOINT_DIR,
+        dirpath=checkpoint_run_dir,
         monitor="val/loss",
         mode="min",
         save_top_k=1,
@@ -135,7 +140,7 @@ def main():
         auto_insert_metric_name=False,
     )
     periodic_checkpoint = VerboseModelCheckpoint(
-        dirpath=CHECKPOINT_DIR,
+        dirpath=checkpoint_run_dir,
         every_n_train_steps=1000,
         save_top_k=1,
         filename="latest-step={step}",
