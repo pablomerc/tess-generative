@@ -117,6 +117,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         lambda_geometric: float = 0.3, # weight for geometric loss
         num_umap_batches: int = 8, # number of validation batches to collect for UMAP visualization
         mask_center: bool = False, # if true -> mask the center of the image
+        all_attention: bool = True, # if true all blocks are cross-attention; otherwise use mixed attention/non-attention blocks
+        figures_dir: Optional[str] = None, # optional directory where validation UMAP figures are saved
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -133,6 +135,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.lambda_geometric = lambda_geometric
         self.num_umap_batches = num_umap_batches
         self.mask_center = mask_center
+        self.figures_dir = Path(figures_dir) if figures_dir else (Path(__file__).resolve().parent / "figures")
 
         # Detect H100 GPU
         self.is_h100 = is_h100_gpu()
@@ -154,28 +157,41 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 pretrained=pretrained_encoder,
             )
 
+            if all_attention:
+                down_block_types = (
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                )
+                up_block_types = (
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                )
+            else:
+                down_block_types = (
+                    "DownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "CrossAttnDownBlock2D",
+                    "DownBlock2D",
+                )
+                up_block_types = (
+                    "UpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "CrossAttnUpBlock2D",
+                    "UpBlock2D",
+                )
+
             self.velocity_model = UNet2DConditionModel(
                 sample_size=image_size,
                 in_channels=in_channels,
                 out_channels=in_channels,
                 layers_per_block=layers_per_block,
                 block_out_channels=block_out_channels,
-                down_block_types=(
-                    # "DownBlock2D", # CHANGED TO ALL ATTENTION BLOCKS
-                    "CrossAttnDownBlock2D",
-                    "CrossAttnDownBlock2D",
-                    "CrossAttnDownBlock2D",
-                    # "DownBlock2D",
-                    "CrossAttnDownBlock2D",
-                ),
-                up_block_types=(
-                    # "UpBlock2D",
-                    "CrossAttnUpBlock2D",
-                    "CrossAttnUpBlock2D",
-                    "CrossAttnUpBlock2D",
-                    # "UpBlock2D",
-                    "CrossAttnUpBlock2D",
-                ),
+                down_block_types=down_block_types,
+                up_block_types=up_block_types,
                 cross_attention_dim=cross_attention_dim,
                 attention_head_dim=attention_head_dim,
             )
@@ -831,7 +847,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         all_embeddings_2 = torch.concat([hsc_embeddings_2, legacy_embeddings_2], dim=0)  # (B_total, seq_len, embed_dim)
 
         # Create figures directory
-        figures_dir = Path('/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/figures')
+        figures_dir = self.figures_dir
         figures_dir.mkdir(parents=True, exist_ok=True)
 
         # UMAP parameters (n_jobs=1 avoids "overridden to 1" warning when random_state is set)
