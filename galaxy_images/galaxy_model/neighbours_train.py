@@ -10,6 +10,7 @@ import sys
 # Print immediately so you see the script started (heavy imports below can take 1–2 min)
 print("neighbours_train: loading imports...", flush=True)
 
+import torch
 from torch.utils.data import DataLoader, Subset, random_split
 
 
@@ -57,16 +58,16 @@ def collate_for_model_precomputed(batch):
 
 
 
-#USING PRECOMPUTED BATCHES
-# PRECOMPUTED_H5 = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/train_neighbors.vds"
-# PRECOMPUTED_H5 = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbors_shard_0000.h5"
-# VAL_PRECOMPUTED_H5 = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/val_neighbors.vds"
-PRECOMPUTED_H5 = '/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5' #contains all
-BATCH_SIZE = 64  # 64 OOM on V100 32GB with 48x48 + 2 encoders + UNet; reduce if still OOM
-NUM_WORKERS = 0
-DATALOADER_MODE = "precomputed"  # "precomputed" (NeighborsPrecomputedDataset + simple_collate) or "neighbors" (NeighborsDataset/RawRAM + collate_neighbors)
+PRECOMPUTED_H5 = '/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5'
+TRAIN_SHARDS_VDS = "/data/vision/billf/scratch/pablomer/data/neighbors_trainingset_march.vds"
+VAL_SHARDS_VDS = "/data/vision/billf/scratch/pablomer/data/neighbors_valset_march.vds"
 
-VAL_RATIO = 0.05  # 5% for validation
+BATCH_SIZE = 64
+NUM_WORKERS = 0
+DATALOADER_MODE = "precomputed"
+
+VALIDATION_MODE = "shards"  # "batches" (random split from single VDS) or "shards" (separate train/val VDS files)
+VAL_RATIO = 0.05
 NUM_STEPS = 300_000 * 5
 IMAGE_SIZE = 48
 LR = 1e-4
@@ -91,15 +92,19 @@ def main():
         precision_setting = "bf16-mixed"
         print(f"H100 detected: batch_size={batch_size}, precision={precision_setting}")
 
-    # Single dataset, then train/val split by index
-    dataset = NeighborsPrecomputedDataset(PRECOMPUTED_H5)
-
-    total_size = len(dataset)
-    val_size = int(total_size * VAL_RATIO)
-    train_size = total_size - val_size
-
-
-    train_ds, val_ds = random_split(dataset, [train_size, val_size])
+    if VALIDATION_MODE == "shards":
+        print(f"Using shard-based split: train={TRAIN_SHARDS_VDS}, val={VAL_SHARDS_VDS}")
+        train_ds = NeighborsPrecomputedDataset(TRAIN_SHARDS_VDS)
+        val_ds = NeighborsPrecomputedDataset(VAL_SHARDS_VDS)
+    else:
+        dataset = NeighborsPrecomputedDataset(PRECOMPUTED_H5)
+        total_size = len(dataset)
+        val_size = int(total_size * VAL_RATIO)
+        train_size = total_size - val_size
+        train_ds, val_ds = random_split(
+            dataset, [train_size, val_size],
+            generator=torch.Generator().manual_seed(seed),
+        )
 
     collate_fn = collate_for_model_precomputed if DATALOADER_MODE == "precomputed" else collate_for_model
 
@@ -144,7 +149,7 @@ def main():
     # Pass config here; Lightning handles DDP so only rank 0 gets real wandb (avoids .config.update() on placeholder)
     wandb_logger = WandbLogger(
         project=WANDB_PROJECT,
-        name="neighbours-48x48-zdim64-geom0.0-longtraining",
+        name=f"neighbours-48x48-zdim64-geom0.0-val-{VALIDATION_MODE}",
         log_model=False,
         config={
             "batch_size": batch_size,
@@ -152,6 +157,7 @@ def main():
             "is_h100": is_h100,
             "dataset": "NeighborsDataset",
             "image_size": IMAGE_SIZE,
+            "validation": VALIDATION_MODE,
         },
     )
 

@@ -25,7 +25,7 @@ from galaxy_images.galaxy_model.neighbors import NeighborsSimpleDataset
 
 NEIGHBORS_HDF5 = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
 K_NEIGHBORS = 10
-N_COLS = 32
+N_COLS = 12
 
 
 def _list_to_str(xs):

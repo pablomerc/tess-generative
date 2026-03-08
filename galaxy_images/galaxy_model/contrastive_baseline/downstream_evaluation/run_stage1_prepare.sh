@@ -6,7 +6,9 @@ GALAXY_MODEL_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${GALAXY_MODEL_DIR}"
 
 # ---- Edit these ----
-CHECKPOINT_PATH="/data/vision/billf/scratch/pablomer/outputs/contrastive_baseline/best-epoch=11-step=17000.ckpt"
+# CHECKPOINT_PATH="/data/vision/billf/scratch/pablomer/outputs/contrastive_baseline/best-epoch=11-step=17000.ckpt"
+CHECKPOINT_PATH='/data/vision/billf/scratch/pablomer/outputs/contrastive_baseline/best-epoch=77-step=120000.ckpt'
+
 SUFFIX="contrastive_latest"
 # --------------------
 

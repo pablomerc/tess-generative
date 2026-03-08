@@ -1,14 +1,15 @@
 #!/bin/bash
-#SBATCH --job-name=contrastive-1gpu
-#SBATCH --qos=shared-if-available
-#SBATCH --partition=vision-shared-v100
+#SBATCH --job-name=cnt-rd-sh
+#SBATCH --qos=vision-billf-main
+#SBATCH --partition=vision-billf-v100
 #SBATCH --account=vision-billf
+#SBATCH --exclude=freeman-v100-2
 #SBATCH --requeue
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --time=20:00:00
-#SBATCH --gres=gpu:4
+#SBATCH --time=16:00:00
+#SBATCH --gres=gpu:1
 #SBATCH --output=/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/contrastive_baseline/logs/job_%j.out
 #SBATCH --error=/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/contrastive_baseline/logs/job_%j.err
 #SBATCH --open-mode=append
@@ -28,7 +29,7 @@ export MPLCONFIGDIR=/tmp/matplotlib
 export NUMBA_CACHE_DIR=/tmp/numba_cache
 
 # Use 1 GPU in Trainer.
-export N_DEVICES=4
+export N_DEVICES=1
 
 # Load wandb key without printing it.
 set -a
