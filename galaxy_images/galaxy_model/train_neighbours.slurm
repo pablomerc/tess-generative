@@ -2,7 +2,6 @@
 #SBATCH --job-name=ne-long
 #SBATCH --qos=shared-if-available
 #SBATCH --partition=vision-shared-h100
-#SBATCH --exclude=andreas-h100-1
 #SBATCH --account=vision-billf
 #SBATCH --requeue
 #SBATCH --nodes=1

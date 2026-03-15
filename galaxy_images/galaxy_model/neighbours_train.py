@@ -74,6 +74,7 @@ LR = 1e-4
 LAMBDA_GENERATIVE = 1.0
 # LAMBDA_GEOMETRIC = 7.5e-4
 LAMBDA_GEOMETRIC = 0.0
+POOLED_CONDITIONING = os.environ.get("POOLED_CONDITIONING", "0") == "1"
 
 WANDB_PROJECT = "galaxy-flow-matching-neighbours"
 
@@ -107,6 +108,7 @@ def main():
         )
 
     collate_fn = collate_for_model_precomputed if DATALOADER_MODE == "precomputed" else collate_for_model
+    conditioning_mode = "pooled" if POOLED_CONDITIONING else "spatial"
 
     train_loader = DataLoader(
         train_ds,
@@ -137,6 +139,7 @@ def main():
         cross_attention_dim=16,
         pretrained_encoder=False,
         concat_conditioning=False,
+        pooled_conditioning=POOLED_CONDITIONING,
         lr=LR,
         num_sample_images=10,
         num_mse_images=32,
@@ -149,7 +152,7 @@ def main():
     # Pass config here; Lightning handles DDP so only rank 0 gets real wandb (avoids .config.update() on placeholder)
     wandb_logger = WandbLogger(
         project=WANDB_PROJECT,
-        name=f"neighbours-48x48-zdim64-geom0.0-val-{VALIDATION_MODE}",
+        name=f"neighbours-48x48-zdim16-geom0.0-cond-{conditioning_mode}-val-{VALIDATION_MODE}",
         log_model=False,
         config={
             "batch_size": batch_size,
@@ -158,6 +161,8 @@ def main():
             "dataset": "NeighborsDataset",
             "image_size": IMAGE_SIZE,
             "validation": VALIDATION_MODE,
+            "pooled_conditioning": POOLED_CONDITIONING,
+            "conditioning_mode": conditioning_mode,
         },
     )
 
