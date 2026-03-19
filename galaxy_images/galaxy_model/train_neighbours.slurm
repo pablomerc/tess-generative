@@ -1,13 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=ne-long
-#SBATCH --qos=shared-if-available
-#SBATCH --partition=vision-shared-h100
+#SBATCH --qos=vision-billf-main
+#SBATCH --partition=vision-billf-v100
 #SBATCH --account=vision-billf
-#SBATCH --requeue
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=128G
-#SBATCH --time=12:00:00
+#SBATCH --time=22:00:00
 #SBATCH --gres=gpu:4
 #SBATCH --output=/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/logs/job_%j.out
 #SBATCH --error=/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/logs/job_%j.err

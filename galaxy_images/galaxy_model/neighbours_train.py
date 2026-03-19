@@ -66,7 +66,7 @@ BATCH_SIZE = 64
 NUM_WORKERS = 0
 DATALOADER_MODE = "precomputed"
 
-VALIDATION_MODE = "shards"  # "batches" (random split from single VDS) or "shards" (separate train/val VDS files)
+VALIDATION_MODE = "batches"  # "batches" (random split from single VDS) or "shards" (separate train/val VDS files)
 VAL_RATIO = 0.05
 NUM_STEPS = 300_000 * 5
 IMAGE_SIZE = 48
@@ -137,6 +137,7 @@ def main():
         model_channels=128,
         channel_mult=(1, 2, 4, 4),
         cross_attention_dim=16,
+        instrument_zdim=4,
         pretrained_encoder=False,
         concat_conditioning=False,
         pooled_conditioning=POOLED_CONDITIONING,

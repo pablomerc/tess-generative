@@ -120,6 +120,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         attention_head_dim: int = 8, # head dimension used by attention blocks inside diffusers unet
         # Conditioning params
         cross_attention_dim: int = 256, # cross-attention mode (conditionning mode). must match the resnet encoder cross att dim and the unet encoding dim
+        instrument_zdim: int = None, # instrument encoder bottleneck dim; if None or equal to cross_attention_dim, no projection is applied
         pretrained_encoder: bool = False, # load pretrained imagenet weights
         concat_conditioning: bool = False, # if true -> no encoder, conditioning is concatenated as extra channels to the input
         pooled_conditioning: bool = False, # if true -> pool encoder features to one global conditioning token per image
@@ -149,6 +150,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.lambda_geometric = lambda_geometric
         self.num_umap_batches = num_umap_batches
         self.mask_center = mask_center
+        self.instrument_zdim = instrument_zdim if instrument_zdim is not None else cross_attention_dim
 
         # Detect H100 GPU
         self.is_h100 = is_h100_gpu()
@@ -167,10 +169,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
             self.encoder_2 = ResNetEncoder(
                 in_channels=cond_channels,
-                cross_attention_dim=cross_attention_dim,
+                cross_attention_dim=self.instrument_zdim,
                 pretrained=pretrained_encoder,
                 mean_pool=pooled_conditioning,
             )
+
+            if self.instrument_zdim != cross_attention_dim:
+                self.ins_proj = nn.Linear(self.instrument_zdim, cross_attention_dim)
+            else:
+                self.ins_proj = None
 
             self.velocity_model = UNet2DConditionModel(
                 sample_size=image_size,
@@ -235,6 +242,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         cond_image_sameins_flat = cond_image_sameins.flatten(0, 1)          # (B*k, C, H, W)
         cond_ins_embedding_flat = self.encoder_2(cond_image_sameins_flat)   # (B*k, seq_len, embed_dim)
+
+        if self.ins_proj is not None:
+            cond_ins_embedding_flat = self.ins_proj(cond_ins_embedding_flat)
 
         cond_ins_embedding = cond_ins_embedding_flat.unflatten(0, (B, k))    # (B, k, seq_len, embed_dim)
 
@@ -368,6 +378,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         if self.trainer.is_global_zero and self.logger and hasattr(self.logger, 'experiment'):
             self.logger.experiment.config.update({
                 "cross_attention_dim": self.hparams.cross_attention_dim,
+                "instrument_zdim": self.instrument_zdim,
                 "pooled_conditioning": self.hparams.pooled_conditioning,
                 "lambda_generative": self.lambda_generative,
                 "lambda_geometric": self.lambda_geometric,
