@@ -18,12 +18,11 @@ if _root_dir not in sys.path:
 from galaxy_images.galaxy_model.neighbors import (
     NeighborsDataset,
     collate_neighbors,
-    worker_init_fn,
 )
 
 # --- Configuration ---
-SOURCE_H5 = '/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5'
-OUTPUT_DIR = '/data/vision/billf/scratch/pablomer/data/neighbor_batches'
+SOURCE_H5 = '/work1/jeroenaudenaert/pablomer/data/neighbours_v2.h5'
+OUTPUT_DIR = '/work1/jeroenaudenaert/pablomer/data/neighbor_batches'
 BATCH_SIZE = 64
 NUM_WORKERS = 8  # Crank this up! We want to brute-force the random reads.
 CHUNKS_PER_FILE = 50 # How many batches to save before closing a file (approx 3200 samples)
@@ -111,7 +110,6 @@ def main():
         drop_last=False,
         persistent_workers=NUM_WORKERS > 0,
         pin_memory=True,
-        worker_init_fn=worker_init_fn,
     )
 
     buffer = []
@@ -159,7 +157,7 @@ if __name__ == "__main__":
 # import os
 # import numpy as np
 
-# OUTPUT_DIR = '/data/vision/billf/scratch/pablomer/data/neighbor_batches'
+# OUTPUT_DIR = '/work1/jeroenaudenaert/pablomer/data/neighbor_batches'
 # VDS_PATH = os.path.join(OUTPUT_DIR, 'neighbours_vds.h5')
 
 # files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "neighbors_shard_*.h5")))

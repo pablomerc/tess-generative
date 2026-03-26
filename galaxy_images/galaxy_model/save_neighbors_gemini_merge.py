@@ -6,9 +6,9 @@ from tqdm import tqdm
 
 # --- Configuration ---
 # Directory containing your 32 shard files
-INPUT_DIR = '/data/vision/billf/scratch/pablomer/data/neighbor_batches'
+INPUT_DIR = '/work1/jeroenaudenaert/pablomer/data/neighbor_batches'
 # Directory to save the VDS files
-OUTPUT_DIR = '/data/vision/billf/scratch/pablomer/data/'
+OUTPUT_DIR = '/work1/jeroenaudenaert/pablomer/data/'
 
 def create_vds(files, output_path):
     """Creates a Virtual Dataset combining multiple HDF5 files."""
