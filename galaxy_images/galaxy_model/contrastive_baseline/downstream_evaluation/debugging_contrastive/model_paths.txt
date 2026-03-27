@@ -1,0 +1,2 @@
+'batches',/data/vision/billf/scratch/pablomer/outputs/contrastive_baseline/dual-encoder-contrastive-resnet18_20260308_133327/latest-step=step=87000.ckpt
+'shards',/data/vision/billf/scratch/pablomer/outputs/contrastive_baseline/dual-encoder-contrastive-resnet18_20260308_133702/latest-step=step=74000.ckpt

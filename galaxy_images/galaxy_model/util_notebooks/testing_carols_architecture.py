@@ -58,6 +58,64 @@ class ResNetEncoder(nn.Module):
         feat = feat.view(B, D, H * W).permute(0, 2, 1)
         return feat
 
+class ResNetEncoder_v2(nn.Module):
+    """
+    ResNet18 encoder from timm that produces spatial feature maps for conditioning.
+    Uses feature extraction to get intermediate spatial features for cross-attention.
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 4,
+        cross_attention_dim: int = 16,
+        pretrained: bool = False,
+    ):
+        super().__init__()
+
+        self.backbone = timm.create_model(
+            'resnet18',
+            pretrained=pretrained,
+            features_only=True,
+            out_indices=(2, 3, 4),  # Get features from layer2, layer3, layer4
+        )
+
+        if in_channels != 3:
+            old_conv = self.backbone.conv1
+            self.backbone.conv1 = nn.Conv2d(
+                in_channels,
+                old_conv.out_channels,
+                kernel_size=old_conv.kernel_size,
+                stride=old_conv.stride,
+                padding=old_conv.padding,
+                bias=old_conv.bias is not None,
+            )
+
+        # self.proj = nn.Conv2d(512, cross_attention_dim, kernel_size=1)
+        self.proj = nn.Linear(512, cross_attention_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Conditioning image (B, C, H, W)
+        Returns:
+            Spatial embeddings (B, seq_len, cross_attention_dim) for cross-attention
+        """
+        features = self.backbone(x)
+        feat = features[-1]  # (B, 512, H/32, W/32)
+        # feat = self.proj(feat)  # (B, cross_attention_dim, H', W')
+        feat = feat.mean(dim=(2, 3))  # (B, 512)
+        feat = self.proj(feat)  # (B, cross_attention_dim)
+
+        # B, D, H, W = feat.shape
+        # feat = feat.view(B, D, H * W).permute(0, 2, 1)
+        return feat.unsqueeze(1)
+
+    def intermediate_states(self, x: torch.Tensor) -> list:
+        features = self.backbone(x)
+        for i, element in enumerate(features):
+            print(f'Shape of features element {i} is {element.shape}')
+        return features
+
 
 class ConditionalFlowMatchingModule(pl.LightningModule):
     """
@@ -331,69 +389,83 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 if __name__ == "__main__":
 
     dummy_image = torch.randn(10, 4, 48, 48)
-    encoder = ResNetEncoder()
+    encoder = ResNetEncoder_v2()
 
     print(f'Encoder model parameters: {sum(p.numel() for p in encoder.parameters()):,}')
-    # print(encoder(dummy_image).shape)
-    image_size = 48
-    in_channels = 4
-    layers_per_block = 2
-    block_out_channels = (128, 256, 512, 512)
-    cross_attention_dim = 512
-    attention_head_dim = 8
-
-    decoder = UNet2DConditionModel(
-                sample_size=image_size,
-                in_channels=in_channels,
-                out_channels=in_channels,
-                layers_per_block=layers_per_block,
-                block_out_channels=block_out_channels,
-                down_block_types=(
-                    "DownBlock2D",
-                    # "CrossAttnDownBlock2D",
-                    # "CrossAttnDownBlock2D",
-                    "DownBlock2D",
-                    "DownBlock2D",
-                    "DownBlock2D",
-                ),
-                mid_block_type='UNetMidBlock2D',
-                up_block_types=(
-                    "UpBlock2D",
-                    # "CrossAttnUpBlock2D",
-                    # "CrossAttnUpBlock2D",
-                    "UpBlock2D",
-                    "UpBlock2D",
-                    "UpBlock2D",
-                ),
-                cross_attention_dim=cross_attention_dim,
-                attention_head_dim=attention_head_dim,
-            )
-    print(f'Decoder total model parameters: {sum(p.numel() for p in decoder.parameters()):,}')
-    # print(decoder)
-
-    def count_params(module: nn.Module):
-        return sum(p.numel() for p in module.parameters() if p.requires_grad)
-
-    print("\n=== DOWN BLOCKS ===")
-    for i, block in enumerate(decoder.down_blocks):
-        print(f"down_blocks[{i}] ({block.__class__.__name__}): "
-            f"{count_params(block):,}")
-
-    print("\n=== MID BLOCK ===")
-    print(f"mid_block ({decoder.mid_block.__class__.__name__}): "
-        f"{count_params(decoder.mid_block):,}")
-
-    print("\n=== UP BLOCKS ===")
-    for i, block in enumerate(decoder.up_blocks):
-        print(f"up_blocks[{i}] ({block.__class__.__name__}): "
-            f"{count_params(block):,}")
+    print(f'Dummy image shape: {dummy_image.shape}')
+    print(encoder(dummy_image).shape)
 
 
-    x = torch.rand(50,4,96,96)
 
-    z = encoder(x)
 
-    print(z.shape)
+
+
+
+
+
+
+
+
+
+    # image_size = 48
+    # in_channels = 4
+    # layers_per_block = 2
+    # block_out_channels = (128, 256, 512, 512)
+    # cross_attention_dim = 512
+    # attention_head_dim = 8
+
+    # decoder = UNet2DConditionModel(
+    #             sample_size=image_size,
+    #             in_channels=in_channels,
+    #             out_channels=in_channels,
+    #             layers_per_block=layers_per_block,
+    #             block_out_channels=block_out_channels,
+    #             down_block_types=(
+    #                 "DownBlock2D",
+    #                 # "CrossAttnDownBlock2D",
+    #                 # "CrossAttnDownBlock2D",
+    #                 "DownBlock2D",
+    #                 "DownBlock2D",
+    #                 "DownBlock2D",
+    #             ),
+    #             mid_block_type='UNetMidBlock2D',
+    #             up_block_types=(
+    #                 "UpBlock2D",
+    #                 # "CrossAttnUpBlock2D",
+    #                 # "CrossAttnUpBlock2D",
+    #                 "UpBlock2D",
+    #                 "UpBlock2D",
+    #                 "UpBlock2D",
+    #             ),
+    #             cross_attention_dim=cross_attention_dim,
+    #             attention_head_dim=attention_head_dim,
+    #         )
+    # print(f'Decoder total model parameters: {sum(p.numel() for p in decoder.parameters()):,}')
+    # # print(decoder)
+
+    # def count_params(module: nn.Module):
+    #     return sum(p.numel() for p in module.parameters() if p.requires_grad)
+
+    # print("\n=== DOWN BLOCKS ===")
+    # for i, block in enumerate(decoder.down_blocks):
+    #     print(f"down_blocks[{i}] ({block.__class__.__name__}): "
+    #         f"{count_params(block):,}")
+
+    # print("\n=== MID BLOCK ===")
+    # print(f"mid_block ({decoder.mid_block.__class__.__name__}): "
+    #     f"{count_params(decoder.mid_block):,}")
+
+    # print("\n=== UP BLOCKS ===")
+    # for i, block in enumerate(decoder.up_blocks):
+    #     print(f"up_blocks[{i}] ({block.__class__.__name__}): "
+    #         f"{count_params(block):,}")
+
+
+    # x = torch.rand(50,4,96,96)
+
+    # z = encoder(x)
+
+    # print(z.shape)
 
 
     # print(torch.rand((10,4,48,48)).shape)

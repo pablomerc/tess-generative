@@ -20,8 +20,10 @@ import numpy as np
 
 class ResNetEncoder(nn.Module):
     """
-    ResNet18 encoder from timm that produces spatial feature maps for conditioning.
-    Uses feature extraction to get intermediate spatial features for cross-attention.
+    ResNet18 encoder for cross-attention conditioning.
+
+    By default it returns spatial tokens from the final feature map. When
+    ``mean_pool`` is enabled, it returns a single global token per image.
     """
 
     def __init__(
@@ -29,9 +31,11 @@ class ResNetEncoder(nn.Module):
         in_channels: int = 4,
         cross_attention_dim: int = 256,
         pretrained: bool = False,
+        mean_pool: bool = False,
     ):
         super().__init__()
 
+        self.mean_pool = mean_pool
         self.backbone = timm.create_model(
             'resnet18',
             pretrained=pretrained,
@@ -50,19 +54,29 @@ class ResNetEncoder(nn.Module):
                 bias=old_conv.bias is not None,
             )
 
-        self.proj = nn.Conv2d(512, cross_attention_dim, kernel_size=1)
+        if mean_pool:
+            self.proj = nn.Linear(512, cross_attention_dim)
+        else:
+            self.proj = nn.Conv2d(512, cross_attention_dim, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
             x: Conditioning image (B, C, H, W)
         Returns:
-            Spatial embeddings (B, seq_len, cross_attention_dim) for cross-attention
+            Conditioning tokens for cross-attention:
+            - spatial mode: (B, seq_len, cross_attention_dim)
+            - pooled mode: (B, 1, cross_attention_dim)
         """
         features = self.backbone(x)
         feat = features[-1]  # (B, 512, H/32, W/32)
-        feat = self.proj(feat)  # (B, cross_attention_dim, H', W')
 
+        if self.mean_pool:
+            feat = feat.mean(dim=(2, 3))  # (B, 512)
+            feat = self.proj(feat)  # (B, cross_attention_dim)
+            return feat.unsqueeze(1)
+
+        feat = self.proj(feat)  # (B, cross_attention_dim, H', W')
         B, D, H, W = feat.shape
         feat = feat.view(B, D, H * W).permute(0, 2, 1)
         return feat
@@ -106,8 +120,10 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         attention_head_dim: int = 8, # head dimension used by attention blocks inside diffusers unet
         # Conditioning params
         cross_attention_dim: int = 256, # cross-attention mode (conditionning mode). must match the resnet encoder cross att dim and the unet encoding dim
+        instrument_zdim: int = None, # instrument encoder bottleneck dim; if None or equal to cross_attention_dim, no projection is applied
         pretrained_encoder: bool = False, # load pretrained imagenet weights
         concat_conditioning: bool = False, # if true -> no encoder, conditioning is concatenated as extra channels to the input
+        pooled_conditioning: bool = False, # if true -> pool encoder features to one global conditioning token per image
         # Optimization params
         lr: float = 1e-4,
         num_sample_images: int = 8, # number of exmaples cached for first validation batch for W&B
@@ -131,11 +147,13 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.cond_channels = cond_channels
         self.image_size = image_size
         self.concat_conditioning = concat_conditioning
+        self.pooled_conditioning = pooled_conditioning
         self.lambda_generative = lambda_generative
         self.lambda_geometric = lambda_geometric
         self.num_umap_batches = num_umap_batches
         self.mask_center = mask_center
         self.figures_dir = Path(figures_dir) if figures_dir else (Path(__file__).resolve().parent / "figures")
+        self.instrument_zdim = instrument_zdim if instrument_zdim is not None else cross_attention_dim
 
         # Detect H100 GPU
         self.is_h100 = is_h100_gpu()
@@ -149,12 +167,14 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 in_channels=cond_channels,
                 cross_attention_dim=cross_attention_dim,
                 pretrained=pretrained_encoder,
+                mean_pool=pooled_conditioning,
             )
 
             self.encoder_2 = ResNetEncoder(
                 in_channels=cond_channels,
-                cross_attention_dim=cross_attention_dim,
+                cross_attention_dim=self.instrument_zdim,
                 pretrained=pretrained_encoder,
+                mean_pool=pooled_conditioning,
             )
 
             if all_attention:
@@ -183,6 +203,11 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                     "CrossAttnUpBlock2D",
                     "UpBlock2D",
                 )
+
+            if self.instrument_zdim != cross_attention_dim:
+                self.ins_proj = nn.Linear(self.instrument_zdim, cross_attention_dim)
+            else:
+                self.ins_proj = None
 
             self.velocity_model = UNet2DConditionModel(
                 sample_size=image_size,
@@ -233,6 +258,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         cond_image_sameins_flat = cond_image_sameins.flatten(0, 1)          # (B*k, C, H, W)
         cond_ins_embedding_flat = self.encoder_2(cond_image_sameins_flat)   # (B*k, seq_len, embed_dim)
+
+        if self.ins_proj is not None:
+            cond_ins_embedding_flat = self.ins_proj(cond_ins_embedding_flat)
 
         cond_ins_embedding = cond_ins_embedding_flat.unflatten(0, (B, k))    # (B, k, seq_len, embed_dim)
 
@@ -366,6 +394,8 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         if self.trainer.is_global_zero and self.logger and hasattr(self.logger, 'experiment'):
             self.logger.experiment.config.update({
                 "cross_attention_dim": self.hparams.cross_attention_dim,
+                "instrument_zdim": self.instrument_zdim,
+                "pooled_conditioning": self.hparams.pooled_conditioning,
                 "lambda_generative": self.lambda_generative,
                 "lambda_geometric": self.lambda_geometric,
                 "is_h100": self.is_h100,
