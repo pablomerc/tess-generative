@@ -1,32 +1,31 @@
 #!/bin/bash
 #SBATCH --job-name=ne-long
-#SBATCH --qos=shared-if-available
-#SBATCH --partition=vision-shared-h100
-#SBATCH --exclude=andreas-h100-1
-#SBATCH --account=vision-billf
-#SBATCH --requeue
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=128G
-#SBATCH --time=1-00:00:00
-#SBATCH --gres=gpu:4
-#SBATCH --output=/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/logs/job_%j.out
-#SBATCH --error=/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/logs/job_%j.err
+#SBATCH --cpus-per-task=16
+#SBATCH --time=24:00:00
+#SBATCH --partition=mi2104x
+#SBATCH --output=/work1/jeroenaudenaert/pablomer/logs/tess_%j.out
+#SBATCH --error=/work1/jeroenaudenaert/pablomer/logs/tess_%j.err
 #SBATCH --open-mode=append
 
-set -euo pipefail
+set -eo pipefail
 
-cd /data/vision/billf/scratch/pablomer/projects/tess-generative
-mkdir -p galaxy_images/galaxy_model/logs
+mkdir -p /work1/jeroenaudenaert/pablomer/logs
 
-# source ~/.bashrc
-source /data/vision/billf/scratch/pablomer/miniconda3/etc/profile.d/conda.sh
-conda activate py310-torch
+# --- Environment ---
+source ~/.bashrc
+conda activate torchenv
 
-# Load wandb key without printing it
-set -a
-source /data/vision/billf/scratch/pablomer/.secrets/wandb.env
-set +a
+# --- ROCm workaround: disable hipBLASLt (buggy on MI210 for certain matrix shapes) ---
+export TORCH_BLAS_PREFER_HIPBLASLT=0
+
+# --- WandB ---
+export WANDB_API_KEY="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"
+
+# --- Run ---
+cd /work1/jeroenaudenaert/pablomer/tess-generative
+
+export PYTHONPATH=/work1/jeroenaudenaert/pablomer/tess-generative:$PYTHONPATH
 
 srun python -u galaxy_images/galaxy_model/neighbours_train.py
 
