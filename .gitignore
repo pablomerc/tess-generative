@@ -1,3 +1,7 @@
+# Model outputs and wandb
+galaxy_images/galaxy_model/outputs/
+wandb/
+
 # Generated data and figures
 galaxy_images/galaxy_model/generative_evaluation/disc_data*/
 galaxy_images/galaxy_model/generative_evaluation/figures*/
