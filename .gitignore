@@ -1,0 +1,19 @@
+# Generated data and figures
+galaxy_images/galaxy_model/generative_evaluation/disc_data*/
+galaxy_images/galaxy_model/generative_evaluation/figures*/
+
+# Notebooks
+*.ipynb
+
+# Images
+*.jpg
+*.jpeg
+*.png
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
