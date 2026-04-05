@@ -207,9 +207,11 @@ def generate_one_per_galaxy(model, targets, samegals, sameins, masks, indices,
 
 @torch.no_grad()
 def run_resnet(model: nn.Module, images_np: np.ndarray,
-               device: torch.device, batch_size: int = 256) -> np.ndarray:
+               device: torch.device, batch_size: int = 256,
+               already_normalized: bool = False) -> np.ndarray:
     """
-    images_np: (N, 4, 48, 48) raw flux, float32
+    images_np: (N, 4, 48, 48) float32
+    already_normalized: if True, skip (x - mean) / std (shard images are pre-normalized)
     Returns (N, 2) predictions [e1, e2]
     """
     model.eval()
@@ -218,7 +220,8 @@ def run_resnet(model: nn.Module, images_np: np.ndarray,
     for start in range(0, N, batch_size):
         end  = min(start + batch_size, N)
         imgs = images_np[start:end]                    # (B, 4, 48, 48)
-        imgs = (imgs - NORM_MEAN) / NORM_STD
+        if not already_normalized:
+            imgs = (imgs - NORM_MEAN) / NORM_STD
         t    = torch.from_numpy(imgs).to(device)
         pred = model(t)                                # (B, 2)
         out[start:end] = pred.cpu().numpy()
@@ -517,7 +520,7 @@ def main(args):
     # --- Step 5: ResNet on real targets ---
     t0 = _step("Run ResNet on real target images")
     real_imgs  = targets[hsc_indices]
-    pred_real  = run_resnet(resnet, real_imgs, device)
+    pred_real  = run_resnet(resnet, real_imgs, device, already_normalized=True)
     _done("Run ResNet on real target images", t0)
 
     # --- Step 6: Load flow-matching model ---
@@ -536,7 +539,7 @@ def main(args):
 
     # --- Step 8: ResNet on generated images ---
     t0 = _step("Run ResNet on generated images")
-    pred_gen = run_resnet(resnet, generated, device)
+    pred_gen = run_resnet(resnet, generated, device, already_normalized=True)
     _done("Run ResNet on generated images", t0)
 
     # --- Step 9: Summary stats ---
