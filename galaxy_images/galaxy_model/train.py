@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
@@ -43,10 +44,17 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def _build_run_dir(config: ExperimentConfig, variant_name: str) -> Path:
-    run_dir = Path(config.run.output_dir) / variant_name
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
-    return run_dir
+    base = Path(config.run.output_dir) / variant_name
+    today = date.today().strftime("%Y-%m-%d")
+    candidate = base / today
+    if candidate.exists():
+        n = 2
+        while (base / f"{today}_{n}").exists():
+            n += 1
+        candidate = base / f"{today}_{n}"
+    candidate.mkdir(parents=True, exist_ok=True)
+    (candidate / "checkpoints").mkdir(parents=True, exist_ok=True)
+    return candidate
 
 
 def _build_model(config: ExperimentConfig):
@@ -78,13 +86,20 @@ def main(argv: Optional[List[str]] = None) -> None:
     runtime_batch_size, runtime_precision, h100 = _effective_training_settings(config)
     model, variant = _build_model(config)
     train_loader, val_loader = build_neighbors_dataloaders(config, runtime_batch_size)
-    run_dir = _build_run_dir(config, variant.name)
+
+    resume_ckpt = config.run.resume_from
+    if resume_ckpt is not None:
+        # Reuse the existing run directory (checkpoints live in <run_dir>/checkpoints/)
+        run_dir = Path(resume_ckpt).parent.parent
+    else:
+        run_dir = _build_run_dir(config, variant.name)
 
     if config.wandb.enabled:
         wandb_logger = WandbLogger(
             project=config.wandb.project,
             name=config.wandb.name,
             log_model=config.wandb.log_model,
+            resume="allow" if resume_ckpt is not None else "never",
             config={
                 **asdict(config),
                 "runtime": {
@@ -145,7 +160,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     print(f"H100 detected: {h100}")
     print(f"Run dir: {run_dir}")
 
-    trainer.fit(model, train_loader, val_loader)
+    trainer.fit(model, train_loader, val_loader, ckpt_path=resume_ckpt)
 
 
 if __name__ == "__main__":

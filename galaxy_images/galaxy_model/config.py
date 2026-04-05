@@ -12,7 +12,7 @@ class DataConfig:
     mode: str = "precomputed"  # precomputed | neighbors
     precomputed_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
     neighbors_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
-    max_neighbors: int = 15
+    max_neighbors: int = 5
     val_ratio: float = 0.05
     batch_size: int = 64
     num_workers: int = 0
@@ -67,7 +67,7 @@ class TrainerConfig:
 class WandbConfig:
     enabled: bool = True
     project: str = "galaxy-flow-matching-neighbours"
-    name: str = "neighbours-48x48-zdim16-geom0.0"
+    name: str = "neighbours-48x48-zdim16-geom0.0-amd-5nbs"
     log_model: bool = False
 
 
@@ -75,6 +75,7 @@ class WandbConfig:
 class RunConfig:
     variant: str = "neighbors_all_attn"
     output_dir: str = "galaxy_images/galaxy_model/outputs"
+    resume_from: Optional[str] = None  # path to checkpoint to resume from; None = fresh run
 
 
 @dataclass

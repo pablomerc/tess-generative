@@ -4,8 +4,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --time=24:00:00
 #SBATCH --partition=mi2104x
-#SBATCH --output=/work1/jeroenaudenaert/pablomer/logs/tess_%j.out
-#SBATCH --error=/work1/jeroenaudenaert/pablomer/logs/tess_%j.err
+#SBATCH --output=/work1/jeroenaudenaert/pablomer/logs/train_neighbours_%j.out
+#SBATCH --error=/work1/jeroenaudenaert/pablomer/logs/train_neighbours_%j.err
 #SBATCH --open-mode=append
 
 set -eo pipefail

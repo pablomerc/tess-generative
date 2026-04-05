@@ -399,7 +399,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 "lambda_generative": self.lambda_generative,
                 "lambda_geometric": self.lambda_geometric,
                 "is_h100": self.is_h100,
-            })
+            }, allow_val_change=True)
 
     def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         loss = self.compute_loss(batch)
