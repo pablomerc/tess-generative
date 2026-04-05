@@ -7,12 +7,16 @@
     "mode": "precomputed",
     "precomputed_h5": "/work1/jeroenaudenaert/pablomer/data/train_neighbors.vds",
     "neighbors_h5": "/work1/jeroenaudenaert/pablomer/data/neighbours_v2.h5",
-    "max_neighbors": 15,
+    "max_neighbors": 5,
     "val_ratio": 0.05,
     "batch_size": 64,
     "num_workers": 0,
     "pin_memory": true,
-    "drop_last_train": true
+    "drop_last_train": true,
+    "save_heldout_validation": true,
+    "heldout_validation_dir": "/work1/jeroenaudenaert/pablomer/data/heldout_validation",
+    "heldout_num_batches": 4,
+    "heldout_file_name": "neighbors_heldout_val_seed42.h5"
   },
   "model": {
     "in_channels": 4,
@@ -56,7 +60,7 @@
   "wandb": {
     "enabled": true,
     "project": "galaxy-flow-matching-neighbours",
-    "name": "neighbours-48x48-zdim16-amdbutoldrepo",
+    "name": "neighbours-48x48-zdim16-amd-5nbs",
     "log_model": false
   }
 }

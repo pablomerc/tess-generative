@@ -18,6 +18,10 @@ class DataConfig:
     num_workers: int = 0
     pin_memory: bool = True
     drop_last_train: bool = True
+    save_heldout_validation: bool = False
+    heldout_validation_dir: Optional[str] = None
+    heldout_num_batches: int = 4
+    heldout_file_name: Optional[str] = None
 
 
 @dataclass
@@ -106,6 +110,8 @@ class ExperimentConfig:
             raise ValueError("data.precomputed_h5 must be set for data.mode='precomputed'.")
         if self.data.mode == "neighbors" and not self.data.neighbors_h5:
             raise ValueError("data.neighbors_h5 must be set for data.mode='neighbors'.")
+        if self.data.heldout_num_batches < 1:
+            raise ValueError("data.heldout_num_batches must be >= 1.")
 
 
 def _deep_update(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
