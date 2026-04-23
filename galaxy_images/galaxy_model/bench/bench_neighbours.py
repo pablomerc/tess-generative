@@ -182,13 +182,17 @@ def phase_dataloader(dataset, batch_size, num_workers, warmup, n_bench):
 def _build_model_and_optimizer(config_path: str, device: torch.device):
     from dataclasses import asdict
     from galaxy_images.galaxy_model.config import load_experiment_config
-    from galaxy_images.galaxy_model.variants import get_variant
+    from galaxy_images.galaxy_model.variants import (
+        filter_supported_model_kwargs,
+        get_variant,
+    )
 
     config = load_experiment_config(config_path, [])
     variant = get_variant(config.run.variant)
     model_kwargs = asdict(config.model)
     model_kwargs["channel_mult"] = tuple(model_kwargs["channel_mult"])
     model_kwargs.update(variant.model_overrides)
+    model_kwargs = filter_supported_model_kwargs(variant.model_cls, model_kwargs)
     model = variant.model_cls(**model_kwargs).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.model.lr)
     return model, optimizer

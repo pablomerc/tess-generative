@@ -36,6 +36,9 @@ class ModelConfig:
     cross_attention_dim: int = 16
     pretrained_encoder: bool = False
     concat_conditioning: bool = False
+    experiment_config: Any = "bn_36x16"
+    instrument_zdim: Optional[int] = None
+    instrument_pooling: str = "masked_mean"
     lr: float = 1e-4
     num_sample_images: int = 10
     num_mse_images: int = 32

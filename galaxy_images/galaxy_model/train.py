@@ -13,15 +13,25 @@ from pytorch_lightning.loggers import WandbLogger
 
 from galaxy_images.galaxy_model.config import ExperimentConfig, load_experiment_config
 from galaxy_images.galaxy_model.data_factory import build_neighbors_dataloaders
-from galaxy_images.galaxy_model.variants import get_variant
+from galaxy_images.galaxy_model.variants import (
+    filter_supported_model_kwargs,
+    get_variant,
+)
 
 
 def is_h100_gpu() -> bool:
-    if not torch.cuda.is_available():
+    try:
+        if not torch.cuda.is_available():
+            return False
+    except Exception:
         return False
-    for i in range(torch.cuda.device_count()):
-        if "h100" in torch.cuda.get_device_name(i).lower():
-            return True
+
+    try:
+        for i in range(torch.cuda.device_count()):
+            if "h100" in torch.cuda.get_device_name(i).lower():
+                return True
+    except Exception:
+        return False
     return False
 
 
@@ -62,6 +72,7 @@ def _build_model(config: ExperimentConfig):
     model_kwargs = asdict(config.model)
     model_kwargs["channel_mult"] = tuple(model_kwargs["channel_mult"])
     model_kwargs.update(variant.model_overrides)
+    model_kwargs = filter_supported_model_kwargs(variant.model_cls, model_kwargs)
     model = variant.model_cls(**model_kwargs)
     return model, variant
 
