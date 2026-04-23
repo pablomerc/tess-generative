@@ -1,5 +1,7 @@
 # Model outputs and wandb
 galaxy_images/galaxy_model/outputs/
+galaxy_images/galaxy_model/anomaly_detection/outputs/
+galaxy_images/galaxy_model/hierarchical_attention/outputs/
 wandb/
 
 # Generated data and figures
