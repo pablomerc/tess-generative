@@ -17,6 +17,10 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 
+# ROCm workaround: hipBLASLt is buggy on MI210 for certain matrix shapes.
+if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "preferred_blas_library"):
+    torch.backends.cuda.preferred_blas_library("hipblas")
+
 from torch.utils.data import DataLoader, random_split
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
@@ -32,10 +36,10 @@ from galaxy_images.galaxy_model.contrastive_baseline.dual_encoder_contrastive im
 )
 
 
-PRECOMPUTED_H5 = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
-TRAIN_SHARDS_VDS = "/data/vision/billf/scratch/pablomer/data/neighbors_trainingset_march.vds"
-VAL_SHARDS_VDS = "/data/vision/billf/scratch/pablomer/data/neighbors_valset_march.vds"
-RANDOM_VAL_DIR = "/data/vision/billf/scratch/pablomer/data/contrastive_val"
+PRECOMPUTED_H5 = "/work1/jeroenaudenaert/pablomer/data/neighbor_batches/neighbours_vds.h5"
+TRAIN_SHARDS_VDS = "/work1/jeroenaudenaert/pablomer/data/train_neighbors.vds"
+VAL_SHARDS_VDS = "/work1/jeroenaudenaert/pablomer/data/val_neighbors.vds"
+RANDOM_VAL_DIR = "/work1/jeroenaudenaert/pablomer/data/contrastive_val"
 
 VAL_TYPE = "shards"  # "shards" or "random_batches"
 # VAL_TYPE = "random_batches"
@@ -51,7 +55,7 @@ PROJECTION_HIDDEN_DIM = 64
 
 WANDB_PROJECT = "galaxy-contrastive-neighbours-baseline"
 RUN_NAME = "dual-encoder-contrastive-resnet18"
-CHECKPOINT_DIR = "/data/vision/billf/scratch/pablomer/outputs/contrastive_baseline"
+CHECKPOINT_DIR = "/work1/jeroenaudenaert/pablomer/outputs/contrastive_baseline"
 
 
 def _save_random_val_set(dataset, val_indices, save_dir, seed):
@@ -92,11 +96,17 @@ class VerboseModelCheckpoint(ModelCheckpoint):
 
 
 def is_h100_gpu() -> bool:
-    if not torch.cuda.is_available():
+    try:
+        if not torch.cuda.is_available():
+            return False
+    except Exception:
         return False
-    for i in range(torch.cuda.device_count()):
-        if "h100" in torch.cuda.get_device_name(i).lower():
-            return True
+    try:
+        for i in range(torch.cuda.device_count()):
+            if "h100" in torch.cuda.get_device_name(i).lower():
+                return True
+    except Exception:
+        return False
     return False
 
 
@@ -109,8 +119,7 @@ def main():
     os.makedirs(checkpoint_run_dir, exist_ok=True)
     print(f"[checkpoint] run directory: {checkpoint_run_dir}", flush=True)
 
-    is_h100 = is_h100_gpu()
-    precision_setting = "bf16-mixed" if is_h100 else "16-mixed"
+    precision_setting = "bf16-mixed"
     batch_size = BATCH_SIZE
 
     if VAL_TYPE == "shards":
@@ -199,7 +208,7 @@ def main():
         save_last=False,
     )
 
-    n_devices = 1
+    n_devices = int(os.environ.get("N_DEVICES", 4))
     trainer = pl.Trainer(
         max_steps=NUM_STEPS,
         logger=wandb_logger,
