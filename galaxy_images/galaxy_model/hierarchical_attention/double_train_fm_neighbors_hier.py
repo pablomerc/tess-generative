@@ -36,6 +36,7 @@ from galaxy_images.galaxy_model.double_train_fm_neighbors import (
     ResNetEncoder,
     is_h100_gpu,
 )
+from galaxy_images.galaxy_model.validation_pairs import reconstruct_hsc_legacy_pairs
 
 
 # =============================================================================
@@ -694,17 +695,13 @@ class HierarchicalFlowMatchingModule(pl.LightningModule):
                 and self._umap_batch_count < self.num_umap_batches):
             (anchor_image, same_galaxy, same_instrument,
              _masks, metadata) = self._unpack_batch(batch)
-            anchor_surveys = [m['anchor_survey'] for m in metadata]
-            hsc_mask = torch.tensor(
-                [s == 'hsc' for s in anchor_surveys], device=anchor_image.device,
+            hsc_images, legacy_images = reconstruct_hsc_legacy_pairs(
+                anchor_image,
+                same_galaxy,
+                metadata,
             )
-            legacy_mask = torch.tensor(
-                [s == 'legacy' for s in anchor_surveys], device=anchor_image.device,
-            )
-            if hsc_mask.any():
-                self._umap_hsc_batches.append(anchor_image[hsc_mask].cpu())
-            if legacy_mask.any():
-                self._umap_legacy_batches.append(anchor_image[legacy_mask].cpu())
+            self._umap_hsc_batches.append(hsc_images.cpu())
+            self._umap_legacy_batches.append(legacy_images.cpu())
             self._umap_batch_count += 1
 
         return loss

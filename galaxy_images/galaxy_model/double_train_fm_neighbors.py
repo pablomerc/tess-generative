@@ -16,6 +16,8 @@ import geomloss
 import umap
 import numpy as np
 
+from galaxy_images.galaxy_model.validation_pairs import reconstruct_hsc_legacy_pairs
+
 
 
 class ResNetEncoder(nn.Module):
@@ -508,21 +510,13 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         if (hasattr(self, '_umap_batch_count') and
             self._umap_batch_count < self.num_umap_batches):
             anchor_image, same_galaxy, same_instrument, _masks, metadata = self._unpack_batch(batch)
-
-            # Separate HSC and Legacy images based on anchor_survey
-            anchor_surveys = [m['anchor_survey'] for m in metadata]
-            hsc_mask = torch.tensor([s == 'hsc' for s in anchor_surveys], device=anchor_image.device)
-            legacy_mask = torch.tensor([s == 'legacy' for s in anchor_surveys], device=anchor_image.device)
-
-            # Collect HSC images (anchor_image when anchor_survey == 'hsc')
-            if hsc_mask.any():
-                hsc_images = anchor_image[hsc_mask]
-                self._umap_hsc_batches.append(hsc_images.cpu())
-
-            # Collect Legacy images (anchor_image when anchor_survey == 'legacy')
-            if legacy_mask.any():
-                legacy_images = anchor_image[legacy_mask]
-                self._umap_legacy_batches.append(legacy_images.cpu())
+            hsc_images, legacy_images = reconstruct_hsc_legacy_pairs(
+                anchor_image,
+                same_galaxy,
+                metadata,
+            )
+            self._umap_hsc_batches.append(hsc_images.cpu())
+            self._umap_legacy_batches.append(legacy_images.cpu())
 
             self._umap_batch_count += 1
 
@@ -1043,13 +1037,19 @@ def is_h100_gpu() -> bool:
     Returns:
         True if at least one H100 GPU is detected, False otherwise.
     """
-    if not torch.cuda.is_available():
+    try:
+        if not torch.cuda.is_available():
+            return False
+    except Exception:
         return False
 
-    for i in range(torch.cuda.device_count()):
-        device_name = torch.cuda.get_device_name(i).lower()
-        if 'h100' in device_name:
-            return True
+    try:
+        for i in range(torch.cuda.device_count()):
+            device_name = torch.cuda.get_device_name(i).lower()
+            if 'h100' in device_name:
+                return True
+    except Exception:
+        return False
 
     return False
 
