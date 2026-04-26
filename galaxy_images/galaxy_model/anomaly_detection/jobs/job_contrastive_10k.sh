@@ -11,6 +11,8 @@
 source ~/.bashrc
 conda activate torchenv
 export TORCH_BLAS_PREFER_HIPBLASLT=0
+export MIOPEN_USER_DB_PATH="/tmp/miopen_${SLURM_JOB_ID}"
+export MIOPEN_DISABLE_CACHE=0
 
 DISCORD="https://discord.com/api/webhooks/1496321484338106519/HdI24VGIwsk9IEYoz9MdwMUSmwJ76hJhgIp-TviwYt8Pbnme59KE1xsrHJTM9x3M5eOM"
 SUFFIX="contrastive_10k"

@@ -2,6 +2,8 @@
 galaxy_images/galaxy_model/outputs/
 galaxy_images/galaxy_model/anomaly_detection/outputs/
 galaxy_images/galaxy_model/hierarchical_attention/outputs/
+galaxy_images/galaxy_model/lense_reconstruction/outputs/
+galaxy_images/galaxy_model/lense_reconstruction/*.h5
 wandb/
 
 # Generated data and figures

@@ -142,6 +142,8 @@ def main():
     parser.add_argument("--train-frac", type=float, default=0.8)
     parser.add_argument("--nsf-epochs", type=int, default=50)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--also-instrument-emb", action="store_true",
+                        help="Also score instrument_emb from the --ours latents file")
     args = parser.parse_args()
 
     if args.ours is None and args.aion is None:
@@ -174,6 +176,18 @@ def main():
 
         print("\n=== Ours: hsc_legacy_mean ===")
         _apply_all_methods("ours/hsc_legacy_mean", hsc_legacy_mean[train_idx], hsc_legacy_mean, args.nsf_epochs, args.device, scores)
+
+        if args.also_instrument_emb:
+            with h5py.File(ours_path, "r") as f:
+                if "instrument_emb" in f:
+                    instrument_emb = f["instrument_emb"][:]
+                    print(f"  instrument_emb: {instrument_emb.shape}")
+                else:
+                    instrument_emb = None
+                    print("  WARNING: instrument_emb not found in latents file, skipping")
+            if instrument_emb is not None:
+                print("\n=== Ours: instrument_emb ===")
+                _apply_all_methods("ours/instrument_emb", instrument_emb[train_idx], instrument_emb, args.nsf_epochs, args.device, scores)
 
     if args.aion is not None:
         aion_path = Path(args.aion)

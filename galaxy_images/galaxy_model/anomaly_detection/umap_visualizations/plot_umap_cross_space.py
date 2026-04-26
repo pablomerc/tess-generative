@@ -20,7 +20,13 @@ Run from galaxy_model/:
     [--suffix crossspace_100k] [--top-n 10] [--n-background 10000]
 """
 import argparse
+import gc
+import os
 from pathlib import Path
+
+# pynndescent's rptree_leaf_array_parallel hardcodes n_jobs=-1 in joblib.Parallel,
+# ignoring UMAP's n_jobs=1. Cap workers so concurrent runs don't exhaust thread limits.
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", "4")
 
 import h5py
 import numpy as np
@@ -54,11 +60,21 @@ def _top_n_by_score(scores_path, score_key, top_n, rank_max=None):
     return ranked[:top_n]
 
 
-def _fit_umap_transform(bg_feats, query_feats, include_anomalies=False):
-    try:
-        import umap as umap_lib
-    except ImportError:
-        raise RuntimeError("umap-learn not installed. Run: pip install umap-learn")
+def _pca_reduce(bg, query, max_dim=64):
+    """PCA-reduce to max_dim on bg, then project query with the same fit."""
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=max_dim, random_state=42)
+    bg_r = pca.fit_transform(bg.astype(np.float32))
+    query_r = pca.transform(query.astype(np.float32))
+    var = pca.explained_variance_ratio_.sum()
+    print(f"  PCA {bg.shape[1]}D → {max_dim}D  (explained variance: {var:.1%})")
+    return bg_r, query_r
+
+
+def _umap_worker(args):
+    """Top-level worker so it's picklable for spawn subprocess."""
+    bg_feats, query_feats, include_anomalies = args
+    import umap as umap_lib
     reducer = umap_lib.UMAP(
         n_neighbors=15, min_dist=0.1, n_components=2,
         metric="euclidean", random_state=42, verbose=True,
@@ -72,6 +88,20 @@ def _fit_umap_transform(bg_feats, query_feats, include_anomalies=False):
         bg_emb = reducer.fit_transform(bg_feats.astype(np.float32))
         query_emb = reducer.transform(query_feats.astype(np.float32))
         return bg_emb, query_emb
+
+
+def _fit_umap_transform(bg_feats, query_feats, include_anomalies=False):
+    import multiprocessing as mp
+
+    # PCA preprocessing for high-dim inputs (pynndescent struggles with >100D)
+    if bg_feats.shape[1] > 100:
+        bg_feats, query_feats = _pca_reduce(bg_feats, query_feats)
+
+    # Each UMAP fit runs in a fresh spawned subprocess to avoid pynndescent/numba
+    # state accumulation that causes MemoryError on the 2nd+ call in the same process.
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=1) as pool:
+        return pool.apply(_umap_worker, ((bg_feats, query_feats, include_anomalies),))
 
 
 def _make_figure(bg_embs, space_names, anom_embs_per_set, highlight_defs, out_path, title):
@@ -120,6 +150,10 @@ def main():
                         help="If set, sample --top-n points uniformly spread across ranks 1..rank-max")
     parser.add_argument("--include-anomalies", action="store_true",
                         help="Include anomaly points in the UMAP fit (joint embedding)")
+    parser.add_argument("--ours-key",  default="ours/hsc_flat/iforest",
+                        help="Score key for physics and instrument detectors")
+    parser.add_argument("--aion-key",  default="aion/hsc_mean_pca64/iforest",
+                        help="Score key for AION detector")
     args = parser.parse_args()
 
     out_dir = OUTPUT_DIR / f"figures_{args.suffix}"
@@ -132,14 +166,18 @@ def main():
     aion_scr = _resolve_path(args.aion_scores)
     ins_scr  = _resolve_path(args.ins_scores)
 
+    # ── Resolve which latent key to use for ours/ins ────────────────────────
+    # ours-key looks like "ours/hsc_flat/flow" — extract the representation part
+    ours_rep = args.ours_key.split("/")[1]  # e.g. "hsc_flat" or "hsc_mean"
+
     # ── Load all latents into memory ─────────────────────────────────────────
     print("Loading latents...")
     with h5py.File(ours_lat, "r") as f:
-        physics_feats = f["hsc_flat"][:]          # (N, 64)
+        physics_feats = f[ours_rep][:]
     with h5py.File(aion_lat, "r") as f:
         aion_feats = f["embeddings_mean_hsc"][:]  # (N, 768)
     with h5py.File(ins_lat, "r") as f:
-        ins_feats = f["hsc_flat"][:]              # (N, 64)
+        ins_feats = f[ours_rep][:]
 
     n_total = len(physics_feats)
     print(f"  N={n_total}  physics={physics_feats.shape}  "
@@ -148,9 +186,9 @@ def main():
     # ── Top-N anomaly positions per detector ─────────────────────────────────
     rank_desc = f"ranks 1–{args.rank_max}" if args.rank_max else f"top-{args.top_n}"
     print(f"\nSelecting {args.top_n} anomaly points ({rank_desc}) per detector...")
-    phys_top = _top_n_by_score(ours_scr, "ours/hsc_flat/iforest", args.top_n, args.rank_max)
-    aion_top = _top_n_by_score(aion_scr, "aion/hsc_mean_pca64/iforest", args.top_n, args.rank_max)
-    ins_top  = _top_n_by_score(ins_scr,  "ours/hsc_flat/iforest", args.top_n, args.rank_max)
+    phys_top = _top_n_by_score(ours_scr, args.ours_key, args.top_n, args.rank_max)
+    aion_top = _top_n_by_score(aion_scr, args.aion_key, args.top_n, args.rank_max)
+    ins_top  = _top_n_by_score(ins_scr,  args.ours_key, args.top_n, args.rank_max)
     print(f"  physics:    {phys_top}")
     print(f"  aion:       {aion_top}")
     print(f"  instrument: {ins_top}")
@@ -201,11 +239,11 @@ def main():
         space_names,
         {k: anom_embs_all_spaces[k] for k in ("physics", "aion")},
         {
-            "physics": ("#e74c3c", "o", f"Physics top-{args.top_n} (iforest)"),
-            "aion":    ("#3498db", "^", f"AION top-{args.top_n} (iforest)"),
+            "physics": ("#e74c3c", "o", f"Physics top-{args.top_n} ({args.ours_key.split('/')[-1]})"),
+            "aion":    ("#3498db", "^", f"AION top-{args.top_n} ({args.aion_key.split('/')[-1]})"),
         },
         out_dir / f"umap_crossspace_physics_aion_{args.suffix}.png",
-        "Cross-space UMAP — physics & AION anomalies",
+        f"Cross-space UMAP — physics & AION anomalies  [{args.ours_key}]",
     )
 
     # ── Figure 2: instrument anomalies ──────────────────────────────────────
@@ -214,9 +252,9 @@ def main():
         bg_embs,
         space_names,
         {"instrument": anom_embs_all_spaces["instrument"]},
-        {"instrument": ("#2ecc71", "*", f"Instrument top-{args.top_n} (iforest)")},
+        {"instrument": ("#2ecc71", "*", f"Instrument top-{args.top_n} ({args.ours_key.split('/')[-1]})")},
         out_dir / f"umap_crossspace_instrument_{args.suffix}.png",
-        "Cross-space UMAP — instrument anomalies",
+        f"Cross-space UMAP — instrument anomalies  [{args.ours_key}]",
     )
 
     print("\nDone.")
