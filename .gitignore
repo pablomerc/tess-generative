@@ -51,7 +51,7 @@ galaxy_images/galaxy_model/neighbor_search_lenses/outputs_extended/
 galaxy_images/galaxy_model/neighbor_search_lenses/outputs_test1k/
 galaxy_images/galaxy_model/neighbor_search_lenses/galleries/
 galaxy_images/galaxy_model/single_encoder_ablation/figures/
-galaxy_images/galaxy_model/hierarchical_latent_experiments/anomalies/
-galaxy_images/galaxy_model/hierarchical_latent_experiments/downstream/
-galaxy_images/galaxy_model/hierarchical_latent_experiments/umap_pairs/
+galaxy_images/galaxy_model/hierarchical_latent_experiments/anomalies/outputs/
+galaxy_images/galaxy_model/hierarchical_latent_experiments/downstream/outputs/
+galaxy_images/galaxy_model/hierarchical_latent_experiments/umap_pairs/outputs/
 
