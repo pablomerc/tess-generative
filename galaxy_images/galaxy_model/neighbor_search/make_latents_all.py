@@ -59,9 +59,8 @@ def collate_neighbors(batch):
     return hsc, leg, meta
 
 
-def generate_physics_instrument_embeddings(model, dataset, device, batch_size=256):
-    """Run encoder_1 (physics) and encoder_2 (instrument) on HSC and Legacy; return arrays + metadata."""
-    from neighbors import NeighborsSimpleDataset  # noqa: F401
+def generate_and_save_embeddings(model, dataset, device, output_path, n_use, checkpoint, module_filename, batch_size=256):
+    """Stream-write physics + instrument embeddings to HDF5 batch by batch to avoid OOM."""
     loader = TorchDataLoader(
         dataset,
         batch_size=batch_size,
@@ -69,23 +68,51 @@ def generate_physics_instrument_embeddings(model, dataset, device, batch_size=25
         num_workers=0,
         collate_fn=collate_neighbors,
     )
-    hsc_physics_list, hsc_instrument_list = [], []
-    leg_physics_list, leg_instrument_list = [], []
-    metadata_collected = []
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    hdf5_file = None
+    row = 0
     with torch.no_grad():
         for hsc_im, leg_im, meta_list in loader:
-            metadata_collected.extend(meta_list)
             h = hsc_im.to(device)
             l = leg_im.to(device)
-            hsc_physics_list.append(model.encoder_1(h).cpu())
-            hsc_instrument_list.append(model.encoder_2(h).cpu())
-            leg_physics_list.append(model.encoder_1(l).cpu())
-            leg_instrument_list.append(model.encoder_2(l).cpu())
-    hsc_physics = torch.cat(hsc_physics_list, dim=0).flatten(start_dim=1).numpy()
-    hsc_instrument = torch.cat(hsc_instrument_list, dim=0).flatten(start_dim=1).numpy()
-    leg_physics = torch.cat(leg_physics_list, dim=0).flatten(start_dim=1).numpy()
-    leg_instrument = torch.cat(leg_instrument_list, dim=0).flatten(start_dim=1).numpy()
-    return hsc_physics, hsc_instrument, leg_physics, leg_instrument, metadata_collected
+            hsc_phys = model.encoder_1(h).cpu().flatten(start_dim=1).numpy().astype(np.float32)
+            hsc_inst  = model.encoder_2(h).cpu().flatten(start_dim=1).numpy().astype(np.float32)
+            leg_phys  = model.encoder_1(l).cpu().flatten(start_dim=1).numpy().astype(np.float32)
+            leg_inst  = model.encoder_2(l).cpu().flatten(start_dim=1).numpy().astype(np.float32)
+            index_mmu_batch = np.array([m["index_mmu"] for m in meta_list], dtype=np.int64)
+            bs = hsc_phys.shape[0]
+
+            if hdf5_file is None:
+                # Create datasets on first batch now that we know embedding dims
+                d_phys = hsc_phys.shape[1]
+                d_inst = hsc_inst.shape[1]
+                hdf5_file = h5py.File(output_path, "w")
+                hdf5_file.create_dataset("idx",                        shape=(n_use,),         dtype=np.int64)
+                hdf5_file.create_dataset("index_mmu",                  shape=(n_use,),         dtype=np.int64)
+                hdf5_file.create_dataset("physics_embedding",          shape=(n_use, d_phys),  dtype=np.float32)
+                hdf5_file.create_dataset("instrument_embedding",       shape=(n_use, d_inst),  dtype=np.float32)
+                hdf5_file.create_dataset("legacy_physics_embedding",   shape=(n_use, d_phys),  dtype=np.float32)
+                hdf5_file.create_dataset("legacy_instrument_embedding",shape=(n_use, d_inst),  dtype=np.float32)
+                hdf5_file.attrs["num_examples"] = n_use
+                hdf5_file.attrs["checkpoint"]   = str(checkpoint)
+                hdf5_file.attrs["module"]        = module_filename
+
+            end = row + bs
+            hdf5_file["idx"][row:end]                         = np.arange(row, end, dtype=np.int64)
+            hdf5_file["index_mmu"][row:end]                   = index_mmu_batch
+            hdf5_file["physics_embedding"][row:end]           = hsc_phys
+            hdf5_file["instrument_embedding"][row:end]        = hsc_inst
+            hdf5_file["legacy_physics_embedding"][row:end]    = leg_phys
+            hdf5_file["legacy_instrument_embedding"][row:end] = leg_inst
+            row = end
+
+            if row % 10000 == 0 or row >= n_use:
+                print(f"  {row}/{n_use} encoded", flush=True)
+
+    if hdf5_file is not None:
+        hdf5_file.close()
 
 
 def main():
@@ -116,47 +143,38 @@ def main():
     )
     p.add_argument("--batch-size", type=int, default=256)
     p.add_argument("--suffix", default=None, help="Suffix for output filename (default: from checkpoint dir)")
+    p.add_argument("--neighbors-h5", default=NEIGHBORS_HDF5, help=f"Path to neighbours_v2.h5 (default: {NEIGHBORS_HDF5})")
     args = p.parse_args()
 
     from neighbors import NeighborsSimpleDataset
 
-    full_dataset = NeighborsSimpleDataset(hdf5_path=NEIGHBORS_HDF5)
+    full_dataset = NeighborsSimpleDataset(hdf5_path=args.neighbors_h5)
     n_total = len(full_dataset)
     n_use = min(args.max_examples, n_total)
     dataset = Subset(full_dataset, range(n_use))
     print(f"Neighbors dataset: using first {n_use} of {n_total} examples")
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = _load_model(args.checkpoint, args.module).to(device)
-    print("Generating physics (encoder_1) and instrument (encoder_2) embeddings on HSC and Legacy...")
-    hsc_physics, hsc_instrument, leg_physics, leg_instrument, metadata = generate_physics_instrument_embeddings(
-        model, dataset, device, batch_size=args.batch_size
-    )
-    del model
-    if device.type == "cuda":
-        torch.cuda.empty_cache()
-
-    # index_mmu: row in original neighbours HDF5 (for loading images in search_neighbors.py)
-    index_mmu = np.array([m["index_mmu"] for m in metadata], dtype=np.int64)
-    idx = np.arange(n_use, dtype=np.int64)
 
     if args.suffix is None:
         args.suffix = Path(args.checkpoint).parent.parent.name
     if args.output is None:
         args.output = _here / f"neighbor_latents_{args.suffix}.h5"
     args.output = Path(args.output)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
 
-    with h5py.File(args.output, "w") as f:
-        f.create_dataset("idx", data=idx, compression="gzip", compression_opts=4)
-        f.create_dataset("index_mmu", data=index_mmu, compression="gzip", compression_opts=4)
-        f.create_dataset("physics_embedding", data=hsc_physics.astype(np.float32), compression="gzip", compression_opts=4)
-        f.create_dataset("instrument_embedding", data=hsc_instrument.astype(np.float32), compression="gzip", compression_opts=4)
-        f.create_dataset("legacy_physics_embedding", data=leg_physics.astype(np.float32), compression="gzip", compression_opts=4)
-        f.create_dataset("legacy_instrument_embedding", data=leg_instrument.astype(np.float32), compression="gzip", compression_opts=4)
-        f.attrs["num_examples"] = n_use
-        f.attrs["checkpoint"] = str(args.checkpoint)
-        f.attrs["module"] = args.module
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = _load_model(args.checkpoint, args.module).to(device)
+    print("Generating physics (encoder_1) and instrument (encoder_2) embeddings on HSC and Legacy...")
+    print("Writing directly to HDF5 to avoid OOM ...")
+    generate_and_save_embeddings(
+        model, dataset, device,
+        output_path=args.output,
+        n_use=n_use,
+        checkpoint=args.checkpoint,
+        module_filename=args.module,
+        batch_size=args.batch_size,
+    )
+    del model
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
     print(f"Saved: {args.output} (idx, index_mmu, physics/instrument/legacy_physics/legacy_instrument embeddings)")
 
 
