@@ -103,6 +103,14 @@ def build_neighbors_dataloaders(config: ExperimentConfig, batch_size: int) -> Tu
             crop_size=config.model.image_size,
         )
         collate_fn = _collate_for_neighbors
+    elif config.data.mode == "efficient":
+        from galaxy_images.galaxy_model.neighbors_efficient import NeighborsEfficientDataset
+        dataset = NeighborsEfficientDataset(
+            data_dir=config.data.efficient_data_dir,
+            max_neighbors=config.data.max_neighbors,
+            crop_size=config.model.image_size,
+        )
+        collate_fn = _collate_for_neighbors
     else:
         raise ValueError(f"Unsupported data mode: {config.data.mode}")
 

@@ -9,9 +9,10 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class DataConfig:
-    mode: str = "precomputed"  # precomputed | neighbors
+    mode: str = "precomputed"  # precomputed | neighbors | efficient
     precomputed_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
     neighbors_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
+    efficient_data_dir: Optional[str] = None
     max_neighbors: int = 5
     val_ratio: float = 0.05
     batch_size: int = 64
@@ -107,12 +108,14 @@ class ExperimentConfig:
         )
 
     def validate(self) -> None:
-        if self.data.mode not in {"precomputed", "neighbors"}:
-            raise ValueError(f"Unsupported data.mode={self.data.mode!r}. Use 'precomputed' or 'neighbors'.")
+        if self.data.mode not in {"precomputed", "neighbors", "efficient"}:
+            raise ValueError(f"Unsupported data.mode={self.data.mode!r}. Use 'precomputed', 'neighbors', or 'efficient'.")
         if self.data.mode == "precomputed" and not self.data.precomputed_h5:
             raise ValueError("data.precomputed_h5 must be set for data.mode='precomputed'.")
         if self.data.mode == "neighbors" and not self.data.neighbors_h5:
             raise ValueError("data.neighbors_h5 must be set for data.mode='neighbors'.")
+        if self.data.mode == "efficient" and not self.data.efficient_data_dir:
+            raise ValueError("data.efficient_data_dir must be set for data.mode='efficient'.")
         if self.data.heldout_num_batches < 1:
             raise ValueError("data.heldout_num_batches must be >= 1.")
 
