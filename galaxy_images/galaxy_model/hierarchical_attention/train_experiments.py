@@ -64,7 +64,17 @@ EXPERIMENTS = {
         "token_dim": 16,
         "global_dim": 64,
     },
+    "bn_36x8": {
+        "spatial_indices": [2],
+        "reductions": {},
+        "token_dim": 8,
+        "global_dim": 16,
+    },
 }
+
+# Aliases for readability
+EXPERIMENTS["hier_base"] = EXPERIMENTS["bn_36x16"]
+EXPERIMENTS["hier_small"] = EXPERIMENTS["bn_36x8"]
 
 
 # =============================================================================
