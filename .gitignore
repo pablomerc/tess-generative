@@ -25,3 +25,33 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Large data and model artifacts
+*.h5
+*.npz
+*.csv
+checkpoints/
+lightning_logs/
+galaxy_images/galaxy_model/contrastive_baseline/downstream_evaluation/*.h5
+galaxy_images/galaxy_model/contrastive_baseline/downstream_evaluation/*.csv
+galaxy_images/galaxy_model/neighbor_search/*.h5
+galaxy_images/galaxy_model/neighbor_search/query_results/
+galaxy_images/galaxy_model/neighbor_search/neighbors_original_img/query_results/
+galaxy_images/galaxy_model/latent_traversal/snr_traversal_results/
+galaxy_images/galaxy_model/latent_traversal/quality_traversal_results/
+galaxy_images/galaxy_model/latent_traversal/noise_grids/
+galaxy_images/galaxy_model/latent_traversal/psf_traversal_*/
+galaxy_images/galaxy_model/latent_traversal/latent_traversal_hsc*/
+galaxy_images/galaxy_model/anomaly_detection/counterfactual_anomaly_experiment/outputs/
+galaxy_images/galaxy_model/anomaly_detection_legacy/outputs/
+galaxy_images/galaxy_model/anomaly_detection_legacy/jobs/
+galaxy_images/galaxy_model/lense_euclid_experiment/outputs/
+galaxy_images/galaxy_model/neighbor_search_lenses/outputs/
+galaxy_images/galaxy_model/neighbor_search_lenses/outputs_extended/
+galaxy_images/galaxy_model/neighbor_search_lenses/outputs_test1k/
+galaxy_images/galaxy_model/neighbor_search_lenses/galleries/
+galaxy_images/galaxy_model/single_encoder_ablation/figures/
+galaxy_images/galaxy_model/hierarchical_latent_experiments/anomalies/
+galaxy_images/galaxy_model/hierarchical_latent_experiments/downstream/
+galaxy_images/galaxy_model/hierarchical_latent_experiments/umap_pairs/
+
