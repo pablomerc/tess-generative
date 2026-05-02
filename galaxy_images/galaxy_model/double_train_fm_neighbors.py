@@ -392,8 +392,14 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
         print(f"{'='*60}\n")
 
-        # Explicitly log important hyperparameters to wandb (only on rank 0; other ranks have dummy logger)
-        if self.trainer.is_global_zero and self.logger and hasattr(self.logger, 'experiment'):
+        # Explicitly log important hyperparameters to wandb (only on rank 0; other ranks have dummy logger).
+        # Guarded with hasattr so non-wandb loggers (e.g. CSVLogger fallback) don't crash here.
+        if (
+            self.trainer.is_global_zero
+            and self.logger
+            and hasattr(self.logger, "experiment")
+            and hasattr(self.logger.experiment, "config")
+        ):
             self.logger.experiment.config.update({
                 "cross_attention_dim": self.hparams.cross_attention_dim,
                 "instrument_zdim": self.instrument_zdim,

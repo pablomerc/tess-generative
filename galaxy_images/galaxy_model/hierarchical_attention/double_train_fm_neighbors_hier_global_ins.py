@@ -633,6 +633,7 @@ class HierarchicalGlobalInstrumentFlowMatchingModule(pl.LightningModule):
             self.trainer.is_global_zero
             and self.logger
             and hasattr(self.logger, "experiment")
+            and hasattr(self.logger.experiment, "config")
         ):
             self.logger.experiment.config.update(
                 {
