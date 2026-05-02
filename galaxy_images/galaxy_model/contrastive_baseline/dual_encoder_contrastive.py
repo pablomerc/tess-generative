@@ -85,6 +85,8 @@ class DualEncoderContrastiveModule(pl.LightningModule):
         num_umap_batches: int = 4,
         umap_n_neighbors: int = 15,
         umap_min_dist: float = 0.1,
+        include_physics_pair_as_instrument_negative: bool = False,
+        use_random_instrument_positives: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -175,6 +177,41 @@ class DualEncoderContrastiveModule(pl.LightningModule):
         acc = (pred_owner[valid_anchor] == torch.arange(a.size(0), device=a.device)[valid_anchor]).float().mean()
         return loss, acc
 
+    def _survey_positive_infonce(
+        self,
+        z: torch.Tensor,
+        is_hsc: torch.Tensor,
+        temperature: float,
+    ):
+        """
+        InfoNCE where positives for anchor i are all j != i with the same survey.
+
+        z: (B, D) — already-projected embeddings (will be L2-normalised here)
+        is_hsc: (B,) bool — True if the corresponding image is from HSC
+        """
+        a = F.normalize(z, dim=1)
+        logits = (a @ a.T) / temperature  # (B, B)
+
+        eye = torch.eye(logits.size(0), dtype=torch.bool, device=z.device)
+        same_survey = is_hsc.unsqueeze(0) == is_hsc.unsqueeze(1)  # (B, B)
+        pos_mask = same_survey & ~eye
+
+        # Remove self-similarity from denominator.
+        logits = logits.masked_fill(eye, float("-inf"))
+        log_denom = torch.logsumexp(logits, dim=1)
+
+        pos_logits = logits.masked_fill(~pos_mask, float("-inf"))
+        log_num = torch.logsumexp(pos_logits, dim=1)
+
+        valid = pos_mask.any(dim=1)
+        if not valid.any():
+            return z.new_tensor(0.0), z.new_tensor(0.0)
+
+        loss = -(log_num[valid] - log_denom[valid]).mean()
+        pred_pos = logits.argmax(dim=1)
+        acc = pos_mask[torch.arange(z.size(0), device=z.device), pred_pos][valid].float().mean()
+        return loss, acc
+
     def _compute_losses(self, batch):
         targets, samegals, sameins, masks, _metadata = batch
 
@@ -190,29 +227,79 @@ class DualEncoderContrastiveModule(pl.LightningModule):
         )
 
         # ---------------------------
-        # 2) Instrument branch multi-positive contrastive loss
+        # 2) Instrument branch contrastive loss
         # ---------------------------
-        # For anchor target_i, positives are ALL valid sameins[i, j].
-        # sameins is padded, so masks tells us which j are real vs padding.
-        B, K, C, H, W = sameins.shape
-        sameins_flat = sameins.view(B * K, C, H, W)
-        z_si_flat = self.head_instrument(self.encoder_instrument(sameins_flat))
-
-        # Remove padded entries before building the candidate pool.
-        masks_flat = masks.view(B * K).bool()
-        z_si_valid = z_si_flat[masks_flat]
-        # owner maps each valid pooled neighbor back to its anchor index i in [0, B).
-        owner = (
-            torch.arange(B, device=targets.device)
-            .unsqueeze(1)
-            .expand(B, K)
-            .reshape(B * K)[masks_flat]
-        )
-
         z_t_i = self.head_instrument(self.encoder_instrument(targets))
-        loss_instrument, acc_instrument = self._multi_positive_infonce(
-            z_t_i, z_si_valid, owner, self.hparams.temperature_instrument
-        )
+
+        if self.hparams.use_random_instrument_positives:
+            # Positives = other in-batch images from the same survey (no precomputed neighbors).
+            surveys = [m.get("anchor_survey", "hsc") for m in _metadata]
+            is_hsc = torch.tensor(
+                [s == "hsc" for s in surveys], dtype=torch.bool, device=targets.device
+            )
+            if self.hparams.include_physics_pair_as_instrument_negative:
+                # Append samegal instrument embeddings as explicit negatives (owner = B, never matched).
+                z_sg_i = self.head_instrument(self.encoder_instrument(samegals))
+                z_pool = torch.cat([z_t_i, z_sg_i], dim=0)  # (2B, D)
+                B = targets.size(0)
+                # For the augmented pool: first B entries are targets (same-survey positives),
+                # last B are samegals (cross-survey, always negatives).
+                # Re-run _survey_positive_infonce on first B anchors against all 2B pool entries.
+                a_anchors = F.normalize(z_t_i, dim=1)          # (B, D)
+                a_pool    = F.normalize(z_pool, dim=1)          # (2B, D)
+                logits = (a_anchors @ a_pool.T) / self.hparams.temperature_instrument  # (B, 2B)
+
+                is_hsc_pool = torch.cat([is_hsc, ~is_hsc], dim=0)  # samegals have the opposite survey
+                same_survey = is_hsc.unsqueeze(1) == is_hsc_pool.unsqueeze(0)  # (B, 2B)
+                # Exclude self from positives (diagonal of the first B columns).
+                self_mask = torch.zeros(B, 2 * B, dtype=torch.bool, device=targets.device)
+                self_mask[:, :B] = torch.eye(B, dtype=torch.bool, device=targets.device)
+                pos_mask = same_survey & ~self_mask
+
+                logits = logits.masked_fill(self_mask, float("-inf"))
+                log_denom = torch.logsumexp(logits, dim=1)
+                pos_logits = logits.masked_fill(~pos_mask, float("-inf"))
+                log_num = torch.logsumexp(pos_logits, dim=1)
+                valid = pos_mask.any(dim=1)
+                if valid.any():
+                    loss_instrument = -(log_num[valid] - log_denom[valid]).mean()
+                    pred_pos = logits.argmax(dim=1)
+                    acc_instrument = pos_mask[torch.arange(B, device=targets.device), pred_pos][valid].float().mean()
+                else:
+                    loss_instrument = targets.new_tensor(0.0)
+                    acc_instrument = targets.new_tensor(0.0)
+            else:
+                loss_instrument, acc_instrument = self._survey_positive_infonce(
+                    z_t_i, is_hsc, self.hparams.temperature_instrument
+                )
+        else:
+            # Original path: precomputed same-instrument neighbors as positives.
+            B, K, C, H, W = sameins.shape
+            sameins_flat = sameins.view(B * K, C, H, W)
+            z_si_flat = self.head_instrument(self.encoder_instrument(sameins_flat))
+
+            masks_flat = masks.view(B * K).bool()
+            z_si_valid = z_si_flat[masks_flat]
+            # owner maps each valid pooled neighbor back to its anchor index i in [0, B).
+            owner = (
+                torch.arange(B, device=targets.device)
+                .unsqueeze(1)
+                .expand(B, K)
+                .reshape(B * K)[masks_flat]
+            )
+
+            if self.hparams.include_physics_pair_as_instrument_negative:
+                # Append samegal instrument embeddings as explicit negatives.
+                # owner = -1 is never equal to any anchor index in [0, B), so they
+                # land only in the InfoNCE denominator.
+                z_sg_i = self.head_instrument(self.encoder_instrument(samegals))
+                neg_owner = torch.full((B,), -1, dtype=torch.long, device=targets.device)
+                z_si_valid = torch.cat([z_si_valid, z_sg_i], dim=0)
+                owner = torch.cat([owner, neg_owner], dim=0)
+
+            loss_instrument, acc_instrument = self._multi_positive_infonce(
+                z_t_i, z_si_valid, owner, self.hparams.temperature_instrument
+            )
 
         # Total objective is weighted sum of branch losses.
         loss = (

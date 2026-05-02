@@ -18,6 +18,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+
+# ROCm workaround: hipBLASLt is buggy on MI210 for certain matrix shapes.
+if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "preferred_blas_library"):
+    torch.backends.cuda.preferred_blas_library("hipblas")
 from torch.utils.data import TensorDataset, DataLoader
 from torch.optim import AdamW
 from pytorch_lightning import Trainer
@@ -241,7 +245,8 @@ def train_and_eval_one(emb, meta, param_names, tr_idx, va_idx, use_embedding, us
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
-    model = LitRegressor(in_dim=emb[0].shape[1], out_dim=meta_s.shape[1], use_embedding=use_embedding)
+    in_dim = emb[0].shape[1] if use_embedding == 1 else emb[1].shape[1]
+    model = LitRegressor(in_dim=in_dim, out_dim=meta_s.shape[1], use_embedding=use_embedding)
     ckpt = ModelCheckpoint(monitor="val/loss", mode="min", save_top_k=1, save_last=False)
     trainer = Trainer(
         max_epochs=100,
@@ -377,6 +382,9 @@ def main():
                    help="Directory containing downstream_*.h5 and where outputs are written")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--no-gpu", action="store_true")
+    p.add_argument("--datasets", default=None,
+                   help="Comma-separated subset of objectives to run: mmu,legacy_provabgs,neighbors,hsc_provabgs. "
+                        "Defaults to all whose H5 file exists.")
     args = p.parse_args()
 
     output_dir = args.output_dir
@@ -386,9 +394,24 @@ def main():
         "neighbors": output_dir / f"downstream_neighbors_{args.suffix}.h5",
         "hsc_provabgs": output_dir / f"downstream_hsc_provabgs_{args.suffix}.h5",
     }
+
+    # Determine which datasets to run.
+    if args.datasets is not None:
+        requested = {s.strip() for s in args.datasets.split(",") if s.strip()}
+    else:
+        requested = set(h5_paths.keys())
+
+    # Soft-check: warn and skip datasets whose H5 is missing.
+    available = {}
     for k, path in h5_paths.items():
-        if not path.exists():
-            raise FileNotFoundError(f"Missing required H5 for {k}: {path}")
+        if k not in requested:
+            continue
+        if path.exists():
+            available[k] = path
+        else:
+            print(f"[WARNING] H5 not found for '{k}', skipping: {path}")
+    if not available:
+        raise FileNotFoundError("No H5 files found for any requested dataset. Run prepare stage first.")
 
     use_gpu = (not args.no_gpu) and torch.cuda.is_available()
     print(f"GPU enabled: {use_gpu}")
@@ -397,13 +420,16 @@ def main():
     for objective, task_name, h5_stem, default_use_embedding, targets in TASKS:
         if not targets:
             continue
+        if h5_stem not in available:
+            print(f"\n[SKIP] {objective} :: {task_name} — H5 for '{h5_stem}' not available")
+            continue
         print(f"\n--- {objective} :: {task_name} ({len(targets)} targets) ---")
         results_per_variant, param_names = run_task(
             task_name,
             h5_stem,
             default_use_embedding,
             targets,
-            h5_paths[h5_stem],
+            available[h5_stem],
             args.seed,
             use_gpu,
         )

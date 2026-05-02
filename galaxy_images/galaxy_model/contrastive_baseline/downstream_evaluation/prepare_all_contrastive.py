@@ -25,6 +25,10 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader as TorchDataLoader, Subset
 
+# ROCm workaround: hipBLASLt is buggy on MI210 for certain matrix shapes.
+if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "preferred_blas_library"):
+    torch.backends.cuda.preferred_blas_library("hipblas")
+
 _here = Path(__file__).resolve().parent
 _project_root = _here.parents[3]  # .../tess-generative
 if str(_project_root) not in sys.path:
@@ -64,8 +68,8 @@ FITS_EVAL_PATH_LEGACY = "/data/vision/billf/scratch/pablomer/data/provabgs_legac
 OVERLAP_CSV_HSC = "/data/vision/billf/scratch/pablomer/projects/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/hsc_train_overlap_df.csv"
 FITS_TRAIN_PATH_HSC = "/data/vision/billf/scratch/pablomer/data/provabgs_hsc_train_v2.fits"
 
-# Neighbors
-NEIGHBORS_HDF5 = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
+# Neighbors — default to this cluster's path; override with --neighbors-hdf5
+NEIGHBORS_HDF5_DEFAULT = "/work1/jeroenaudenaert/pablomer/data/neighbours_v2.h5"
 NUM_EXAMPLES_NEIGHBORS = 4096
 NEIGHBORS_SEED = 42
 SHUFFLE_NEIGHBORS = True
@@ -405,8 +409,9 @@ def prepare_hsc_provabgs(checkpoint_path, output_dir, batch_size, seed, suffix):
     return out_path
 
 
-def prepare_neighbors(checkpoint_path, output_dir, batch_size, seed, suffix):
-    full_dataset = NeighborsSimpleDataset(hdf5_path=NEIGHBORS_HDF5)
+def prepare_neighbors(checkpoint_path, output_dir, batch_size, seed, suffix, neighbors_hdf5=None):
+    hdf5_path = neighbors_hdf5 or NEIGHBORS_HDF5_DEFAULT
+    full_dataset = NeighborsSimpleDataset(hdf5_path=hdf5_path)
     n_use = min(NUM_EXAMPLES_NEIGHBORS, len(full_dataset))
     dataset = Subset(full_dataset, range(n_use))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -440,6 +445,8 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--datasets", default="mmu,legacy_provabgs,neighbors,hsc_provabgs",
                    help="Comma-separated subset of: mmu,legacy_provabgs,neighbors,hsc_provabgs")
+    p.add_argument("--neighbors-hdf5", default=None,
+                   help=f"Path to neighbours_v2.h5 (default: {NEIGHBORS_HDF5_DEFAULT})")
     args = p.parse_args()
 
     suffix = args.suffix or Path(args.checkpoint).stem
@@ -456,7 +463,8 @@ def main():
         saved.append(prepare_legacy_provabgs(args.checkpoint, output_dir, args.batch_size, args.seed, suffix))
     if "neighbors" in datasets:
         print("[Neighbors]")
-        saved.append(prepare_neighbors(args.checkpoint, output_dir, args.batch_size, args.seed, suffix))
+        saved.append(prepare_neighbors(args.checkpoint, output_dir, args.batch_size, args.seed, suffix,
+                                       neighbors_hdf5=args.neighbors_hdf5))
     if "hsc_provabgs" in datasets:
         print("[HSC ProvaBGS]")
         saved.append(prepare_hsc_provabgs(args.checkpoint, output_dir, args.batch_size, args.seed, suffix))
