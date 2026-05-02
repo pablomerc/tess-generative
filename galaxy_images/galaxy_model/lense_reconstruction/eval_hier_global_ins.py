@@ -72,10 +72,14 @@ def _load_hsc_pool_indices() -> np.ndarray:
     return pool
 
 
-def load_lenses(num_lenses: int, neighbor_start: int = 0, seed: int = 42):
+def load_lenses(num_lenses: int, neighbor_start: int = 0, seed: int = 42,
+                lens_indices: list[int] | None = None):
     """Load and preprocess lens images + same-instrument neighbors.
 
     neighbor_start: first rank to use (0-indexed). E.g. 0 → ranks 1-5, 5 → ranks 6-10.
+    lens_indices: optional explicit list of 0-based dataset indices. When provided,
+    `num_lenses` is ignored and only these lenses are loaded (in order).
+
     For each of the MAX_NEIGHBORS slots, if the neighbor at rank (neighbor_start + k) is
     unavailable (index == -1), a random HSC image (source_type==0) is substituted and
     flagged in random_flags.
@@ -92,11 +96,22 @@ def load_lenses(num_lenses: int, neighbor_start: int = 0, seed: int = 42):
 
     with h5py.File(LENS_H5, "r") as lf:
         n_total = lf["images_hsc"].shape[0]
-        n = min(num_lenses, n_total)
-        print(f"Loading {n}/{n_total} lenses from {LENS_H5}")
-        raw_hsc = lf["images_hsc"][:n]           # (n, 5, 160, 160)
-        raw_legacy = lf["images_legacy"][:n]      # (n, 4, 160, 160)
-        neighbor_idx = lf["neighbor_idx_hsc"][:n] # (n, 100)
+        if lens_indices is not None:
+            sel = list(lens_indices)
+            for j in sel:
+                if j < 0 or j >= n_total:
+                    raise IndexError(f"lens index {j} out of range [0, {n_total})")
+            n = len(sel)
+            print(f"Loading {n} selected lenses (0-based indices: {sel}) from {LENS_H5}")
+            raw_hsc = lf["images_hsc"][:][sel]
+            raw_legacy = lf["images_legacy"][:][sel]
+            neighbor_idx = lf["neighbor_idx_hsc"][:][sel]
+        else:
+            n = min(num_lenses, n_total)
+            print(f"Loading {n}/{n_total} lenses from {LENS_H5}")
+            raw_hsc = lf["images_hsc"][:n]           # (n, 5, 160, 160)
+            raw_legacy = lf["images_legacy"][:n]      # (n, 4, 160, 160)
+            neighbor_idx = lf["neighbor_idx_hsc"][:n] # (n, 100)
 
     targets_list, samegals_list, sameins_list, masks_list, random_flags_list = [], [], [], [], []
 
@@ -344,9 +359,14 @@ def main():
     parser.add_argument("--steps", type=int, default=NUM_INTEGRATION_STEPS)
     parser.add_argument("--neighbor-start", type=int, default=0,
                         help="First neighbor rank to use (0-indexed). 0 = ranks 1-5, 5 = ranks 6-10.")
+    parser.add_argument("--lens-indices", type=str, default=None,
+                        help="Comma-separated 1-based lens indices to use (overrides --num-lenses).")
     parser.add_argument("--replot", action="store_true",
                         help="Skip inference, replot from cached samples_cache.pt")
     args = parser.parse_args()
+    sel_indices = None
+    if args.lens_indices:
+        sel_indices = [int(x) - 1 for x in args.lens_indices.split(",") if x.strip()]
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -373,6 +393,7 @@ def main():
         print("\nLoading and preprocessing lenses...")
         targets, samegals, sameins, masks, random_flags = load_lenses(
             args.num_lenses, neighbor_start=args.neighbor_start,
+            lens_indices=sel_indices,
         )
         print(f"  targets: {targets.shape}, samegals: {samegals.shape}")
         print(f"  sameins: {sameins.shape}, masks: {masks.shape}")

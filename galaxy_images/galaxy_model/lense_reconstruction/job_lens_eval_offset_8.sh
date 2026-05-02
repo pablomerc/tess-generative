@@ -14,9 +14,9 @@ export TORCH_BLAS_PREFER_HIPBLASLT=0
 export MIOPEN_USER_DB_PATH="/tmp/miopen_${SLURM_JOB_ID}"
 export PYTHONPATH=/work1/jeroenaudenaert/pablomer/tess-generative:$PYTHONPATH
 
-DISCORD="https://discord.com/api/webhooks/1496321484338106519/HdI24VGIwsk9IEYoz9MdwMUSmwJ76hJhgIp-TviwYt8Pbnme59KE1xsrHJTM9x3M5eOM"
-CKPT="/work1/jeroenaudenaert/pablomer/tess-generative/galaxy_images/galaxy_model/hierarchical_attention/outputs/neighbors_hier_global_ins/2026-04-22_2/checkpoints/latest-step=step=201000.ckpt"
-OUTDIR="lense_reconstruction/outputs/lens_eval_offset_neighbors_8"
+DISCORD="${DISCORD:-https://discord.com/api/webhooks/1496321484338106519/HdI24VGIwsk9IEYoz9MdwMUSmwJ76hJhgIp-TviwYt8Pbnme59KE1xsrHJTM9x3M5eOM}"
+CKPT="${CKPT:-/work1/jeroenaudenaert/pablomer/tess-generative/galaxy_images/galaxy_model/hierarchical_attention/outputs/neighbors_hier_global_ins/2026-04-22_2/checkpoints/latest-step=step=201000.ckpt}"
+OUTDIR="${OUTDIR:-lense_reconstruction/outputs/lens_eval_offset_neighbors_8}"
 
 notify() {
     curl -s -X POST "$DISCORD" \
