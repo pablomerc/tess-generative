@@ -22,7 +22,8 @@ from matplotlib.legend_handler import HandlerBase
 # ---------- Tune these for quick iteration ----------
 FIG_SIZE = (20, 8)
 POINT_SIZE = 20
-alpha = 1
+ALPHA = 0.55           # background HSC/Legacy dot transparency (encoder 1)
+ALPHA_E2 = 0.35        # encoder 2 keeps the original "/2" feel; tweak independently
 # Color palette: first 2 = HSC / Legacy, next 5 = pair markers (cycle for same-shape different color)
 PALETTE = [
     "#e8c4a0",  # HSC (BG_COLORS from aion_vs_ours_all.py)
@@ -39,17 +40,25 @@ PAIR_COLORS = PALETTE[2:]  # 5 colors for pairs
 SHOW_PAIRS = True
 PAIR_MARKER_SIZE = 200
 PAIR_LINEWIDTHS = 3
+# --- Lines connecting the two members of a highlighted pair ---
+SHOW_PAIR_LINES = True
+PAIR_LINE_WIDTH = 1.4
+PAIR_LINE_ALPHA = 0.85
+PAIR_LINE_STYLE = "-"   # "-", "--", ":", "-."
 DPI = 150
-TITLE_FONTSIZE = 23   # +2 from previous
-AXIS_FONTSIZE = 23    # xlabel/ylabel, +4 from previous
-LEGEND_FONTSIZE = 21  # +2 from previous
-TICK_FONTSIZE = 17    # xticks/yticks, +4 from previous
-LEGEND_MARKER_SIZE = 8  # marker size in legend (points)
-# Match downstream_evaluation/final/aion_vs_ours_all.py GROUP_LABEL_COLORS
+TITLE_FONTSIZE = 23
+AXIS_FONTSIZE = 23
+LEGEND_FONTSIZE = 21
+TICK_FONTSIZE = 17
+LEGEND_MARKER_SIZE = 8
 LEGEND_TEXT_COLOR_LEGACY = "#2563a8"
 LEGEND_TEXT_COLOR_HSC = "#996515"
+# SciencePlots: None = no extra style; otherwise a list of style names (e.g. ['science','no-latex'])
+SCIENCE_STYLE = None
 # Optional: set to a path to save elsewhere; None = same dir as data, same stem as .npz
 OUTPUT_PATH = None
+# Optional output suffix to keep multiple tuning experiments side-by-side
+OUTPUT_SUFFIX = "_tuned"
 # ----------------------------------------------------
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -128,117 +137,111 @@ def load_umap_data(data_path: Path):
     }
 
 
+def _draw_panel(ax, hsc_xy, legacy_xy, selected_indices, *,
+                color_hsc, color_legacy, point_size, alpha,
+                show_pairs, pair_colors, pair_markers, pair_marker_size, pair_linewidths,
+                show_pair_lines, pair_line_width, pair_line_alpha, pair_line_style,
+                title):
+    n_pair_colors = len(pair_colors)
+    ax.scatter(hsc_xy[:, 0], hsc_xy[:, 1], s=point_size, label='HSC', alpha=alpha, c=color_hsc)
+    ax.scatter(legacy_xy[:, 0], legacy_xy[:, 1], s=point_size, label='Legacy', alpha=alpha, c=color_legacy)
+
+    if show_pairs and selected_indices is not None:
+        for i, idx in enumerate(selected_indices):
+            color = pair_colors[i % n_pair_colors]
+            marker = pair_markers[i % 4]
+            lw = pair_linewidths
+            lw_outline = lw + 2 if marker == 'x' else lw
+
+            # Connecting line first (under markers).
+            if show_pair_lines:
+                ax.plot([hsc_xy[idx, 0], legacy_xy[idx, 0]],
+                        [hsc_xy[idx, 1], legacy_xy[idx, 1]],
+                        color=color, linewidth=pair_line_width, alpha=pair_line_alpha,
+                        linestyle=pair_line_style, zorder=3, solid_capstyle='round')
+
+            # 'x' gets a thicker black outline underneath.
+            if marker == 'x':
+                ax.scatter(hsc_xy[idx, 0], hsc_xy[idx, 1], marker=marker,
+                           s=pair_marker_size, c=['black'], linewidths=lw_outline, zorder=4, alpha=1.0)
+                ax.scatter(legacy_xy[idx, 0], legacy_xy[idx, 1], marker=marker,
+                           s=pair_marker_size, c=['black'], linewidths=lw_outline, zorder=4, alpha=1.0)
+            ax.scatter(hsc_xy[idx, 0], hsc_xy[idx, 1], marker=marker,
+                       s=pair_marker_size, c=[color], linewidths=lw, zorder=5,
+                       edgecolors='black', alpha=1.0)
+            ax.scatter(legacy_xy[idx, 0], legacy_xy[idx, 1], marker=marker,
+                       s=pair_marker_size, c=[color], linewidths=lw, zorder=5,
+                       edgecolors='black', alpha=1.0)
+
+    ax.set_title(title, fontsize=TITLE_FONTSIZE, fontweight='bold')
+    ax.set_xlabel('UMAP Component 1', fontsize=AXIS_FONTSIZE)
+    ax.set_ylabel('UMAP Component 2', fontsize=AXIS_FONTSIZE)
+    ax.tick_params(axis='both', labelsize=TICK_FONTSIZE)
+
+    legend_handles = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=color_hsc,
+               markeredgecolor='black', markersize=LEGEND_MARKER_SIZE, label='HSC'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=color_legacy,
+               markeredgecolor='black', markersize=LEGEND_MARKER_SIZE, label='Legacy'),
+    ]
+    legend_labels = ['HSC', 'Legacy']
+    if show_pairs and selected_indices is not None:
+        legend_handles.append(_PairsLegendHandle())
+        legend_labels.append('Pairs')
+        ax.legend(handles=legend_handles, labels=legend_labels, fontsize=LEGEND_FONTSIZE,
+                  handlelength=4, handler_map={_PairsLegendHandle: _HandlerPairs(pair_markers)})
+    else:
+        ax.legend(handles=legend_handles, fontsize=LEGEND_FONTSIZE)
+
+
 def plot(dat, figsize=FIG_SIZE, point_size=POINT_SIZE,
          color_hsc=COLOR_HSC, color_legacy=COLOR_LEGACY, show_pairs=SHOW_PAIRS,
          pair_colors=None, pair_marker_size=PAIR_MARKER_SIZE, pair_linewidths=PAIR_LINEWIDTHS,
+         alpha_e1=ALPHA, alpha_e2=ALPHA_E2,
+         show_pair_lines=SHOW_PAIR_LINES, pair_line_width=PAIR_LINE_WIDTH,
+         pair_line_alpha=PAIR_LINE_ALPHA, pair_line_style=PAIR_LINE_STYLE,
+         science_style=SCIENCE_STYLE, output_suffix=OUTPUT_SUFFIX,
          output_path=None, dpi=DPI):
     meta = dat['meta']
-    epoch = meta['epoch']
     selected_indices = dat['selected_indices']
     figures_dir = dat['figures_dir']
     stem = dat['stem']
 
     if pair_colors is None:
         pair_colors = PAIR_COLORS
-    n_pair_colors = len(pair_colors)
     pair_markers = ['x', 's', 'o', '^']
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    style_ctx = plt.style.context(science_style) if science_style else plt.style.context('default')
+    with style_ctx:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
-    # Encoder 1
-    ax1.scatter(dat['hsc_umap_1'][:, 0], dat['hsc_umap_1'][:, 1],
-                s=point_size, label='HSC', alpha=alpha, c=color_hsc)
-    ax1.scatter(dat['legacy_umap_1'][:, 0], dat['legacy_umap_1'][:, 1],
-                s=point_size, label='Legacy', alpha=alpha, c=color_legacy)
-    if show_pairs and selected_indices is not None:
-        for i, idx in enumerate(selected_indices):
-            color = pair_colors[i % n_pair_colors]
-            marker = pair_markers[i % 4]
-            lw = pair_linewidths
-            lw_outline = lw + 2 if marker == 'x' else lw
-            # For 'x', draw black outline first (thicker), then colored on top
-            if marker == 'x':
-                ax1.scatter(dat['hsc_umap_1'][idx, 0], dat['hsc_umap_1'][idx, 1],
-                            marker=marker, s=pair_marker_size, c=['black'],
-                            linewidths=lw_outline, zorder=4, alpha=1.0)
-                ax1.scatter(dat['legacy_umap_1'][idx, 0], dat['legacy_umap_1'][idx, 1],
-                            marker=marker, s=pair_marker_size, c=['black'],
-                            linewidths=lw_outline, zorder=4, alpha=1.0)
-            ax1.scatter(dat['hsc_umap_1'][idx, 0], dat['hsc_umap_1'][idx, 1],
-                        marker=marker, s=pair_marker_size, c=[color],
-                        linewidths=lw, zorder=5, edgecolors='black', alpha=1.0)
-            ax1.scatter(dat['legacy_umap_1'][idx, 0], dat['legacy_umap_1'][idx, 1],
-                        marker=marker, s=pair_marker_size, c=[color],
-                        linewidths=lw, zorder=5, edgecolors='black', alpha=1.0)
-    ax1.set_title(f'Physics Latent Space', fontsize=TITLE_FONTSIZE, fontweight='bold')
-    ax1.set_xlabel('UMAP Component 1', fontsize=AXIS_FONTSIZE)
-    ax1.set_ylabel('UMAP Component 2', fontsize=AXIS_FONTSIZE)
-    ax1.tick_params(axis='both', labelsize=TICK_FONTSIZE)
-    legend_handles = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=color_hsc, markeredgecolor='black', markersize=LEGEND_MARKER_SIZE, label='HSC'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=color_legacy, markeredgecolor='black', markersize=LEGEND_MARKER_SIZE, label='Legacy'),
-    ]
-    legend_labels = ['HSC', 'Legacy']
-    if show_pairs and selected_indices is not None:
-        legend_handles.append(_PairsLegendHandle())
-        legend_labels.append('Pairs')
-        ax1.legend(handles=legend_handles, labels=legend_labels, fontsize=LEGEND_FONTSIZE,
-                   handlelength=4,
-                   handler_map={_PairsLegendHandle: _HandlerPairs(pair_markers)})
-    else:
-        ax1.legend(handles=legend_handles, fontsize=LEGEND_FONTSIZE)
-    # ax1.grid(True)
+        _draw_panel(
+            ax1, dat['hsc_umap_1'], dat['legacy_umap_1'], selected_indices,
+            color_hsc=color_hsc, color_legacy=color_legacy,
+            point_size=point_size, alpha=alpha_e1,
+            show_pairs=show_pairs, pair_colors=pair_colors, pair_markers=pair_markers,
+            pair_marker_size=pair_marker_size, pair_linewidths=pair_linewidths,
+            show_pair_lines=show_pair_lines, pair_line_width=pair_line_width,
+            pair_line_alpha=pair_line_alpha, pair_line_style=pair_line_style,
+            title='Physics Latent Space',
+        )
+        _draw_panel(
+            ax2, dat['hsc_umap_2'], dat['legacy_umap_2'], selected_indices,
+            color_hsc=color_hsc, color_legacy=color_legacy,
+            point_size=point_size, alpha=alpha_e2,
+            show_pairs=show_pairs, pair_colors=pair_colors, pair_markers=pair_markers,
+            pair_marker_size=pair_marker_size, pair_linewidths=pair_linewidths,
+            show_pair_lines=show_pair_lines, pair_line_width=pair_line_width,
+            pair_line_alpha=pair_line_alpha, pair_line_style=pair_line_style,
+            title='Instrument Latent Space',
+        )
 
-    # Encoder 2
-    ax2.scatter(dat['hsc_umap_2'][:, 0], dat['hsc_umap_2'][:, 1],
-                s=point_size, label='HSC', alpha=alpha*0.5, c=color_hsc)
-    ax2.scatter(dat['legacy_umap_2'][:, 0], dat['legacy_umap_2'][:, 1],
-                s=point_size, label='Legacy', alpha=alpha*0.5, c=color_legacy)
-    if show_pairs and selected_indices is not None:
-        for i, idx in enumerate(selected_indices):
-            color = pair_colors[i % n_pair_colors]
-            marker = pair_markers[i % 4]
-            lw = pair_linewidths
-            lw_outline = lw + 2 if marker == 'x' else lw
-            if marker == 'x':
-                ax2.scatter(dat['hsc_umap_2'][idx, 0], dat['hsc_umap_2'][idx, 1],
-                            marker=marker, s=pair_marker_size, c=['black'],
-                            linewidths=lw_outline, zorder=4, alpha=1.0)
-                ax2.scatter(dat['legacy_umap_2'][idx, 0], dat['legacy_umap_2'][idx, 1],
-                            marker=marker, s=pair_marker_size, c=['black'],
-                            linewidths=lw_outline, zorder=4, alpha=1.0)
-            ax2.scatter(dat['hsc_umap_2'][idx, 0], dat['hsc_umap_2'][idx, 1],
-                        marker=marker, s=pair_marker_size, c=[color],
-                        linewidths=lw, zorder=5, edgecolors='black', alpha=1.0)
-            ax2.scatter(dat['legacy_umap_2'][idx, 0], dat['legacy_umap_2'][idx, 1],
-                        marker=marker, s=pair_marker_size, c=[color],
-                        linewidths=lw, zorder=5, edgecolors='black', alpha=1.0)
-    ax2.set_title(f'Instrument Latent Space', fontsize=TITLE_FONTSIZE, fontweight='bold')
-    ax2.set_xlabel('UMAP Component 1', fontsize=AXIS_FONTSIZE)
-    ax2.set_ylabel('UMAP Component 2', fontsize=AXIS_FONTSIZE)
-    ax2.tick_params(axis='both', labelsize=TICK_FONTSIZE)
-    legend_handles = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=color_hsc, markeredgecolor='black', markersize=LEGEND_MARKER_SIZE, label='HSC'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=color_legacy, markeredgecolor='black', markersize=LEGEND_MARKER_SIZE, label='Legacy'),
-    ]
-    legend_labels = ['HSC', 'Legacy']
-    if show_pairs and selected_indices is not None:
-        legend_handles.append(_PairsLegendHandle())
-        legend_labels.append('Pairs')
-        ax2.legend(handles=legend_handles, labels=legend_labels, fontsize=LEGEND_FONTSIZE,
-                   handlelength=4,
-                   handler_map={_PairsLegendHandle: _HandlerPairs(pair_markers)})
-    else:
-        ax2.legend(handles=legend_handles, fontsize=LEGEND_FONTSIZE)
-    # ax2.grid(True)
-
-    plt.tight_layout()
-
-    out = output_path if output_path is not None else (figures_dir / f'{stem}_tuned.png')
-    out = Path(out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(out, dpi=dpi)
-    plt.close()
+        plt.tight_layout()
+        out = output_path if output_path is not None else (figures_dir / f'{stem}{output_suffix}.png')
+        out = Path(out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out, dpi=dpi)
+        plt.close()
     print(f"Saved: {out}")
     return out
 
@@ -251,9 +254,31 @@ def main():
     group.add_argument('--stem', type=str,
                        help='Stem of file (e.g. umap_both_encoders_zdim16_zoom_flat); looks in LATENT_SPACE_DIR')
     parser.add_argument('--no-pairs', action='store_true', help='Do not highlight pairs')
+    parser.add_argument('--no-pair-lines', action='store_true', help='Do not draw connecting lines between pair members')
+    parser.add_argument('--alpha-e1', type=float, default=ALPHA, help='Background dot alpha for encoder 1 panel')
+    parser.add_argument('--alpha-e2', type=float, default=ALPHA_E2, help='Background dot alpha for encoder 2 panel')
+    parser.add_argument('--point-size', type=float, default=POINT_SIZE, help='Background point size')
+    parser.add_argument('--pair-line-width', type=float, default=PAIR_LINE_WIDTH)
+    parser.add_argument('--pair-line-alpha', type=float, default=PAIR_LINE_ALPHA)
+    parser.add_argument('--pair-line-style', type=str, default=PAIR_LINE_STYLE,
+                        help="matplotlib linestyle: '-', '--', ':', '-.'")
+    parser.add_argument('--science', nargs='*', default=None,
+                        help="Apply SciencePlots styles, e.g. --science science no-latex")
+    parser.add_argument('--suffix', type=str, default=OUTPUT_SUFFIX,
+                        help="Output PNG suffix (default '_tuned'); change to keep multiple variants")
     parser.add_argument('--dpi', type=int, default=DPI)
     parser.add_argument('--out', type=Path, default=None, help='Output path for figure')
     args = parser.parse_args()
+
+    science_style = None
+    if args.science is not None:
+        try:
+            import scienceplots  # noqa: F401  (registers styles on import)
+        except ImportError:
+            print("[plot_umap_from_file] WARNING: scienceplots not installed; --science ignored",
+                  file=__import__('sys').stderr)
+        else:
+            science_style = list(args.science) if args.science else ['science']
 
     if args.data is not None:
         data_path = Path(args.data)
@@ -276,6 +301,15 @@ def main():
     dat = load_umap_data(data_path)
     plot(dat,
          show_pairs=not args.no_pairs,
+         show_pair_lines=not args.no_pair_lines,
+         alpha_e1=args.alpha_e1,
+         alpha_e2=args.alpha_e2,
+         point_size=args.point_size,
+         pair_line_width=args.pair_line_width,
+         pair_line_alpha=args.pair_line_alpha,
+         pair_line_style=args.pair_line_style,
+         science_style=science_style,
+         output_suffix=args.suffix,
          dpi=args.dpi,
          output_path=args.out or OUTPUT_PATH)
 

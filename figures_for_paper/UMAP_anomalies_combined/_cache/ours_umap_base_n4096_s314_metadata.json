@@ -1,0 +1,25 @@
+{
+  "epoch": 87000,
+  "dim": 16,
+  "mode_tag": "",
+  "zoom_val": true,
+  "avg_latent_space": false,
+  "num_hsc": 4096,
+  "tag": "base_n4096_s314",
+  "checkpoint_path": "galaxy_images/galaxy_model/checkpoints/base/snapshot.ckpt",
+  "data_dir": "/work1/jeroenaudenaert/pablomer/data/neighbors_efficient",
+  "num_anchors": 4096,
+  "umap_params": {
+    "n_neighbors": 15,
+    "min_dist": 0.1,
+    "n_components": 2,
+    "metric": "euclidean",
+    "random_state": 314
+  },
+  "pair_distance_ratio_physics": 0.385942014429683,
+  "pair_distance_ratio_instrument": 0.9481910334963729,
+  "encode_seconds": 0.7469059489667416,
+  "umap_seconds": 37.98787962272763,
+  "host": "k005-003",
+  "slurm_job_id": "305112"
+}

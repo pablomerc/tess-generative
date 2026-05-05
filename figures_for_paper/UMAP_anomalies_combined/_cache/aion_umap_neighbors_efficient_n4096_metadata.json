@@ -1,0 +1,27 @@
+{
+  "num_anchors": 4096,
+  "data_dir": "/work1/jeroenaudenaert/pablomer/data/neighbors_efficient",
+  "seed": 42,
+  "umap_params": {
+    "n_neighbors": 15,
+    "min_dist": 0.1,
+    "n_components": 2,
+    "metric": "euclidean",
+    "random_state": 42
+  },
+  "aion_model_id": "polymathic-ai/aion-base",
+  "encoder_token_cap": null,
+  "token_pooling": "mean_over_tokens",
+  "device": "cpu",
+  "host": "k005-004",
+  "slurm_job_id": "305135",
+  "encode_seconds": 799.8497996265069,
+  "umap_seconds": 23.631086359731853,
+  "first_5_anchor_row_idx": [
+    256,
+    258,
+    265,
+    267,
+    270
+  ]
+}
