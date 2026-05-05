@@ -1,0 +1,293 @@
+[
+  {
+    "lens": 33,
+    "label": "Query",
+    "survey": "hsc",
+    "h5_row": 166616,
+    "ra": 350.94195556640625,
+    "dec": -0.5105330348014832,
+    "obj_id": "41619422804208581",
+    "simbad": {
+      "hits": [
+        {
+          "main_id": "DES J232346.05-003038.0",
+          "otype": "Le?",
+          "ids": "DES J232346.05-003038.0"
+        }
+      ]
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 33,
+    "label": "NN#1",
+    "survey": "legacy",
+    "h5_row": 166616,
+    "ra": 350.94195556640625,
+    "dec": -0.5105330348014832,
+    "obj_id": "b'3508m005-7430'",
+    "simbad": {
+      "hits": [
+        {
+          "main_id": "DES J232346.05-003038.0",
+          "otype": "Le?",
+          "ids": "DES J232346.05-003038.0"
+        }
+      ]
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 33,
+    "label": "NN#2",
+    "survey": "hsc",
+    "h5_row": 173519,
+    "ra": 352.5403747558594,
+    "dec": -0.6928648948669434,
+    "obj_id": "41623679116805771",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 33,
+    "label": "NN#3",
+    "survey": "hsc",
+    "h5_row": 166888,
+    "ra": 350.9774475097656,
+    "dec": -0.14036737382411957,
+    "obj_id": "41619431394145978",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "hits": [
+        {
+          "name": "WISEA J232354.56-000824.9",
+          "type": "G",
+          "z": null
+        }
+      ]
+    }
+  },
+  {
+    "lens": 33,
+    "label": "NN#6",
+    "survey": "hsc",
+    "h5_row": 166836,
+    "ra": 350.9913024902344,
+    "dec": -0.19653668999671936,
+    "obj_id": "41619431394141553",
+    "simbad": {
+      "hits": [
+        {
+          "main_id": "SDSS J232357.92-001147.3",
+          "otype": "G",
+          "ids": "WiggleZ S00J232357901-00114772|SDSS J232357.92-001147.3"
+        }
+      ]
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 33,
+    "label": "NN#7",
+    "survey": "hsc",
+    "h5_row": 307420,
+    "ra": 149.75621032714844,
+    "dec": 1.7450616359710693,
+    "obj_id": "43158996781141851",
+    "simbad": {
+      "hits": [
+        {
+          "main_id": "COSMOS2015 303570",
+          "otype": "G",
+          "ids": "COSMOS2015 303570|COSMOS 611193|COSMOS J095901.49+014442.2|zCOSMOS 807262|UVISTADR1 J095901.48+014442.0|[BMM2014] 382518|[MMS2013] 52514"
+        },
+        {
+          "main_id": "COSMOS2015 300546",
+          "otype": "G",
+          "ids": "COSMOS2015 300546|COSMOS 611322|COSMOS J095901.37+014440.8|zCOSMOS 807266"
+        }
+      ]
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 33,
+    "label": "NN#8",
+    "survey": "hsc",
+    "h5_row": 12405,
+    "ra": 34.20298767089844,
+    "dec": -4.539132118225098,
+    "obj_id": "37485134529711217",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "hits": [
+        {
+          "name": "WISEA J021648.72-043221.0",
+          "type": "VisS",
+          "z": 0.492794
+        },
+        {
+          "name": "GALEXMSC J021648.98-043221.4",
+          "type": "UvS",
+          "z": null
+        }
+      ]
+    }
+  },
+  {
+    "lens": 48,
+    "label": "Query",
+    "survey": "hsc",
+    "h5_row": 183713,
+    "ra": 352.9560546875,
+    "dec": 0.586402416229248,
+    "obj_id": "42692125246129290",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 48,
+    "label": "NN#1",
+    "survey": "legacy",
+    "h5_row": 183713,
+    "ra": 352.9560546875,
+    "dec": 0.586402416229248,
+    "obj_id": "b'3528p005-10026'",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "hits": [
+        {
+          "name": "WISEA J233149.44+003511.0",
+          "type": "G",
+          "z": 0.622003
+        }
+      ]
+    }
+  },
+  {
+    "lens": 48,
+    "label": "NN#3",
+    "survey": "hsc",
+    "h5_row": 187190,
+    "ra": 352.28753662109375,
+    "dec": 0.6245643496513367,
+    "obj_id": "42692675001945884",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "hits": [
+        {
+          "name": "WISEA J232908.99+003728.7",
+          "type": "G",
+          "z": null
+        }
+      ]
+    }
+  },
+  {
+    "lens": 48,
+    "label": "NN#4",
+    "survey": "hsc",
+    "h5_row": 15375,
+    "ra": 36.005699157714844,
+    "dec": -5.772210597991943,
+    "obj_id": "37489227633550294",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 48,
+    "label": "NN#5",
+    "survey": "hsc",
+    "h5_row": 181039,
+    "ra": 351.3007507324219,
+    "dec": 0.597202718257904,
+    "obj_id": "42687864638564440",
+    "simbad": {
+      "hits": []
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 48,
+    "label": "NN#6",
+    "survey": "hsc",
+    "h5_row": 40202,
+    "ra": 36.67762756347656,
+    "dec": -4.213443756103516,
+    "obj_id": "38558640130523161",
+    "simbad": {
+      "hits": [
+        {
+          "main_id": "VIDEO J022642.63-041248.25",
+          "otype": "G",
+          "ids": "[LLL2014] 9485|VIDEO J022642.63-041248.25"
+        }
+      ]
+    },
+    "ned": {
+      "error": "HTTPSConnectionPool(host='ned.ipac.caltech.edu', port=443): Read timed out. (read timeout=60)"
+    }
+  },
+  {
+    "lens": 48,
+    "label": "NN#8",
+    "survey": "hsc",
+    "h5_row": 23615,
+    "ra": 35.04362869262695,
+    "dec": -4.715473651885986,
+    "obj_id": "37490078037069717",
+    "simbad": {
+      "hits": [
+        {
+          "main_id": "VIPERS 115190503",
+          "otype": "G",
+          "ids": "VIPERS 115190503"
+        }
+      ]
+    },
+    "ned": {
+      "hits": [
+        {
+          "name": "GALEXMSC J022010.44-044252.3",
+          "type": "UvS",
+          "z": null
+        },
+        {
+          "name": "WISEA J022010.46-044255.7",
+          "type": "VisS",
+          "z": 0.62181
+        }
+      ]
+    }
+  }
+]
