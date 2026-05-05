@@ -37,7 +37,10 @@ plt.rcParams.update({
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 })
-FS = 16
+FS = 16          # text inside the panels (inner & bottom labels)
+FS_OUT = 20      # text outside the panels (headers, arrow label, pair titles)
+FS_RECON = 20    # "Reconstructions:" prefix (matches FS_OUT for visual consistency)
+FS_FORMULA = 26  # the math formula sitting next to "Reconstructions:"
 
 # --- top-row palette (paper style) ---
 COLOR_TRUTH  = "#d0f0c0"
@@ -82,11 +85,39 @@ def add_highlight(ax, color, zorder_bg):
     ax.add_patch(rect)
 
 
-def draw_header(fig, ax_lo, ax_hi, y_top, label, line_width=1.5):
+def draw_header(fig, ax_lo, ax_hi, y_top, label, fontsize=FS_OUT, line_width=1.5):
     bb_lo = ax_lo.get_position()
     bb_hi = ax_hi.get_position()
     fig.text((bb_lo.x0 + bb_hi.x1) / 2.0, y_top + 0.012, label,
-             ha="center", va="bottom", fontsize=FS, fontweight="bold")
+             ha="center", va="bottom", fontsize=fontsize, fontweight="bold")
+    fig.add_artist(plt.Line2D(
+        [bb_lo.x0, bb_hi.x1], [y_top, y_top],
+        transform=fig.transFigure, color="black", linewidth=line_width,
+    ))
+
+
+def draw_header_split(fig, ax_lo, ax_hi, y_top, prefix, formula,
+                      prefix_fs=FS_RECON, formula_fs=FS_FORMULA, line_width=1.5):
+    """Header with two text segments at different sizes, centered as a group."""
+    bb_lo = ax_lo.get_position()
+    bb_hi = ax_hi.get_position()
+    x_mid = (bb_lo.x0 + bb_hi.x1) / 2.0
+    y_text = y_top + 0.012
+
+    t_pre = fig.text(0, y_text, prefix, fontsize=prefix_fs, fontweight="bold",
+                     ha="left", va="bottom")
+    t_for = fig.text(0, y_text, formula, fontsize=formula_fs, fontweight="bold",
+                     ha="left", va="bottom")
+    fig.canvas.draw()
+    inv = fig.transFigure.inverted()
+    bb_pre = t_pre.get_window_extent(renderer=fig.canvas.get_renderer()).transformed(inv)
+    bb_for = t_for.get_window_extent(renderer=fig.canvas.get_renderer()).transformed(inv)
+    gap = 0.005
+    total_w = bb_pre.width + gap + bb_for.width
+    x_start = x_mid - total_w / 2.0
+    t_pre.set_position((x_start, y_text))
+    t_for.set_position((x_start + bb_pre.width + gap, y_text))
+
     fig.add_artist(plt.Line2D(
         [bb_lo.x0, bb_hi.x1], [y_top, y_top],
         transform=fig.transFigure, color="black", linewidth=line_width,
@@ -152,9 +183,10 @@ def main():
     y_header = top_panels_top + 0.005
     draw_header(fig, axes_top[0], axes_top[0], y_header, "Ground truth")
     draw_header(fig, axes_top[1], axes_top[1], y_header, "Model input")
-    draw_header(
+    draw_header_split(
         fig, axes_top[2], axes_top[2 + n_recon - 1], y_header,
-        r"Reconstructions: $p(x_{\mathrm{HSC}} \mid z_{\mathrm{phy}}, z_{\mathrm{ins}}^{\mathrm{SNR}})$",
+        "Reconstructions:",
+        r"$p(x_{\mathrm{HSC}} \mid z_{\mathrm{phy}}, z_{\mathrm{ins}}^{\mathrm{SNR}})$",
     )
 
     bb_lo = axes_top[2].get_position()
@@ -169,7 +201,7 @@ def main():
     ))
     fig.text((x0 + x1) / 2.0, y_arrow - 0.025,
              "SNR low  $\\rightarrow$  SNR high",
-             ha="center", va="top", fontsize=FS, fontweight="bold")
+             ha="center", va="top", fontsize=FS_OUT, fontweight="bold")
 
     fig.add_artist(plt.Line2D(
         [0.02, 0.99], [sep_y, sep_y],
@@ -190,11 +222,11 @@ def main():
         )
         ax_o = fig.add_subplot(inner[0, 0])
         ax_o.imshow(to_rgb_p1_99(targets[j])); ax_o.axis("off")
-        ax_o.set_title(f"Original {j + 1}", fontsize=FS, pad=6)
+        ax_o.set_title(f"Original {j + 1}", fontsize=FS_OUT, fontweight="bold", pad=6)
 
         ax_c = fig.add_subplot(inner[0, 1])
         ax_c.imshow(to_rgb_p1_99(recons[j])); ax_c.axis("off")
-        ax_c.set_title(f"Corrected {j + 1}", fontsize=FS, pad=6)
+        ax_c.set_title(f"Corrected {j + 1}", fontsize=FS_OUT, fontweight="bold", pad=6)
         pair_outer_positions.append(gs_bot_outer[0, j].get_position(fig))
 
     for j in range(n_pairs - 1):
