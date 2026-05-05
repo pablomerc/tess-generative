@@ -54,4 +54,5 @@ galaxy_images/galaxy_model/single_encoder_ablation/figures/
 galaxy_images/galaxy_model/hierarchical_latent_experiments/anomalies/outputs/
 galaxy_images/galaxy_model/hierarchical_latent_experiments/downstream/outputs/
 galaxy_images/galaxy_model/hierarchical_latent_experiments/umap_pairs/outputs/
+galaxy_images/galaxy_model/base6x6_experiments/umap_pairs/outputs/
 
