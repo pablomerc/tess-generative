@@ -48,6 +48,7 @@ class NeighborsEfficientDataset(Dataset):
         crop_size: int = 48,
         max_neighbors: int = 15,
         norm_dict: dict = NORM_DICT,
+        random_neighbors: bool = False,
     ):
         data_dir = Path(data_dir)
 
@@ -86,10 +87,13 @@ class NeighborsEfficientDataset(Dataset):
         self.crop_size = crop_size
         self.max_neighbors = max_neighbors
         self.norm_dict = norm_dict
+        self.random_neighbors = bool(random_neighbors)
+        self._n_total_rows = n_rows
 
         print(
             f"[NeighborsEfficientDataset] {len(self.anchor_indices):,} anchors "
-            f"out of {n_rows:,} total rows | crop_size={crop_size} | max_neighbors={max_neighbors}"
+            f"out of {n_rows:,} total rows | crop_size={crop_size} | "
+            f"max_neighbors={max_neighbors} | random_neighbors={self.random_neighbors}"
         )
 
     def __len__(self) -> int:
@@ -132,7 +136,12 @@ class NeighborsEfficientDataset(Dataset):
             neighbor_row_ids = self.neighbor_idx_legacy[row_idx]
             sameins_survey = "legacy"
 
-        valid_ids = neighbor_row_ids[neighbor_row_ids >= 0][: self.max_neighbors]
+        if self.random_neighbors:
+            valid_ids = np.random.randint(
+                0, self._n_total_rows, size=self.max_neighbors, dtype=np.int64,
+            )
+        else:
+            valid_ids = neighbor_row_ids[neighbor_row_ids >= 0][: self.max_neighbors]
 
         sameins_list: list[torch.Tensor] = []
         for nid in valid_ids:

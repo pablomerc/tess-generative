@@ -13,6 +13,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from galaxy_images.galaxy_model.config import ExperimentConfig, load_experiment_config
 from galaxy_images.galaxy_model.data_factory import build_neighbors_dataloaders
+from galaxy_images.galaxy_model.lens_val_callback import LensValidationCallback
 from galaxy_images.galaxy_model.variants import (
     filter_supported_model_kwargs,
     get_variant,
@@ -96,7 +97,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     runtime_batch_size, runtime_precision, h100 = _effective_training_settings(config)
     model, variant = _build_model(config)
-    train_loader, val_loader = build_neighbors_dataloaders(config, runtime_batch_size)
+    train_loader, val_loader, lens_loader = build_neighbors_dataloaders(config, runtime_batch_size)
 
     resume_ckpt = config.run.resume_from
     if resume_ckpt is not None:
@@ -124,8 +125,19 @@ def main(argv: Optional[List[str]] = None) -> None:
     else:
         wandb_logger = None
 
+    # Best checkpoint goes to a shared dir (one subfolder per run-name) so it's
+    # easy to compare runs side-by-side. Periodic latest checkpoints stay in the
+    # per-run output dir.
+    if config.run.shared_checkpoint_dir:
+        run_subdir_name = config.wandb.name or variant.name
+        best_ckpt_dir = Path(config.run.shared_checkpoint_dir) / run_subdir_name
+        best_ckpt_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        best_ckpt_dir = run_dir / "checkpoints"
+    print(f"Best-checkpoint dir: {best_ckpt_dir}")
+
     best_checkpoint = ModelCheckpoint(
-        dirpath=run_dir / "checkpoints",
+        dirpath=best_ckpt_dir,
         monitor=config.trainer.monitor_metric,
         mode="min",
         save_top_k=1,
@@ -139,6 +151,24 @@ def main(argv: Optional[List[str]] = None) -> None:
         filename="latest-step={step}",
         save_last=False,
     )
+
+    callbacks = [best_checkpoint, periodic_checkpoint]
+    if lens_loader is not None:
+        figures_dir = run_dir / "figures" / "lens_val"
+        callbacks.append(
+            LensValidationCallback(
+                lens_loader=lens_loader,
+                every_n_validations=config.lens_val.every_n_validations,
+                num_integration_steps=config.lens_val.num_integration_steps,
+                num_samples_per_cond=config.lens_val.num_samples_per_cond,
+                figures_dir=figures_dir,
+                run_name=config.wandb.name or variant.name,
+            )
+        )
+        print(
+            f"[lens-val] callback enabled: every {config.lens_val.every_n_validations} validations, "
+            f"{len(config.lens_val.lens_indices_zero_based)} lenses"
+        )
 
     n_devices = config.trainer.devices
     max_steps = config.trainer.num_steps
@@ -159,7 +189,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         precision=runtime_precision,
         val_check_interval=config.trainer.val_check_interval,
         check_val_every_n_epoch=None,
-        callbacks=[best_checkpoint, periodic_checkpoint],
+        callbacks=callbacks,
         num_sanity_val_steps=config.trainer.num_sanity_val_steps,
     )
 

@@ -497,16 +497,22 @@ class NeighborsSimpleDataset(Dataset):
     """
     Returns samples from the HDF5: hsc image, legacy image, and metadata from all columns
     except source_type, images_hsc, images_legacy, and neighbor_* (neighbor_idx_*, neighbor_dist_*).
+
+    `source_types` selects which `source_type` values are kept. Defaults to (0,) so existing
+    callers see only MMU anchors. Pass e.g. (0, 1) to also include the neighbor pool that
+    still has valid HSC/Legacy stamps.
     """
-    def __init__(self, hdf5_path, norm_dict=NORM_DICT, crop_size=48):
+    def __init__(self, hdf5_path, norm_dict=NORM_DICT, crop_size=48, source_types=(0,)):
         self.hdf5_path = hdf5_path
         self.norm_dict = norm_dict
         self.crop_size = crop_size
+        self.source_types = tuple(int(s) for s in source_types)
         self.file = None  # Handle for lazy loading
 
         with h5py.File(self.hdf5_path, 'r') as f:
             sources = f['source_type'][:]
-            indexes_mmu = np.where(sources == 0)[0]
+            mask = np.isin(sources, np.asarray(self.source_types))
+            indexes_mmu = np.where(mask)[0]
             self.indexes_mmu = indexes_mmu
             self._meta_keys = [k for k in f.keys() if k not in NEIGHBORS_SIMPLE_EXCLUDE_KEYS]
 
