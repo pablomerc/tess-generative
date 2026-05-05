@@ -29,25 +29,48 @@ _here = Path(__file__).resolve().parent
 OUTPUTS_DIR = _here / "outputs"
 NEIGHBORS_HDF5 = "/work1/jeroenaudenaert/pablomer/data/neighbours_v2.h5"
 
-SOURCES = [
-    {
-        "label": "Ours (Physics)",
-        "scores_file": "anomaly_scores_ours_100k.h5",
-        "score_key": "ours/hsc_mean/flow",
-    },
-    {
-        "label": "AION",
-        "scores_file": "anomaly_scores_aion_100k.h5",
-        "score_key": "aion/hsc_mean_pca64/flow",
-    },
-    {
-        "label": "Ours (Instrument)",
-        "scores_file": "anomaly_scores_ins_100k.h5",
-        "score_key": "ours/hsc_flat/flow",
-    },
-]
+DEFAULT_SUFFIX = "100k"
 
-N_COLS_PER = 4
+
+def build_sources(suffix=DEFAULT_SUFFIX):
+    """Build the 3-column SOURCES list for a given encoder run suffix.
+
+    suffix is the trailing token in the score filenames, e.g. '100k' for the
+    legacy run and '367k' for the sources={0,1} rerun. Score keys (which are
+    a function of the score format inside each .h5) are unchanged.
+    """
+    return [
+        {
+            "label": "Ours (Physics)",
+            "scores_file": f"anomaly_scores_ours_{suffix}.h5",
+            "score_key": "ours/hsc_mean/flow",
+        },
+        {
+            "label": "AION-1",
+            "scores_file": f"anomaly_scores_aion_{suffix}.h5",
+            "score_key": "aion/hsc_mean_pca64/flow",
+        },
+        {
+            "label": "Ours (Instrument)",
+            "scores_file": f"anomaly_scores_ins_{suffix}.h5",
+            "score_key": "ours/hsc_flat/flow",
+        },
+    ]
+
+
+# Module-level default (suffix=100k) — preserved so scripts that
+# `from paper_anomaly_figure import SOURCES, ...` keep working.
+SOURCES = build_sources(DEFAULT_SUFFIX)
+
+DEFAULT_N_COLS_PER = 4
+CACHE_DIR = OUTPUTS_DIR / "figures_compare" / "_cache"
+
+
+def cache_dir_for_suffix(suffix):
+    """Per-suffix cache dir so the 367k rerun doesn't collide with 100k cache."""
+    if suffix == DEFAULT_SUFFIX:
+        return CACHE_DIR
+    return OUTPUTS_DIR / f"figures_compare_{suffix}" / "_cache"
 
 # Background colors — lightened from downstream_eval/final/makeplot_v2.py palette:
 #   Physics:    #8AC3EE (light blue bar)  → ~15% tint
@@ -94,18 +117,46 @@ def _top_n_with_percentiles(scores_path, score_key, n):
     return top_raw, top_pcts
 
 
-def make_figure(top_n, out_path, img_size=1.35, group_gap=0.35):
-    n_rows = top_n // N_COLS_PER
-    n_groups = len(SOURCES)
+def _cache_path(src, top_n, cache_dir=CACHE_DIR):
+    stem = Path(src["scores_file"]).stem
+    key = src["score_key"].replace("/", "_")
+    return cache_dir / f"{stem}__{key}__top{top_n}.npz"
 
-    fig_w = n_groups * N_COLS_PER * img_size + (n_groups - 1) * group_gap
+
+def _load_source_top(src, top_n, h5_data, cache_dir=CACHE_DIR):
+    """Load (top_raw, top_pcts, hsc_imgs) for a source, using a cached .npz when present."""
+    cache = _cache_path(src, top_n, cache_dir)
+    if cache.exists():
+        with np.load(cache) as data:
+            return data["top_raw"], data["top_pcts"], data["hsc_imgs"]
+
+    scores_path = OUTPUTS_DIR / src["scores_file"]
+    top_raw, top_pcts = _top_n_with_percentiles(scores_path, src["score_key"], top_n)
+    hsc_imgs = _load_hsc_images(h5_data, top_raw)
+
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(cache, top_raw=top_raw, top_pcts=top_pcts, hsc_imgs=hsc_imgs)
+    return top_raw, top_pcts, hsc_imgs
+
+
+def make_figure(top_n, out_path, n_cols_per=DEFAULT_N_COLS_PER, img_size=1.35, group_gap=0.35,
+                sources=None, cache_dir=None):
+    if sources is None:
+        sources = SOURCES
+    if cache_dir is None:
+        cache_dir = CACHE_DIR
+    assert top_n % n_cols_per == 0, f"top_n={top_n} must be divisible by n_cols_per={n_cols_per}"
+    n_rows = top_n // n_cols_per
+    n_groups = len(sources)
+
+    fig_w = n_groups * n_cols_per * img_size + (n_groups - 1) * group_gap
     fig_h = n_rows * img_size + 0.7  # extra room for larger header
 
     fig = plt.figure(figsize=(fig_w, fig_h))
     fig.patch.set_facecolor("white")
 
     gs_left, gs_right = 0.005, 0.995
-    wspace_frac = group_gap / (N_COLS_PER * img_size)
+    wspace_frac = group_gap / (n_cols_per * img_size)
     outer = gridspec.GridSpec(
         1, n_groups, figure=fig,
         left=gs_left, right=gs_right,
@@ -132,23 +183,25 @@ def make_figure(top_n, out_path, img_size=1.35, group_gap=0.35):
         x1 = pos.x1 + (pad_x if col_idx < n_groups - 1 else 0)
         bg_ax.axvspan(x0, x1, facecolor=BG_COLORS[col_idx], linewidth=0)
 
-    print(f"Building figure: top_n={top_n}, n_rows={n_rows}")
+    print(f"Building figure: top_n={top_n}, n_rows={n_rows}, n_cols={n_cols_per}")
 
-    with h5py.File(NEIGHBORS_HDF5, "r") as h5_data:
-        for col_idx, src in enumerate(SOURCES):
-            scores_path = OUTPUTS_DIR / src["scores_file"]
-            print(f"  {src['label']}: loading top {top_n} ...")
-            top_raw, top_pcts = _top_n_with_percentiles(scores_path, src["score_key"], top_n)
-            hsc_imgs = _load_hsc_images(h5_data, top_raw)
+    # Open the neighbors HDF5 only if any source needs to be (re)computed.
+    needs_h5 = any(not _cache_path(src, top_n, cache_dir).exists() for src in sources)
+    h5_ctx = h5py.File(NEIGHBORS_HDF5, "r") if needs_h5 else None
+    try:
+        for col_idx, src in enumerate(sources):
+            cached = _cache_path(src, top_n, cache_dir).exists()
+            print(f"  {src['label']}: {'cache hit' if cached else 'computing'} (top {top_n}) ...")
+            top_raw, top_pcts, hsc_imgs = _load_source_top(src, top_n, h5_ctx, cache_dir)
 
             inner = gridspec.GridSpecFromSubplotSpec(
-                n_rows, N_COLS_PER,
+                n_rows, n_cols_per,
                 subplot_spec=outer[col_idx],
                 hspace=0.30, wspace=0.04,
             )
 
             for i in range(top_n):
-                r, c = divmod(i, N_COLS_PER)
+                r, c = divmod(i, n_cols_per)
                 ax = fig.add_subplot(inner[r, c])
                 ax.set_facecolor("none")
                 ax.set_zorder(2)
@@ -169,6 +222,9 @@ def make_figure(top_n, out_path, img_size=1.35, group_gap=0.35):
                 ha="center", va="bottom",
                 fontsize=15, fontweight="bold",
             )
+    finally:
+        if h5_ctx is not None:
+            h5_ctx.close()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -186,13 +242,31 @@ def make_figure(top_n, out_path, img_size=1.35, group_gap=0.35):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out-dir", default=None)
+    parser.add_argument(
+        "--suffix", default=DEFAULT_SUFFIX,
+        help=f"Score-file suffix (default: {DEFAULT_SUFFIX}). 'foo' selects anomaly_scores_*_foo.h5.",
+    )
+    parser.add_argument(
+        "--out-dir", default=None,
+        help="Output directory. Defaults to outputs/figures_compare for suffix=100k, "
+             "outputs/figures_compare_<suffix> otherwise.",
+    )
     args = parser.parse_args()
 
-    out_dir = Path(args.out_dir) if args.out_dir else OUTPUTS_DIR / "figures_compare"
+    sources = build_sources(args.suffix)
+    cache_dir = cache_dir_for_suffix(args.suffix)
+    if args.out_dir is not None:
+        out_dir = Path(args.out_dir)
+    elif args.suffix == DEFAULT_SUFFIX:
+        out_dir = OUTPUTS_DIR / "figures_compare"
+    else:
+        out_dir = OUTPUTS_DIR / f"figures_compare_{args.suffix}"
 
-    make_figure(8,  out_dir / "paper_anomaly_8.png")
-    make_figure(12, out_dir / "paper_anomaly_12.png")
+    print(f"Using suffix={args.suffix!r}, out_dir={out_dir}, cache_dir={cache_dir}")
+
+    make_figure(8,  out_dir / "paper_anomaly_8.png",  n_cols_per=4, sources=sources, cache_dir=cache_dir)
+    make_figure(9,  out_dir / "paper_anomaly_9.png",  n_cols_per=3, sources=sources, cache_dir=cache_dir)
+    make_figure(12, out_dir / "paper_anomaly_12.png", n_cols_per=4, sources=sources, cache_dir=cache_dir)
 
     print("\nDone.")
 

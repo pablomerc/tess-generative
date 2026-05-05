@@ -36,23 +36,26 @@ NUM_ENCODER_TOKENS_HSC = 600
 OUTPUT_DIR = _here / "outputs"
 
 
-def encode(suffix, batch_size, n_max, device_str):
+def encode(suffix, batch_size, n_max, device_str, source_types=(0,)):
     device = torch.device(device_str)
     print(f"Loading AION model (polymathic-ai/aion-base)...")
     model = AION.from_pretrained("polymathic-ai/aion-base").to(device)
     codec_manager = CodecManager(device=device_str)
     model.eval()
 
+    source_types_arr = np.asarray(tuple(source_types), dtype=np.int64)
     with h5py.File(NEIGHBORS_HDF5, "r") as f:
-        indexes_mmu = np.where(f["source_type"][:] == 0)[0]
+        indexes_mmu = np.where(np.isin(f["source_type"][:], source_types_arr))[0]
 
     n_total = len(indexes_mmu)
     n_use = min(n_max, n_total) if n_max is not None else n_total
     indexes_mmu = indexes_mmu[:n_use]
-    print(f"Encoding {n_use} MMU examples (total: {n_total})")
+    print(f"Encoding {n_use} examples  (source_types={tuple(source_types)}, total filtered: {n_total})")
 
-    all_embeddings_mean_hsc = []
-    all_raw_index = []
+    # Pre-allocate output buffers. Avoids the list-append + np.concatenate path
+    # that previously caused unbounded RSS growth and OOM kills on larger runs.
+    raw_index = np.empty(n_use, dtype=np.int64)
+    embeddings_mean_hsc = None  # lazily sized once we know the embedding dim
 
     with h5py.File(NEIGHBORS_HDF5, "r") as f:
         for start in tqdm(range(0, n_use, batch_size), desc="Encoding AION"):
@@ -70,11 +73,13 @@ def encode(suffix, batch_size, n_max, device_str):
             with torch.no_grad():
                 emb_hsc = model.encode(tokens_hsc, num_encoder_tokens=NUM_ENCODER_TOKENS_HSC)
 
-            all_embeddings_mean_hsc.append(emb_hsc.mean(dim=1).cpu().numpy().astype(np.float32))
-            all_raw_index.append(indices.astype(np.int64))
+            mean_emb = emb_hsc.mean(dim=1).to(torch.float32).cpu().numpy()
+            if embeddings_mean_hsc is None:
+                embeddings_mean_hsc = np.empty((n_use, mean_emb.shape[1]), dtype=np.float32)
+            embeddings_mean_hsc[start:end] = mean_emb
+            raw_index[start:end] = indices.astype(np.int64)
 
-    embeddings_mean_hsc = np.concatenate(all_embeddings_mean_hsc, axis=0)
-    raw_index = np.concatenate(all_raw_index, axis=0)
+            del emb_hsc, mean_emb, tokens_hsc, hsc_tensor, image_hsc
 
     print(f"  embeddings_mean_hsc: {embeddings_mean_hsc.shape}")
     print(f"  raw_index: {raw_index.shape}")
@@ -90,6 +95,7 @@ def encode(suffix, batch_size, n_max, device_str):
             f.attrs["n_use"] = n_use
             f.attrs["suffix"] = suffix
             f.attrs["embedding_dim"] = embeddings_mean_hsc.shape[1]
+            f.attrs["source_types"] = source_types_arr
         shutil.move(tmp_path, out_path)
     except Exception:
         if os.path.exists(tmp_path):
@@ -105,9 +111,16 @@ def main():
     parser.add_argument("--suffix", default="best87k")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--n-max", type=int, default=None)
+    parser.add_argument(
+        "--source-types", type=int, nargs="+", default=[0],
+        help="source_type values to keep (default: 0). Use '--source-types 0 1' for the joint pool.",
+    )
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
-    encode(args.suffix, args.batch_size, args.n_max, args.device)
+    encode(
+        args.suffix, args.batch_size, args.n_max, args.device,
+        source_types=tuple(args.source_types),
+    )
 
 
 if __name__ == "__main__":

@@ -56,19 +56,19 @@ def _load_model(checkpoint_path, device):
     return model.to(device)
 
 
-def encode(checkpoint_path, suffix, batch_size, n_max, device_str):
+def encode(checkpoint_path, suffix, batch_size, n_max, device_str, source_types=(0,)):
     device = torch.device(device_str)
     print(f"Loading model from {checkpoint_path}")
     model = _load_model(checkpoint_path, device)
     cross_dim = model.hparams.cross_attention_dim
     print(f"  cross_attention_dim={cross_dim}")
 
-    print(f"Loading dataset from {NEIGHBORS_HDF5}")
-    full_dataset = NeighborsSimpleDataset(hdf5_path=NEIGHBORS_HDF5)
+    print(f"Loading dataset from {NEIGHBORS_HDF5}  (source_types={tuple(source_types)})")
+    full_dataset = NeighborsSimpleDataset(hdf5_path=NEIGHBORS_HDF5, source_types=source_types)
     n_total = len(full_dataset)
     n_use = min(n_max, n_total) if n_max is not None else n_total
     dataset = Subset(full_dataset, list(range(n_use)))
-    print(f"  Encoding {n_use} examples (total MMU: {n_total})")
+    print(f"  Encoding {n_use} examples (total filtered: {n_total})")
 
     loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=False,
@@ -122,6 +122,7 @@ def encode(checkpoint_path, suffix, batch_size, n_max, device_str):
             f.attrs["suffix"] = suffix
             f.attrs["cross_attention_dim"] = cross_dim
             f.attrs["n_tokens"] = int(enc1_hsc.shape[1])
+            f.attrs["source_types"] = np.asarray(source_types, dtype=np.int64)
         shutil.move(tmp_path, out_path)
     except Exception:
         if os.path.exists(tmp_path):
@@ -138,9 +139,16 @@ def main():
     parser.add_argument("--suffix", default="best87k")
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--n-max", type=int, default=None, help="Cap number of examples (default: all)")
+    parser.add_argument(
+        "--source-types", type=int, nargs="+", default=[0],
+        help="source_type values to keep (default: 0). Use '--source-types 0 1' for the joint pool.",
+    )
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
-    encode(args.checkpoint, args.suffix, args.batch_size, args.n_max, args.device)
+    encode(
+        args.checkpoint, args.suffix, args.batch_size, args.n_max, args.device,
+        source_types=tuple(args.source_types),
+    )
 
 
 if __name__ == "__main__":
