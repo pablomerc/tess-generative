@@ -252,7 +252,7 @@ def save_target_mode_arrays(arr_path: Path, target_idx, mode, target_meta,
 
 def run_one(model, device, hdf5_path, target_idx, target_hsc, target_legacy,
             target_meta, mode, snr_neg, snr_pos, valid, ivar_all, psf_all,
-            hdf5_row_idx, output_dir, arrays_file, post_discord):
+            hdf5_row_idx, output_dir, arrays_file, post_discord, fixed_noise=False):
     cfg = MODE_CONFIG[mode]
     n_select, n_pass, repeat_one = cfg["n_select"], cfg["n_pass"], cfg["repeat_one"]
 
@@ -280,13 +280,23 @@ def run_one(model, device, hdf5_path, target_idx, target_hsc, target_legacy,
     # Generate
     samegal  = target_legacy.unsqueeze(0).to(device)
     masks_kb = torch.ones(1, n_pass, dtype=torch.bool, device=device)
+
+    # Optionally share one noise draw across all SNR buckets so reconstructions
+    # differ only in conditioning, not in the initial noise realization.
+    x_noise_shared = None
+    if fixed_noise:
+        x_noise_shared = torch.randn(
+            1, model.in_channels, model.image_size, model.image_size,
+            device=device,
+        )
+
     generated = []
     for b in bucket_data:
         cond_t = torch.from_numpy(b["cond_unique"])  # (n_select, 4, 48, 48)
         if repeat_one:
             cond_t = cond_t[:1].repeat(n_pass, 1, 1, 1)  # (n_pass, 4, 48, 48)
         sameins = cond_t.unsqueeze(0).to(device)  # (1, n_pass, 4, 48, 48)
-        gen = model.sample(samegal, sameins, masks=masks_kb)
+        gen = model.sample(samegal, sameins, masks=masks_kb, x_noise=x_noise_shared)
         generated.append(gen.squeeze(0).cpu().numpy())
 
     # Plot rowscale (main) + indep (separate subdir)
@@ -361,6 +371,9 @@ def main():
     parser.add_argument("--output-dir",   type=Path, default=OUTPUT_DIR)
     parser.add_argument("--arrays-file",  type=Path, default=ARRAYS_FILE)
     parser.add_argument("--no-discord",   action="store_true")
+    parser.add_argument("--fixed-noise",  action="store_true",
+                        help="Use a single shared noise draw for all SNR bucket reconstructions "
+                             "so differences are due to conditioning only, not noise lottery.")
     args = parser.parse_args()
 
     for m in args.modes:
@@ -437,6 +450,7 @@ def main():
                 snr_neg, snr_pos, valid, ivar_all, psf_all,
                 hdf5_row_idx, args.output_dir, args.arrays_file,
                 post_discord=not args.no_discord,
+                fixed_noise=args.fixed_noise,
             )
             done += 1
             print(f"  [{done}/{n_total}] mode={mode} done in {time.time()-t0:.1f}s")
