@@ -396,6 +396,131 @@ if __name__ == "__main__":
     print(encoder(dummy_image).shape)
 
 
+    # ===================================================================
+    # Shape exploration: vary out_indices and strides in the timm resnet18
+    # backbone to see what changes about the conditioning tokens.
+    # ===================================================================
+    print('\n' + '=' * 70)
+    print('  Shape sweep: timm resnet18 stages')
+    print('=' * 70)
+
+    def probe_backbone(in_channels=4, image_size=48, out_indices=(0, 1, 2, 3, 4)):
+        bb = timm.create_model(
+            'resnet18', pretrained=False, features_only=True,
+            out_indices=tuple(out_indices),
+        )
+        if in_channels != 3:
+            old = bb.conv1
+            bb.conv1 = nn.Conv2d(
+                in_channels, old.out_channels, kernel_size=old.kernel_size,
+                stride=old.stride, padding=old.padding, bias=old.bias is not None,
+            )
+        x = torch.zeros(1, in_channels, image_size, image_size)
+        feats = bb(x)
+        in_vals = in_channels * image_size * image_size
+        names = {0: 'stem', 1: 'layer1', 2: 'layer2', 3: 'layer3', 4: 'layer4'}
+        print(f"\n  input  : {tuple(x.shape)}")
+        print(f"  params : {sum(p.numel() for p in bb.parameters())/1e6:.2f}M  "
+              f"(includes layers above the highest out_index)")
+        print(f"\n  {'idx':>3}  {'stage':<8}  {'shape':<22}  {'tokens':>7}  {'compress':>10}")
+        for idx, f in zip(out_indices, feats):
+            _, c, h, w = f.shape
+            tokens = h * w
+            cond_vals = c * h * w
+            ratio = in_vals / cond_vals
+            tag = f"{ratio:.1f}x" if ratio >= 1 else f"1/{1/ratio:.1f}x"
+            shape_str = "x".join(str(s) for s in f.shape)
+            print(f"  {idx:>3}  {names.get(idx,'?'):<8}  {shape_str:<22}  "
+                  f"{tokens:>7}  {tag:>10}")
+        return bb
+
+    probe_backbone(in_channels=4, image_size=48, out_indices=(0, 1, 2, 3, 4))
+
+
+    print('\n' + '=' * 70)
+    print('  Stride sweep — what changes if I drop a stride? (input 4x48x48)')
+    print('=' * 70)
+
+    def patch_strides(bb, overrides):
+        """Override strides at named locations of a timm resnet18.
+
+        Recognized keys (each maps to a real attribute):
+          conv1, maxpool, layer1, layer2, layer3, layer4
+        """
+        targets = {
+            'conv1':   bb.conv1,
+            'maxpool': bb.maxpool,
+            'layer1':  bb.layer1[0],
+            'layer2':  bb.layer2[0],
+            'layer3':  bb.layer3[0],
+            'layer4':  bb.layer4[0],
+        }
+        for key, s in overrides.items():
+            mod = targets[key]
+            if key == 'conv1':
+                mod.stride = (s, s)
+            elif key == 'maxpool':
+                mod.stride = s
+            else:
+                # BasicBlock: first conv carries the stride, downsample 1x1 too.
+                mod.conv1.stride = (s, s)
+                if getattr(mod, 'downsample', None) is not None:
+                    mod.downsample[0].stride = (s, s)
+
+    def stride_sweep_row(label, overrides, in_channels=4, image_size=48):
+        bb = timm.create_model(
+            'resnet18', pretrained=False, features_only=True,
+            out_indices=(0, 1, 2, 3, 4),
+        )
+        if in_channels != 3:
+            old = bb.conv1
+            bb.conv1 = nn.Conv2d(
+                in_channels, old.out_channels, kernel_size=old.kernel_size,
+                stride=old.stride, padding=old.padding, bias=old.bias is not None,
+            )
+        patch_strides(bb, overrides)
+        x = torch.zeros(1, in_channels, image_size, image_size)
+        feats = bb(x)
+        sizes = [f"{f.shape[2]}x{f.shape[3]}" for f in feats]
+        print(f"  {label:<38}  " + "  ".join(f"{s:<8}" for s in sizes))
+
+    sweeps = [
+        ('baseline                              ', {}),
+        ('drop maxpool stride                   ', {'maxpool': 1}),
+        ('drop conv1 stride                     ', {'conv1': 1}),
+        ('drop conv1 + maxpool strides          ', {'conv1': 1, 'maxpool': 1}),
+        ('drop layer4 stride                    ', {'layer4': 1}),
+        ('drop layer3 stride                    ', {'layer3': 1}),
+        ('drop layer2 stride                    ', {'layer2': 1}),
+        ('drop layer3 + layer4 strides          ', {'layer3': 1, 'layer4': 1}),
+    ]
+    print(f"\n  {'experiment':<40}  {'stem':<10}{'layer1':<10}{'layer2':<10}"
+          f"{'layer3':<10}{'layer4':<10}")
+    for label, ov in sweeps:
+        stride_sweep_row(label, ov)
+
+
+    print('\n' + '=' * 70)
+    print('  Cheat sheet — token count vs token_dim vs compression')
+    print('=' * 70)
+    in_channels, image_size = 4, 48
+    in_vals = in_channels * image_size * image_size
+    print(f"\n  Compression = (C*H*W) / (n_tokens * token_dim).")
+    print(f"  C={in_channels}, H=W={image_size}, input_vals={in_vals}\n")
+    print(f"  {'tokens':>7}  {'grid':<8}  {'token_dim':>10}  {'cond_vals':>10}  {'ratio':>8}")
+    cases = [
+        (4*4,  '4x4',  4),  (4*4,  '4x4',  16),  (4*4,  '4x4',  64),
+        (6*6,  '6x6',  4),  (6*6,  '6x6',  16),  (6*6,  '6x6',  64),
+        (12*12,'12x12', 4), (12*12,'12x12',16),  (12*12,'12x12',64),
+        (24*24,'24x24',  4), (24*24,'24x24',16),
+    ]
+    for n, grid, td in cases:
+        cond = n * td
+        ratio = in_vals / cond
+        tag = f"{ratio:.2f}x" if ratio >= 1 else f"1/{1/ratio:.2f}x"
+        print(f"  {n:>7}  {grid:<8}  {td:>10}  {cond:>10}  {tag:>8}")
+
+
 
 
 

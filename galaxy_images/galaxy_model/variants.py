@@ -38,6 +38,40 @@ VARIANTS: Dict[str, VariantSpec] = {
         description="Hierarchical galaxy conditioning with a separate pooled global instrument path.",
         model_cls=HierarchicalGlobalInstrumentFlowMatchingModule,
     ),
+    "neighbors_hier_bn36x16_ng": VariantSpec(
+        name="neighbors_hier_bn36x16_ng",
+        description="bn_36x16 hierarchical variant with the global physics path disabled (spatial tokens + instrument-global only).",
+        model_cls=HierarchicalGlobalInstrumentFlowMatchingModule,
+        model_overrides={"disable_global_physics": True},
+    ),
+    "neighbors_base6x6": VariantSpec(
+        name="neighbors_base6x6",
+        description="Baseline dual-encoder model with layer3+layer4 strides removed -> encoder outputs 6x6 spatial map.",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "encoder_stride_overrides": {"layer3": 1, "layer4": 1},
+        },
+    ),
+    "neighbors_base3x3": VariantSpec(
+        name="neighbors_base3x3",
+        description="Baseline dual-encoder model with layer4 stride removed -> encoder outputs 3x3 spatial map.",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "encoder_stride_overrides": {"layer4": 1},
+        },
+    ),
+    "neighbors_base3x3_phys_only": VariantSpec(
+        name="neighbors_base3x3_phys_only",
+        description="Physics encoder gets layer4 stride removed (3x3, 9 tokens). Instrument encoder kept at original baseline (2x2, 4 tokens).",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "encoder_1_stride_overrides": {"layer4": 1},
+            "encoder_2_stride_overrides": None,
+        },
+    ),
 }
 
 

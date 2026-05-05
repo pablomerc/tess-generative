@@ -164,9 +164,11 @@ class HierarchicalGlobalInstrumentFlowMatchingModule(pl.LightningModule):
         num_umap_batches: int = 8,
         mask_center: bool = False,
         figures_dir: Optional[str] = None,
+        disable_global_physics: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters()
+        self.disable_global_physics = disable_global_physics
 
         if isinstance(experiment_config, str):
             experiment_config = EXPERIMENTS[experiment_config]
@@ -398,7 +400,7 @@ class HierarchicalGlobalInstrumentFlowMatchingModule(pl.LightningModule):
             sample=x_t,
             timestep=timesteps,
             spatial_levels=spatial_levels,
-            class_labels=global_vec,
+            class_labels=None if self.disable_global_physics else global_vec,
             instrument_global_labels=instrument_global,
         )
 

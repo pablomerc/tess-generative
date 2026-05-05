@@ -19,6 +19,33 @@ import numpy as np
 from galaxy_images.galaxy_model.validation_pairs import reconstruct_hsc_legacy_pairs
 
 
+def _patch_resnet_strides(backbone, overrides: dict) -> None:
+    """Override strides at named locations of a timm resnet18 in-place.
+
+    Recognized keys: conv1, maxpool, layer1, layer2, layer3, layer4.
+    """
+    targets = {
+        "conv1":   backbone.conv1,
+        "maxpool": backbone.maxpool,
+        "layer1":  backbone.layer1[0],
+        "layer2":  backbone.layer2[0],
+        "layer3":  backbone.layer3[0],
+        "layer4":  backbone.layer4[0],
+    }
+    for key, s in overrides.items():
+        if key not in targets:
+            raise KeyError(f"unknown stride key {key!r}; valid: {list(targets)}")
+        mod = targets[key]
+        if key == "conv1":
+            mod.stride = (s, s)
+        elif key == "maxpool":
+            mod.stride = s
+        else:
+            mod.conv1.stride = (s, s)
+            if getattr(mod, "downsample", None) is not None:
+                mod.downsample[0].stride = (s, s)
+
+
 
 class ResNetEncoder(nn.Module):
     """
@@ -34,6 +61,7 @@ class ResNetEncoder(nn.Module):
         cross_attention_dim: int = 256,
         pretrained: bool = False,
         mean_pool: bool = False,
+        stride_overrides: Optional[dict] = None,
     ):
         super().__init__()
 
@@ -55,6 +83,9 @@ class ResNetEncoder(nn.Module):
                 padding=old_conv.padding,
                 bias=old_conv.bias is not None,
             )
+
+        if stride_overrides:
+            _patch_resnet_strides(self.backbone, stride_overrides)
 
         if mean_pool:
             self.proj = nn.Linear(512, cross_attention_dim)
@@ -137,6 +168,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         mask_center: bool = False, # if true -> mask the center of the image
         all_attention: bool = True, # if true all blocks are cross-attention; otherwise use mixed attention/non-attention blocks
         figures_dir: Optional[str] = None, # optional directory where validation UMAP figures are saved
+        encoder_stride_overrides: Optional[dict] = None, # back-compat: applied to BOTH encoders unless per-encoder overrides are set
+        encoder_1_stride_overrides: Optional[dict] = None, # only patches the physics (samegal) encoder
+        encoder_2_stride_overrides: Optional[dict] = None, # only patches the instrument (sameins) encoder
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -165,11 +199,25 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         if concat_conditioning:
             raise ValueError("Concat conditioning is not supported for the double encoder case")
         else:
+            # Per-encoder stride overrides take precedence; encoder_stride_overrides
+            # is the back-compat shortcut that applies to both.
+            enc1_overrides = (
+                encoder_1_stride_overrides
+                if encoder_1_stride_overrides is not None
+                else encoder_stride_overrides
+            )
+            enc2_overrides = (
+                encoder_2_stride_overrides
+                if encoder_2_stride_overrides is not None
+                else encoder_stride_overrides
+            )
+
             self.encoder_1 = ResNetEncoder(
                 in_channels=cond_channels,
                 cross_attention_dim=cross_attention_dim,
                 pretrained=pretrained_encoder,
                 mean_pool=pooled_conditioning,
+                stride_overrides=enc1_overrides,
             )
 
             self.encoder_2 = ResNetEncoder(
@@ -177,6 +225,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 cross_attention_dim=self.instrument_zdim,
                 pretrained=pretrained_encoder,
                 mean_pool=pooled_conditioning,
+                stride_overrides=enc2_overrides,
             )
 
             if all_attention:
@@ -833,9 +882,16 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 hsc_mega_batch = torch.cat(self._umap_hsc_batches, dim=0).to(self.device)
                 legacy_mega_batch = torch.cat(self._umap_legacy_batches, dim=0).to(self.device)
 
-                # Call plot_latent_space
-                umap_path = self.plot_latent_space(hsc_mega_batch, legacy_mega_batch)
-                print(f"[UMAP] Visualization saved to {umap_path}")
+                # Dispatch by encoder seq_len: the legacy per-token grid is
+                # hard-coded to 4 tokens, so any other token count uses the
+                # token-count-agnostic flat+pooled plot instead.
+                with torch.no_grad():
+                    seq_len = self.encoder_1(hsc_mega_batch[:1]).shape[1]
+                if seq_len == 4:
+                    umap_path = self.plot_latent_space(hsc_mega_batch, legacy_mega_batch)
+                else:
+                    umap_path = self.plot_latent_space_flat_pooled(hsc_mega_batch, legacy_mega_batch)
+                print(f"[UMAP] Visualization (seq_len={seq_len}) saved to {umap_path}")
             except Exception as e:
                 print(f"[UMAP] Error generating UMAP visualization: {e}")
                 import traceback
@@ -1033,6 +1089,75 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 "global_step": self.global_step,
             })
 
+        return save_path
+
+    @torch.no_grad()
+    def plot_latent_space_flat_pooled(self, hsc_batch, legacy_batch):
+        """Token-count-agnostic UMAP plot.
+
+        Produces a 2x2 grid:
+          rows: Encoder 1 (Same Galaxy)  |  Encoder 2 (Same Instrument)
+          cols: Flattened (B, S*D)       |  Pooled (mean over S, B, D)
+
+        Used for any encoder whose seq_len is not 4 (e.g. base6x6 -> 36, base3x3 -> 9).
+        """
+        import matplotlib.pyplot as plt
+
+        e1_hsc = self.encoder_1(hsc_batch)   # (B, S, D)
+        e1_leg = self.encoder_1(legacy_batch)
+        e2_hsc = self.encoder_2(hsc_batch)
+        e2_leg = self.encoder_2(legacy_batch)
+        num_hsc = e1_hsc.shape[0]
+
+        def _flat(a, b):
+            return torch.cat([a, b], dim=0).flatten(start_dim=1).cpu().numpy()
+        def _pool(a, b):
+            return torch.cat([a, b], dim=0).mean(dim=1).cpu().numpy()
+
+        panels = [
+            ("Encoder 1 (Same Galaxy) — Flattened",     _flat(e1_hsc, e1_leg)),
+            ("Encoder 1 (Same Galaxy) — Pooled (mean)", _pool(e1_hsc, e1_leg)),
+            ("Encoder 2 (Same Instrument) — Flattened", _flat(e2_hsc, e2_leg)),
+            ("Encoder 2 (Same Instrument) — Pooled",    _pool(e2_hsc, e2_leg)),
+        ]
+
+        figures_dir = self.figures_dir
+        figures_dir.mkdir(parents=True, exist_ok=True)
+
+        umap_params = {
+            'n_neighbors': max(2, min(15, num_hsc * 2 - 1)),
+            'min_dist': 0.1,
+            'n_components': 2,
+            'metric': 'euclidean',
+            'random_state': 42,
+            'n_jobs': 1,
+        }
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 12), squeeze=False)
+        for ax, (title, feats) in zip(axes.flat, panels):
+            reducer = umap.UMAP(**umap_params)
+            coords = reducer.fit_transform(feats)
+            ax.scatter(coords[:num_hsc, 0], coords[:num_hsc, 1],
+                       s=8, label='HSC', alpha=0.6, c='blue')
+            ax.scatter(coords[num_hsc:, 0], coords[num_hsc:, 1],
+                       s=8, label='Legacy', alpha=0.6, c='orange')
+            ax.set_title(title, fontsize=10)
+            ax.legend(loc='best', fontsize=9)
+            ax.grid(True, alpha=0.3)
+
+        plt.suptitle('UMAP — Flattened vs Pooled across tokens', fontsize=12, y=0.995)
+        plt.tight_layout()
+
+        save_path = figures_dir / f'umap_latent_space_step{self.global_step}.png'
+        plt.savefig(save_path, dpi=120, bbox_inches='tight')
+        plt.close()
+
+        if self.logger and hasattr(self.logger, 'experiment'):
+            import wandb
+            self.logger.experiment.log({
+                "latent_space/umap_grid": wandb.Image(str(save_path)),
+                "global_step": self.global_step,
+            })
         return save_path
 
 
