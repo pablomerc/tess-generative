@@ -8,7 +8,22 @@
 
 Trains dual-encoder generative models that learn **physics** and **instrument** latent spaces from paired galaxy images across two surveys (HSC and Legacy Survey). The main approach is **flow matching** (conditional velocity prediction) with two ResNet18 encoders feeding a `diffusers` UNet via cross-attention. A separate **contrastive baseline** (InfoNCE on dual encoders) lives in `galaxy_images/galaxy_model/contrastive_baseline/`.
 
-Two clusters: MIT (`/data/vision/billf/scratch/pablomer/`) and this one (Jeroen's, `/work1/jeroenaudenaert/pablomer/`). **Only the neighbors dataset is available on this cluster.** Hardcoded MIT paths in some downstream scripts must be parameterized.
+**Active clusters: AMD (this one) and Engaging.** Development happens on both; they share the GitHub remote `git@github.com:pablomerc/tess-generative.git` and the working branch is `galaxy-engaging`.
+
+- **AMD** (this cluster, `/work1/jeroenaudenaert/pablomer/`): AMD MI210 GPUs plus an H100 partition. **Needs the hipBLASLt workaround** (see below).
+- **Engaging** (`/home/<user>/... — confirm exact path on Engaging`): NVIDIA GPUs (CUDA). **Does not need the hipBLASLt workaround.**
+
+The old MIT/CSAIL cluster (`/data/vision/billf/scratch/pablomer/`) is **no longer in active use** — treat its hardcoded paths in older downstream scripts as legacy to parameterize before running anywhere. **Only the neighbors dataset is available on the AMD cluster.**
+
+---
+
+## Working across clusters (AMD ⇄ Engaging)
+
+Both clusters develop on `galaxy-engaging` and sync through the shared GitHub remote.
+
+- **Never force-push a shared branch** (`galaxy-engaging`, `main`). To move work between clusters, push to a per-cluster snapshot branch (`amd-snapshot`, `engaging-snapshot`) and merge from there, so nothing gets clobbered.
+- **Cluster-specific job scripts diverge on purpose.** SLURM/`.sh` submission scripts and training entry points carry per-cluster settings (partitions, module loads, the hipBLASLt workaround on AMD). When merging, **keep both variants** rather than overwriting one cluster's scripts with the other's.
+- For code that must run on **both** clusters, use the guarded hipBLASLt form (`try/except` around `preferred_blas_library`, as in `downstream_evaluation/engaging/`) — it's a no-op on NVIDIA and a fix on AMD.
 
 ---
 
@@ -105,7 +120,9 @@ To add a new variant: register it in `variants.py` and create a matching config 
 
 ---
 
-## HipBLASLt bug (MI210 GPUs)
+## HipBLASLt bug (MI210 GPUs — AMD cluster only)
+
+**Applies only on the AMD cluster.** On Engaging (NVIDIA/CUDA) the workaround is unnecessary — the guarded form is a harmless no-op, and the unguarded `preferred_blas_library("hipblas")` call may error, so use the guarded form in any code shared across clusters.
 
 **Symptom:** training crashes with `HIPBLAS_STATUS_INVALID_VALUE` on certain matrix shapes when running on AMD MI210 GPUs.
 
