@@ -1,0 +1,19 @@
+Loading HSC catalog:    /home/pablomer/orcd/scratch/hsc_downstream/catalog.parquet
+Loading Legacy catalog: /home/pablomer/orcd/scratch/legacy_downstream_full/full_1M/catalog.parquet
+  HSC rows:    474,954
+  Legacy rows: 1,000,000
+  HSC rows in .bin:    474,954
+  Legacy rows in .bin: 911,758
+  After clipping to .bin: HSC=474,954  Legacy=911,758
+
+Crossmatching within 1.0" (astropy SkyCoord.match_to_catalog_sky)...
+  matches (clipped HSC vs full Legacy): 5,469
+  separation arcsec: median=0.027  95p=0.317  max=0.999
+  wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/index/overlap_full.parquet (5,469 rows)
+
+overlap.parquet:      5,469 rows (cap 16000)
+hsc_only.parquet:     16,000 rows (cap 16000, pool 469,485)
+legacy_only.parquet:  16,000 rows (cap 16000, pool 906,397)
+
+Done.
+Done at Sat May  2 19:14:44 EDT 2026

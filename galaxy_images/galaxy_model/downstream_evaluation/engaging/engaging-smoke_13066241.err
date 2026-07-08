@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/build_overlap_dataset.py", line 259, in <module>
+    main()
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/build_overlap_dataset.py", line 136, in main
+    hsc = load_radec(hsc_cat)
+          ^^^^^^^^^^^^^^^^^^^
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/build_overlap_dataset.py", line 61, in load_radec
+    df = pq.read_table(catalog_path, columns=cols).to_pandas()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/pyarrow/parquet/core.py", line 1891, in read_table
+    dataset = ParquetDataset(
+              ^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/pyarrow/parquet/core.py", line 1471, in __init__
+    self._dataset = ds.dataset(path_or_paths, filesystem=filesystem,
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/pyarrow/dataset.py", line 790, in dataset
+    return _filesystem_dataset(source, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/pyarrow/dataset.py", line 472, in _filesystem_dataset
+    fs, paths_or_selector = _ensure_single_source(source, filesystem)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/pyarrow/dataset.py", line 437, in _ensure_single_source
+    raise FileNotFoundError(path)
+FileNotFoundError: /work1/jeroenaudenaert/pablomer/data/hsc_downstream/catalog.parquet

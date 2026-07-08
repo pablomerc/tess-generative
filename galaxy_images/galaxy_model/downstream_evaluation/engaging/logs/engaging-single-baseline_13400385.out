@@ -1,0 +1,9 @@
+=== single-baseline ===
+  ckpt   : /orcd/scratch/orcd/009/pablomer/checkpoints/single-baseline/snapshot.ckpt
+  module : single_encoder_ablation/model.py
+  class  : SingleEncoderFlowMatchingModule
+[skip] /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/single-baseline.h5 already exists
+[skip] /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_single-baseline.csv already exists
+Plot: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_single-baseline_all.png
+Wide CSV: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_single-baseline_all_merged.csv
+Done at Wed May  6 00:40:42 EDT 2026

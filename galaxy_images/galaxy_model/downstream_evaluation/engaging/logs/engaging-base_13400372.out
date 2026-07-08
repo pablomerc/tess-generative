@@ -1,0 +1,9 @@
+=== base ===
+  ckpt   : /orcd/pool/007/pablomer/checkpoints_new/base/snapshot.ckpt
+  module : double_train_fm_neighbors.py
+  class  : ConditionalFlowMatchingModule
+[skip] /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base.h5 already exists
+[skip] /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_base.csv already exists
+Plot: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_base_all.png
+Wide CSV: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_base_all_merged.csv
+Done at Wed May  6 00:03:04 EDT 2026

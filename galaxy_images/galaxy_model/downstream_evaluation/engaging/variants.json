@@ -1,0 +1,94 @@
+{
+  "variants": [
+    {
+      "name": "base",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base-5NB",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base-5NB/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base-5NB-DWNVAL",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base-5NB-DWNVAL/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base-15NB",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base-15NB/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base-15NB-DWNVAL",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base-15NB-DWNVAL/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base-15NB-RND-DWNVAL",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base-15NB-RND-DWNVAL/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base3x3",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base3x3/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base3x3-physOnly",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base3x3-physOnly/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base6x6",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base6x6/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "base6x6-15NB",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/base6x6-15NB/*.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "hier",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/hier/*.ckpt:/orcd/scratch/orcd/009/pablomer/checkpoints/hier/snapshot.ckpt",
+      "module": "hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py",
+      "model_class": "HierarchicalGlobalInstrumentFlowMatchingModule"
+    },
+    {
+      "name": "hier-small",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/hier-small/*.ckpt:/orcd/scratch/orcd/009/pablomer/checkpoints/hier-small/snapshot.ckpt",
+      "module": "hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py",
+      "model_class": "HierarchicalGlobalInstrumentFlowMatchingModule"
+    },
+    {
+      "name": "hier-bn36x16-NG",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/hier-bn36x16-NG/*.ckpt",
+      "module": "hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py",
+      "model_class": "HierarchicalGlobalInstrumentFlowMatchingModule"
+    },
+    {
+      "name": "hier-bn36x16-NG-DWNVAL",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/hier-bn36x16-NG-DWNVAL/*.ckpt",
+      "module": "hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py",
+      "model_class": "HierarchicalGlobalInstrumentFlowMatchingModule"
+    },
+    {
+      "name": "single-baseline",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/single-baseline/*.ckpt:/orcd/scratch/orcd/009/pablomer/checkpoints/single-baseline/snapshot.ckpt",
+      "module": "single_encoder_ablation/model.py",
+      "model_class": "SingleEncoderFlowMatchingModule"
+    }
+  ]
+}

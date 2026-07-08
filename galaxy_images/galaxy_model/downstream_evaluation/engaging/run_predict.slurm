@@ -4,7 +4,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=4:00:00
-##SBATCH --partition=<engaging-gpu-partition>
+#SBATCH --partition=mit_normal_gpu
+#SBATCH --mem=64G
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --open-mode=append
@@ -14,8 +15,30 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+SCRIPT_DIR="/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging"
+REPO_ROOT="/home/pablomer/orcd/pool/tess-generative"
+
+DISCORD_WEBHOOK="${DISCORD_WEBHOOK:-https://discord.com/api/webhooks/1500242707522519183/NqqAxuo5n0Ex4X81vMcq7gDOjrP3oAURAVZtgrZT5CramGNfBGPxuEvC2NnxwYBkfs9j}"
+_ping() { curl -sS -X POST -H 'Content-Type: application/json' -d "{\"content\": \"$1\"}" "${DISCORD_WEBHOOK}" >/dev/null || true; }
+_ping_file() {
+    # $1 = message, $2 = file path
+    if [[ -f "$2" ]]; then
+        curl -sS -F "payload_json={\"content\":\"$1\"}" -F "file=@$2" "${DISCORD_WEBHOOK}" >/dev/null || true
+    else
+        _ping "$1 (file missing: $2)"
+    fi
+}
+_on_exit() {
+    rc=$?
+    if [[ $rc -eq 0 ]]; then
+        _ping_file "engaging-predict ${SLURM_JOB_ID:-?} ✅ done at $(date '+%F %T') — full plot (combined latents + OURS-FEB + AION)" \
+                   "${SCRIPT_DIR}/outputs/plots/compare_all_with_baselines.png"
+    else
+        _ping "engaging-predict ${SLURM_JOB_ID:-?} ❌ failed (rc=$rc) at $(date '+%F %T')"
+    fi
+}
+trap _on_exit EXIT
+_ping "engaging-predict ${SLURM_JOB_ID:-?} started at $(date '+%F %T')"
 
 source ~/.bashrc
 conda activate torchenv

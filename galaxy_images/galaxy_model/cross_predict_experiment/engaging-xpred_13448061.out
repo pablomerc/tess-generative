@@ -1,0 +1,138 @@
+cross_predict: loading imports...
+Device: cuda
+Loading CrossPredictDataset...
+  Loading targets for legacy_to_hsc...
+    read hsc_i_variance_value
+    read hsc_r_variance_value
+    read hsc_z_variance_value
+    derived hsc_g_psf_fwhm
+    derived hsc_i_psf_fwhm
+    derived hsc_r_psf_fwhm
+    derived hsc_z_psf_fwhm
+    reading sidecar extra_targets_per_h5_row.parquet
+    sidecar  hsc_a_g
+    sidecar  hsc_a_r
+    sidecar  hsc_a_i
+    sidecar  hsc_a_z
+    sidecar  hsc_a_y
+  Filtering 67936/103741 samples with non-finite targets.
+  35805 valid samples remain.
+  12 targets, 35805 samples ready.
+Train: 32225, Val: 3580
+Model: ResNet18 -> 12 targets
+  Total params:     11,185,804
+  Trainable params: 11,185,804
+  Model size:       42.7 MB (float32)
+  GPU: NVIDIA L40S
+  GPU memory: 44.4 GB
+Epoch 1/50  train_loss=0.76988  val_loss=0.71581  avg_r2=0.1887  lr=9.99e-04
+Epoch 2/50  train_loss=0.67610  val_loss=0.60788  avg_r2=0.2944  lr=9.96e-04
+Epoch 3/50  train_loss=0.64642  val_loss=0.56143  avg_r2=0.3411  lr=9.91e-04
+Epoch 4/50  train_loss=0.62463  val_loss=0.61339  avg_r2=0.2613  lr=9.84e-04
+Epoch 5/50  train_loss=0.60935  val_loss=0.62228  avg_r2=0.2781  lr=9.76e-04
+  Discord response code: 204
+Epoch 6/50  train_loss=0.58683  val_loss=0.89148  avg_r2=-0.9485  lr=9.65e-04
+Epoch 7/50  train_loss=0.57306  val_loss=0.81603  avg_r2=-0.4816  lr=9.52e-04
+Epoch 8/50  train_loss=0.55089  val_loss=0.50904  avg_r2=0.3819  lr=9.38e-04
+Epoch 9/50  train_loss=0.53247  val_loss=0.49058  avg_r2=0.3848  lr=9.22e-04
+Epoch 10/50  train_loss=0.50625  val_loss=0.51906  avg_r2=0.3502  lr=9.05e-04
+  Discord response code: 204
+Epoch 11/50  train_loss=0.47946  val_loss=0.55984  avg_r2=0.3167  lr=8.85e-04
+Epoch 12/50  train_loss=0.46239  val_loss=0.56142  avg_r2=0.3111  lr=8.64e-04
+Epoch 13/50  train_loss=0.42999  val_loss=0.56299  avg_r2=0.2760  lr=8.42e-04
+Epoch 14/50  train_loss=0.40749  val_loss=0.50720  avg_r2=0.3174  lr=8.19e-04
+Epoch 15/50  train_loss=0.37278  val_loss=0.54716  avg_r2=0.2569  lr=7.94e-04
+  Discord response code: 204
+Epoch 16/50  train_loss=0.31770  val_loss=0.51479  avg_r2=0.1843  lr=7.68e-04
+Epoch 17/50  train_loss=0.25083  val_loss=0.52730  avg_r2=-1.0574  lr=7.41e-04
+Epoch 18/50  train_loss=0.21602  val_loss=0.52453  avg_r2=0.3323  lr=7.13e-04
+Epoch 19/50  train_loss=0.18259  val_loss=0.51573  avg_r2=0.3533  lr=6.84e-04
+Epoch 20/50  train_loss=0.15946  val_loss=0.52575  avg_r2=0.3284  lr=6.55e-04
+  Discord response code: 204
+Epoch 21/50  train_loss=0.13999  val_loss=0.55168  avg_r2=0.3049  lr=6.24e-04
+Epoch 22/50  train_loss=0.11754  val_loss=0.52505  avg_r2=0.3372  lr=5.94e-04
+Epoch 23/50  train_loss=0.10163  val_loss=0.53152  avg_r2=0.3355  lr=5.63e-04
+Epoch 24/50  train_loss=0.09171  val_loss=0.52934  avg_r2=0.3380  lr=5.31e-04
+Epoch 25/50  train_loss=0.08378  val_loss=0.52536  avg_r2=0.3446  lr=5.00e-04
+  Discord response code: 204
+Epoch 26/50  train_loss=0.07322  val_loss=0.54669  avg_r2=0.3196  lr=4.69e-04
+Epoch 27/50  train_loss=0.06502  val_loss=0.52411  avg_r2=0.3588  lr=4.37e-04
+Epoch 28/50  train_loss=0.05970  val_loss=0.52559  avg_r2=0.3531  lr=4.06e-04
+Epoch 29/50  train_loss=0.05578  val_loss=0.52441  avg_r2=0.3369  lr=3.76e-04
+Epoch 30/50  train_loss=0.04779  val_loss=0.52349  avg_r2=0.3623  lr=3.45e-04
+  Discord response code: 204
+Epoch 31/50  train_loss=0.04230  val_loss=0.52192  avg_r2=0.3593  lr=3.16e-04
+Epoch 32/50  train_loss=0.03855  val_loss=0.52265  avg_r2=0.3660  lr=2.87e-04
+Epoch 33/50  train_loss=0.03505  val_loss=0.52336  avg_r2=0.3608  lr=2.59e-04
+Epoch 34/50  train_loss=0.03204  val_loss=0.52539  avg_r2=0.3565  lr=2.32e-04
+Epoch 35/50  train_loss=0.02888  val_loss=0.52645  avg_r2=0.3556  lr=2.06e-04
+  Discord response code: 204
+Epoch 36/50  train_loss=0.02638  val_loss=0.51507  avg_r2=0.3719  lr=1.81e-04
+Epoch 37/50  train_loss=0.02497  val_loss=0.52085  avg_r2=0.1010  lr=1.58e-04
+Epoch 38/50  train_loss=0.02233  val_loss=0.51965  avg_r2=0.3695  lr=1.36e-04
+Epoch 39/50  train_loss=0.02150  val_loss=0.52005  avg_r2=-0.0227  lr=1.15e-04
+Epoch 40/50  train_loss=0.01983  val_loss=0.51802  avg_r2=0.3700  lr=9.55e-05
+  Discord response code: 204
+Epoch 41/50  train_loss=0.01958  val_loss=0.51747  avg_r2=0.3630  lr=7.78e-05
+Epoch 42/50  train_loss=0.01797  val_loss=0.51747  avg_r2=0.3279  lr=6.18e-05
+Epoch 43/50  train_loss=0.01735  val_loss=0.51972  avg_r2=0.3679  lr=4.76e-05
+Epoch 44/50  train_loss=0.01673  val_loss=0.52019  avg_r2=0.3654  lr=3.51e-05
+Epoch 45/50  train_loss=0.01611  val_loss=0.51856  avg_r2=0.3673  lr=2.45e-05
+  Discord response code: 204
+Epoch 46/50  train_loss=0.01596  val_loss=0.51995  avg_r2=0.3093  lr=1.57e-05
+Epoch 47/50  train_loss=0.01549  val_loss=0.51765  avg_r2=0.3694  lr=8.86e-06
+Epoch 48/50  train_loss=0.01499  val_loss=0.51890  avg_r2=0.3551  lr=3.94e-06
+Epoch 49/50  train_loss=0.01538  val_loss=0.51864  avg_r2=0.3701  lr=9.87e-07
+Epoch 50/50  train_loss=0.01477  val_loss=0.52034  avg_r2=0.3677  lr=0.00e+00
+  Discord response code: 204
+
+=== Final R² (best validation epoch) ===
+  hsc_i_variance_value                      R²=-0.3110
+  hsc_r_variance_value                      R²=0.0377
+  hsc_z_variance_value                      R²=0.0698
+  hsc_g_psf_fwhm                            R²=0.2410
+  hsc_i_psf_fwhm                            R²=0.3103
+  hsc_r_psf_fwhm                            R²=0.2677
+  hsc_z_psf_fwhm                            R²=0.6546
+  hsc_a_g                                   R²=0.6689
+  hsc_a_r                                   R²=0.6701
+  hsc_a_i                                   R²=0.6696
+  hsc_a_z                                   R²=0.6696
+  hsc_a_y                                   R²=0.6692
+  AVERAGE                                   R²=0.3848
+R² results saved: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/cross_predict_experiment/r2_results_legacy_to_hsc.csv
+[skip] BASELINE_CSV missing (/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/final/predict_all_zdim16_nogeom_neighbors_table.csv); not generating comparison plot.
+  Discord response code: 204
+Done.
+
+=== R² CSV ===
+target,r2_cross_predict
+hsc_i_variance_value,-0.311037540435791
+hsc_r_variance_value,0.03766721487045288
+hsc_z_variance_value,0.06980353593826294
+hsc_g_psf_fwhm,0.24098247289657593
+hsc_i_psf_fwhm,0.3102617859840393
+hsc_r_psf_fwhm,0.26768308877944946
+hsc_z_psf_fwhm,0.6545940637588501
+hsc_a_g,0.6688799262046814
+hsc_a_r,0.6701127290725708
+hsc_a_i,0.6695613861083984
+hsc_a_z,0.6695886850357056
+hsc_a_y,0.66922926902771
+
+=== Summary ===
+cross-predict legacy_to_hsc R² (best validation epoch):
+  hsc_i_variance_value                      R² = -0.3110
+  hsc_r_variance_value                      R² = +0.0377
+  hsc_z_variance_value                      R² = +0.0698
+  hsc_g_psf_fwhm                            R² = +0.2410
+  hsc_i_psf_fwhm                            R² = +0.3103
+  hsc_r_psf_fwhm                            R² = +0.2677
+  hsc_z_psf_fwhm                            R² = +0.6546
+  hsc_a_g                                   R² = +0.6689
+  hsc_a_r                                   R² = +0.6701
+  hsc_a_i                                   R² = +0.6696
+  hsc_a_z                                   R² = +0.6696
+  hsc_a_y                                   R² = +0.6692
+  AVERAGE                                   R² = +0.3848
+Done at Wed May  6 17:13:48 EDT 2026

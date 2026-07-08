@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/prepare_combined.py", line 400, in <module>
+    main()
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/prepare_combined.py", line 266, in main
+    model = _load_model(args.checkpoint, args.module, args.model_class, device)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/prepare_combined.py", line 149, in _load_model
+    cls = _load_module_class(module, model_class)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/prepare_combined.py", line 139, in _load_module_class
+    spec.loader.exec_module(mod)
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/double_train_fm_neighbors.py", line 4, in <module>
+    import wandb
+ModuleNotFoundError: No module named 'wandb'

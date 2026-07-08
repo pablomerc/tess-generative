@@ -1,0 +1,119 @@
+=== base-5NB-DWNVAL ===
+  ckpt   : /orcd/pool/007/pablomer/checkpoints_new/base-5NB-DWNVAL/best-epoch=197-step=75000.ckpt
+  module : double_train_fm_neighbors.py
+  class  : ConditionalFlowMatchingModule
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/base-5NB-DWNVAL/best-epoch=197-step=75000.ckpt
+Module/class: double_train_fm_neighbors.py :: ConditionalFlowMatchingModule
+Architecture: base  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1303.1 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1240.0 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base-5NB-DWNVAL.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base-5NB-DWNVAL.h5
+  checkpoint_name=base-5NB-DWNVAL  arch=base  has_e2=True
+  [physics] desi_z :: combined_e1  (n=4666)
+  [physics] provabgs_logmstar :: combined_e1  (n=4666)
+  [physics] provabgs_tage_mw :: combined_e1  (n=4666)
+  [physics] provabgs_avg_sfr :: combined_e1  (n=4666)
+  [physics] provabgs_z_mw :: combined_e1  (n=4666)
+  [physics] ssfr :: combined_e1  (n=4666)
+  [physics] desi_z :: combined_e2  (n=4666)
+  [physics] provabgs_logmstar :: combined_e2  (n=4666)
+  [physics] provabgs_tage_mw :: combined_e2  (n=4666)
+  [physics] provabgs_avg_sfr :: combined_e2  (n=4666)
+  [physics] provabgs_z_mw :: combined_e2  (n=4666)
+  [physics] ssfr :: combined_e2  (n=4666)
+  [hsc-inst] a_g :: combined_e1  (n=5469)
+  [hsc-inst] a_r :: combined_e1  (n=5469)
+  [hsc-inst] a_i :: combined_e1  (n=5469)
+  [hsc-inst] a_z :: combined_e1  (n=5469)
+  [hsc-inst] a_y :: combined_e1  (n=5469)
+  [hsc-inst] g_variance_value :: combined_e1  (n=1227)
+  [hsc-inst] r_variance_value :: combined_e1  (n=1181)
+  [hsc-inst] i_variance_value :: combined_e1  (n=1377)
+  [hsc-inst] z_variance_value :: combined_e1  (n=1706)
+  [hsc-inst] psf_fwhm_g :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_r :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_i :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_z :: combined_e1  (n=5469)
+  [hsc-inst] a_g :: combined_e2  (n=5469)
+  [hsc-inst] a_r :: combined_e2  (n=5469)
+  [hsc-inst] a_i :: combined_e2  (n=5469)
+  [hsc-inst] a_z :: combined_e2  (n=5469)
+  [hsc-inst] a_y :: combined_e2  (n=5469)
+  [hsc-inst] g_variance_value :: combined_e2  (n=1227)
+  [hsc-inst] r_variance_value :: combined_e2  (n=1181)
+  [hsc-inst] i_variance_value :: combined_e2  (n=1377)
+  [hsc-inst] z_variance_value :: combined_e2  (n=1706)
+  [hsc-inst] psf_fwhm_g :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_r :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_i :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_z :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_G :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_R :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_I :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_Z :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_G :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_R :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_I :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_Z :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_G :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_R :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_I :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_Z :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_G :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_R :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_I :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_Z :: combined_e1  (n=5469)
+  [legacy-inst] EBV :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_G :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_R :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_I :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_Z :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_g :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_r :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_i :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_z :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_G :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_R :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_I :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_Z :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_G :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_R :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_I :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_Z :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_G :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_R :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_I :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_Z :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_G :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_R :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_I :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_Z :: combined_e2  (n=5469)
+  [legacy-inst] EBV :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_G :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_R :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_I :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_Z :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_g :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_r :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_i :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_z :: combined_e2  (n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_base-5NB-DWNVAL.csv  (88 rows)
+Plot: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_base-5NB-DWNVAL_all.png
+Wide CSV: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_base-5NB-DWNVAL_all_merged.csv
+Done at Wed May  6 00:11:00 EDT 2026

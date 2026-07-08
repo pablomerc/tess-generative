@@ -1,0 +1,156 @@
+cross_predict: loading imports...
+Device: cuda
+Loading CrossPredictDataset...
+  Loading targets for hsc_to_legacy...
+    read legacy_PSFSIZE_G
+    read legacy_PSFSIZE_I
+    read legacy_PSFSIZE_R
+    read legacy_PSFSIZE_Z
+    read legacy_PSFDEPTH_G
+    read legacy_PSFDEPTH_R
+    read legacy_PSFDEPTH_I
+    read legacy_PSFDEPTH_Z
+    read legacy_GALDEPTH_G
+    read legacy_GALDEPTH_R
+    read legacy_GALDEPTH_I
+    read legacy_GALDEPTH_Z
+    read legacy_NOBS_G
+    read legacy_NOBS_R
+    read legacy_NOBS_I
+    read legacy_NOBS_Z
+    read legacy_EBV
+  17 targets, 103741 samples ready.
+Random subset: 50000 of 103741 samples (SEED=42)
+Train: 45000, Val: 5000
+Model: ResNet18 -> 17 targets
+  Total params:     11,188,369
+  Trainable params: 11,188,369
+  Model size:       42.7 MB (float32)
+  GPU: NVIDIA L40S
+  GPU memory: 44.4 GB
+Epoch 1/50  train_loss=0.90672  val_loss=0.86942  avg_r2=0.1300  lr=9.99e-04
+Epoch 2/50  train_loss=0.83633  val_loss=0.84518  avg_r2=0.1545  lr=9.96e-04
+Epoch 3/50  train_loss=0.80485  val_loss=0.88110  avg_r2=0.1162  lr=9.91e-04
+Epoch 4/50  train_loss=0.78290  val_loss=0.84196  avg_r2=0.1570  lr=9.84e-04
+Epoch 5/50  train_loss=0.76835  val_loss=0.76467  avg_r2=0.2348  lr=9.76e-04
+  Discord response code: 204
+Epoch 6/50  train_loss=0.75573  val_loss=0.87689  avg_r2=0.1231  lr=9.65e-04
+Epoch 7/50  train_loss=0.74527  val_loss=0.79761  avg_r2=0.2030  lr=9.52e-04
+Epoch 8/50  train_loss=0.73481  val_loss=0.75655  avg_r2=0.2417  lr=9.38e-04
+Epoch 9/50  train_loss=0.72902  val_loss=0.87317  avg_r2=0.1250  lr=9.22e-04
+Epoch 10/50  train_loss=0.71597  val_loss=0.86321  avg_r2=0.1392  lr=9.05e-04
+  Discord response code: 204
+Epoch 11/50  train_loss=0.70780  val_loss=0.74072  avg_r2=0.2577  lr=8.85e-04
+Epoch 12/50  train_loss=0.69621  val_loss=0.82083  avg_r2=0.1785  lr=8.64e-04
+Epoch 13/50  train_loss=0.69077  val_loss=0.82034  avg_r2=0.1798  lr=8.42e-04
+Epoch 14/50  train_loss=0.67593  val_loss=0.89611  avg_r2=0.1016  lr=8.19e-04
+Epoch 15/50  train_loss=0.65938  val_loss=0.90734  avg_r2=0.0930  lr=7.94e-04
+  Discord response code: 204
+Epoch 16/50  train_loss=0.62895  val_loss=0.90833  avg_r2=0.0936  lr=7.68e-04
+Epoch 17/50  train_loss=0.62312  val_loss=0.77680  avg_r2=0.2207  lr=7.41e-04
+Epoch 18/50  train_loss=0.58492  val_loss=0.85070  avg_r2=0.1489  lr=7.13e-04
+Epoch 19/50  train_loss=0.54563  val_loss=0.76803  avg_r2=0.2309  lr=6.84e-04
+Epoch 20/50  train_loss=0.52152  val_loss=0.81663  avg_r2=0.1796  lr=6.55e-04
+  Discord response code: 204
+Epoch 21/50  train_loss=0.50006  val_loss=0.74658  avg_r2=0.2529  lr=6.24e-04
+Epoch 22/50  train_loss=0.46393  val_loss=0.84068  avg_r2=0.1577  lr=5.94e-04
+Epoch 23/50  train_loss=0.44524  val_loss=0.79837  avg_r2=0.2003  lr=5.63e-04
+Epoch 24/50  train_loss=0.41300  val_loss=0.76854  avg_r2=0.2323  lr=5.31e-04
+Epoch 25/50  train_loss=0.38907  val_loss=0.83021  avg_r2=0.1760  lr=5.00e-04
+  Discord response code: 204
+Epoch 26/50  train_loss=0.35907  val_loss=0.80781  avg_r2=0.1909  lr=4.69e-04
+Epoch 27/50  train_loss=0.33152  val_loss=0.80539  avg_r2=0.1936  lr=4.37e-04
+Epoch 28/50  train_loss=0.30642  val_loss=0.79926  avg_r2=0.2015  lr=4.06e-04
+Epoch 29/50  train_loss=0.28240  val_loss=0.79861  avg_r2=0.2025  lr=3.76e-04
+Epoch 30/50  train_loss=0.26142  val_loss=0.81347  avg_r2=0.1923  lr=3.45e-04
+  Discord response code: 204
+Epoch 31/50  train_loss=0.24343  val_loss=0.82307  avg_r2=0.1801  lr=3.16e-04
+Epoch 32/50  train_loss=0.22804  val_loss=0.80872  avg_r2=0.1972  lr=2.87e-04
+Epoch 33/50  train_loss=0.21272  val_loss=0.82285  avg_r2=0.1794  lr=2.59e-04
+Epoch 34/50  train_loss=0.20157  val_loss=0.82717  avg_r2=0.1751  lr=2.32e-04
+Epoch 35/50  train_loss=0.19085  val_loss=0.82453  avg_r2=0.1774  lr=2.06e-04
+  Discord response code: 204
+Epoch 36/50  train_loss=0.17980  val_loss=0.82550  avg_r2=0.1784  lr=1.81e-04
+Epoch 37/50  train_loss=0.17218  val_loss=0.82602  avg_r2=0.1759  lr=1.58e-04
+Epoch 38/50  train_loss=0.16591  val_loss=0.81415  avg_r2=0.1881  lr=1.36e-04
+Epoch 39/50  train_loss=0.15934  val_loss=0.82133  avg_r2=0.1828  lr=1.15e-04
+Epoch 40/50  train_loss=0.15354  val_loss=0.81677  avg_r2=0.1873  lr=9.55e-05
+  Discord response code: 204
+Epoch 41/50  train_loss=0.15016  val_loss=0.82239  avg_r2=0.1815  lr=7.78e-05
+Epoch 42/50  train_loss=0.14535  val_loss=0.81242  avg_r2=0.1907  lr=6.18e-05
+Epoch 43/50  train_loss=0.14264  val_loss=0.81690  avg_r2=0.1864  lr=4.76e-05
+Epoch 44/50  train_loss=0.13933  val_loss=0.82323  avg_r2=0.1806  lr=3.51e-05
+Epoch 45/50  train_loss=0.13741  val_loss=0.82242  avg_r2=0.1813  lr=2.45e-05
+  Discord response code: 204
+Epoch 46/50  train_loss=0.13582  val_loss=0.82193  avg_r2=0.1807  lr=1.57e-05
+Epoch 47/50  train_loss=0.13469  val_loss=0.82305  avg_r2=0.1810  lr=8.86e-06
+Epoch 48/50  train_loss=0.13418  val_loss=0.82034  avg_r2=0.1827  lr=3.94e-06
+Epoch 49/50  train_loss=0.13328  val_loss=0.82267  avg_r2=0.1802  lr=9.87e-07
+Epoch 50/50  train_loss=0.13285  val_loss=0.82898  avg_r2=0.1732  lr=0.00e+00
+  Discord response code: 204
+
+=== Final R² (best validation epoch) ===
+  legacy_PSFSIZE_G                          R²=0.3734
+  legacy_PSFSIZE_I                          R²=0.1788
+  legacy_PSFSIZE_R                          R²=0.1606
+  legacy_PSFSIZE_Z                          R²=0.5381
+  legacy_PSFDEPTH_G                         R²=0.1451
+  legacy_PSFDEPTH_R                         R²=0.3333
+  legacy_PSFDEPTH_I                         R²=0.2854
+  legacy_PSFDEPTH_Z                         R²=0.0743
+  legacy_GALDEPTH_G                         R²=0.1390
+  legacy_GALDEPTH_R                         R²=0.3400
+  legacy_GALDEPTH_I                         R²=0.2951
+  legacy_GALDEPTH_Z                         R²=0.0821
+  legacy_NOBS_G                             R²=0.1427
+  legacy_NOBS_R                             R²=0.1667
+  legacy_NOBS_I                             R²=0.2653
+  legacy_NOBS_Z                             R²=0.2120
+  legacy_EBV                                R²=0.6485
+  AVERAGE                                   R²=0.2577
+R² results saved: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/cross_predict_experiment/r2_results_hsc_to_legacy.csv
+[skip] BASELINE_CSV missing (/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/final/predict_all_zdim16_nogeom_neighbors_table.csv); not generating comparison plot.
+  Discord response code: 204
+Done.
+
+=== R² CSV ===
+target,r2_cross_predict
+legacy_PSFSIZE_G,0.37343794107437134
+legacy_PSFSIZE_I,0.17875397205352783
+legacy_PSFSIZE_R,0.16062229871749878
+legacy_PSFSIZE_Z,0.5381127595901489
+legacy_PSFDEPTH_G,0.14506089687347412
+legacy_PSFDEPTH_R,0.33334439992904663
+legacy_PSFDEPTH_I,0.28538596630096436
+legacy_PSFDEPTH_Z,0.07433944940567017
+legacy_GALDEPTH_G,0.13899481296539307
+legacy_GALDEPTH_R,0.3399936556816101
+legacy_GALDEPTH_I,0.2951422929763794
+legacy_GALDEPTH_Z,0.08206021785736084
+legacy_NOBS_G,0.14270448684692383
+legacy_NOBS_R,0.16667938232421875
+legacy_NOBS_I,0.2653387784957886
+legacy_NOBS_Z,0.21203184127807617
+legacy_EBV,0.6484586000442505
+
+=== Summary ===
+cross-predict hsc_to_legacy R² (best validation epoch):
+  legacy_PSFSIZE_G                          R² = +0.3734
+  legacy_PSFSIZE_I                          R² = +0.1788
+  legacy_PSFSIZE_R                          R² = +0.1606
+  legacy_PSFSIZE_Z                          R² = +0.5381
+  legacy_PSFDEPTH_G                         R² = +0.1451
+  legacy_PSFDEPTH_R                         R² = +0.3333
+  legacy_PSFDEPTH_I                         R² = +0.2854
+  legacy_PSFDEPTH_Z                         R² = +0.0743
+  legacy_GALDEPTH_G                         R² = +0.1390
+  legacy_GALDEPTH_R                         R² = +0.3400
+  legacy_GALDEPTH_I                         R² = +0.2951
+  legacy_GALDEPTH_Z                         R² = +0.0821
+  legacy_NOBS_G                             R² = +0.1427
+  legacy_NOBS_R                             R² = +0.1667
+  legacy_NOBS_I                             R² = +0.2653
+  legacy_NOBS_Z                             R² = +0.2120
+  legacy_EBV                                R² = +0.6485
+  AVERAGE                                   R² = +0.2577
+Done at Wed May  6 19:25:05 EDT 2026

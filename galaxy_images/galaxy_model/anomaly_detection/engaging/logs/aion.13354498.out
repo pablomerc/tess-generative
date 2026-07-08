@@ -1,0 +1,24 @@
+[setup] python=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python
+Loading AION model (polymathic-ai/aion-base)...
+Encoding 474954 examples (total: 474954)  with AION
+  embeddings_mean_hsc: (474954, 768)
+  raw_index: (474954,)
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_latents_aion_hscdown_474k.h5
+Loading latents from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_latents_aion_hscdown_474k.h5  (key=embeddings_mean_hsc)
+  N=474954, dim=768
+  train=379963, test=94991
+
+=== aion :: Isolation Forest ===
+
+=== aion :: NSF (epochs=50) ===
+
+Saved scores: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_scores_aion_hscdown_474k.h5
+Score keys: ['aion/hsc_mean_full/iforest', 'aion/hsc_mean_full/flow']
+Loading dataset (HSC downstream memmap)...
+Loading top-6000 from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_scores_aion_hscdown_474k.h5 :: aion/hsc_mean_full/flow
+  kept 12 after RA/Dec dedup (10.0")
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/figures_hscdown_474k/top12_aion_flow_hscdown_474k.png
+Loading dataset (HSC downstream memmap)...
+Loading top-6000 from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_scores_aion_hscdown_474k.h5 :: aion/hsc_mean_full/iforest
+  kept 12 after RA/Dec dedup (10.0")
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/figures_hscdown_474k/top12_aion_iforest_hscdown_474k.png

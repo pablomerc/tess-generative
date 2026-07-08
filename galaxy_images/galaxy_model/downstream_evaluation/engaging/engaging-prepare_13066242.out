@@ -1,0 +1,4 @@
+=== Embedding for base ===
+Device: cuda
+Checkpoint: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/checkpoints/base/snapshot.ckpt
+Module/class: double_train_fm_neighbors.py :: ConditionalFlowMatchingModule
