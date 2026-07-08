@@ -18,6 +18,18 @@ galaxy_images/galaxy_model/generative_evaluation/figures*/
 *.jpeg
 *.png
 
+# PDFs and JSON (paper figures + generated metadata).
+# Keep source configs tracked via the negations below.
+*.pdf
+*.json
+!**/configs/*.json
+!**/config.json
+!**/split_indices.json
+
+# Backups and large archives (collaborator/data bundles)
+*.bak
+*.zip
+
 # Python
 __pycache__/
 *.pyc
@@ -43,6 +55,8 @@ galaxy_images/galaxy_model/latent_traversal/noise_grids/
 galaxy_images/galaxy_model/latent_traversal/psf_traversal_*/
 galaxy_images/galaxy_model/latent_traversal/latent_traversal_hsc*/
 galaxy_images/galaxy_model/anomaly_detection/counterfactual_anomaly_experiment/outputs/
+galaxy_images/galaxy_model/anomaly_detection/redshift_experiment/outputs/
+galaxy_images/galaxy_model/anomaly_detection/redshift_experiment/outputs_instrument/
 galaxy_images/galaxy_model/anomaly_detection_legacy/outputs/
 galaxy_images/galaxy_model/anomaly_detection_legacy/jobs/
 galaxy_images/galaxy_model/lense_euclid_experiment/outputs/
