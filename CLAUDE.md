@@ -11,7 +11,7 @@ Trains dual-encoder generative models that learn **physics** and **instrument** 
 **Active clusters: AMD (this one) and Engaging.** Development happens on both; they share the GitHub remote `git@github.com:pablomerc/tess-generative.git` and the working branch is `galaxy-engaging`.
 
 - **AMD** (this cluster, `/work1/jeroenaudenaert/pablomer/`): AMD MI210 GPUs plus an H100 partition. **Needs the hipBLASLt workaround** (see below).
-- **Engaging** (`/home/<user>/... — confirm exact path on Engaging`): NVIDIA GPUs (CUDA). **Does not need the hipBLASLt workaround.**
+- **Engaging** (`/orcd/pool/007/pablomer/tess-generative`, alias `/home/pablomer/orcd/pool/tess-generative`): NVIDIA GPUs (CUDA). **Does not need the hipBLASLt workaround.**
 
 The old MIT/CSAIL cluster (`/data/vision/billf/scratch/pablomer/`) is **no longer in active use** — treat its hardcoded paths in older downstream scripts as legacy to parameterize before running anywhere. **Only the neighbors dataset is available on the AMD cluster.**
 
@@ -24,6 +24,34 @@ Both clusters develop on `galaxy-engaging` and sync through the shared GitHub re
 - **Never force-push a shared branch** (`galaxy-engaging`, `main`). To move work between clusters, push to a per-cluster snapshot branch (`amd-snapshot`, `engaging-snapshot`) and merge from there, so nothing gets clobbered.
 - **Cluster-specific job scripts diverge on purpose.** SLURM/`.sh` submission scripts and training entry points carry per-cluster settings (partitions, module loads, the hipBLASLt workaround on AMD). When merging, **keep both variants** rather than overwriting one cluster's scripts with the other's.
 - For code that must run on **both** clusters, use the guarded hipBLASLt form (`try/except` around `preferred_blas_library`, as in `downstream_evaluation/engaging/`) — it's a no-op on NVIDIA and a fix on AMD.
+
+---
+
+## Submitting jobs on each cluster
+
+Same repo, same conda env name (`torchenv`) on both — the differences are the SLURM partitions, absolute paths, and the hipBLASLt workaround. `sbatch` the cluster-appropriate script (each cluster's scripts hardcode its own paths).
+
+### AMD (this cluster)
+- Repo `/work1/jeroenaudenaert/pablomer/tess-generative` · `conda activate torchenv` · logs → `/work1/jeroenaudenaert/pablomer/logs/`
+- GPU partitions: **`mi2104x`** (4×MI210) and **`mi2101x`** (1×MI210). GPUs come with the partition — no `--gres` line. Some scripts `--exclude` known-bad nodes.
+- **Every GPU job needs the hipBLASLt workaround**: `export TORCH_BLAS_PREFER_HIPBLASLT=0` in the script *and* `torch.backends.cuda.preferred_blas_library("hipblas")` in the Python entry point.
+```bash
+sbatch galaxy_images/galaxy_model/train_neighbors_efficient.slurm            # baseline training
+sbatch galaxy_images/galaxy_model/slurm_jobs/base_ins4x4.slurm               # variant sweep: sets $CONFIG_PATH, sources _train_template.slurm
+```
+
+### Engaging
+- Repo `/orcd/pool/007/pablomer/tess-generative` (alias `/home/pablomer/orcd/pool/tess-generative`) · `conda activate torchenv`
+- GPU partitions: **`mit_normal_gpu`** (H100/H200/L40S) and **`mit_preemptable`** (A100/A40, preemptible). Request GPUs explicitly: `#SBATCH --gres=gpu:1` + a `--mem` line. Logs default to `%x_%j.out` in the submit dir.
+- **No hipBLASLt workaround** (NVIDIA); the env var, if present, is a harmless no-op. Engaging-specific pipelines live in `downstream_evaluation/engaging/`, `cross_predict_experiment/`, `anomaly_detection/engaging/`, and are parameterized via `--export`:
+```bash
+sbatch galaxy_images/galaxy_model/downstream_evaluation/engaging/run_predict.slurm
+sbatch --export=ALL,XPRED_DIRECTION=hsc_to_legacy \
+  galaxy_images/galaxy_model/cross_predict_experiment/run_engaging.slurm     # also legacy_to_hsc
+```
+- Engaging data: `/orcd/pool/007/pablomer/neighbours_v2.h5`.
+
+> **Secrets note:** a few scripts embed credentials in plaintext — a WandB API key (AMD SLURM scripts) and a Discord webhook (Engaging scripts). Since the repo is on GitHub, prefer moving these into `~/.bashrc`/env vars and rotating them.
 
 ---
 
