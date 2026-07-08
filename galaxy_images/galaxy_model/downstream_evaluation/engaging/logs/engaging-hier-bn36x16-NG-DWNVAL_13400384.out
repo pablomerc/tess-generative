@@ -1,0 +1,136 @@
+=== hier-bn36x16-NG-DWNVAL ===
+  ckpt   : /orcd/pool/007/pablomer/checkpoints_new/hier-bn36x16-NG-DWNVAL/best-epoch=197-step=75000.ckpt
+  module : hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py
+  class  : HierarchicalGlobalInstrumentFlowMatchingModule
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/hier-bn36x16-NG-DWNVAL/best-epoch=197-step=75000.ckpt
+Module/class: hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py :: HierarchicalGlobalInstrumentFlowMatchingModule
+
+Encoder 1 (galaxy) configuration:
+  Level 0: 6x6 = 36 tokens x 16d = 576 values | RoPE=yes
+  Global: 64d
+  Total: 36 tokens + global = 640 values (14.4x compression from 9216)
+  Attention head dim: 64
+
+Encoder 2 (instrument): 1 token x 16d per image
+Setting up cross-attention processors (standard hierarchical RoPE)...
+  RoPE on down_blocks.3.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on down_blocks.3.attentions.1.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.1.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.2.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on mid_block.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+Done.
+
+Architecture: hier  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1953.4 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1649.8 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/hier-bn36x16-NG-DWNVAL.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/hier-bn36x16-NG-DWNVAL.h5
+  checkpoint_name=hier-bn36x16-NG-DWNVAL  arch=hier  has_e2=True
+  [physics] desi_z :: combined_e1  (n=4666)
+  [physics] provabgs_logmstar :: combined_e1  (n=4666)
+  [physics] provabgs_tage_mw :: combined_e1  (n=4666)
+  [physics] provabgs_avg_sfr :: combined_e1  (n=4666)
+  [physics] provabgs_z_mw :: combined_e1  (n=4666)
+  [physics] ssfr :: combined_e1  (n=4666)
+  [physics] desi_z :: combined_e2  (n=4666)
+  [physics] provabgs_logmstar :: combined_e2  (n=4666)
+  [physics] provabgs_tage_mw :: combined_e2  (n=4666)
+  [physics] provabgs_avg_sfr :: combined_e2  (n=4666)
+  [physics] provabgs_z_mw :: combined_e2  (n=4666)
+  [physics] ssfr :: combined_e2  (n=4666)
+  [hsc-inst] a_g :: combined_e1  (n=5469)
+  [hsc-inst] a_r :: combined_e1  (n=5469)
+  [hsc-inst] a_i :: combined_e1  (n=5469)
+  [hsc-inst] a_z :: combined_e1  (n=5469)
+  [hsc-inst] a_y :: combined_e1  (n=5469)
+  [hsc-inst] g_variance_value :: combined_e1  (n=1227)
+  [hsc-inst] r_variance_value :: combined_e1  (n=1181)
+  [hsc-inst] i_variance_value :: combined_e1  (n=1377)
+  [hsc-inst] z_variance_value :: combined_e1  (n=1706)
+  [hsc-inst] psf_fwhm_g :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_r :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_i :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_z :: combined_e1  (n=5469)
+  [hsc-inst] a_g :: combined_e2  (n=5469)
+  [hsc-inst] a_r :: combined_e2  (n=5469)
+  [hsc-inst] a_i :: combined_e2  (n=5469)
+  [hsc-inst] a_z :: combined_e2  (n=5469)
+  [hsc-inst] a_y :: combined_e2  (n=5469)
+  [hsc-inst] g_variance_value :: combined_e2  (n=1227)
+  [hsc-inst] r_variance_value :: combined_e2  (n=1181)
+  [hsc-inst] i_variance_value :: combined_e2  (n=1377)
+  [hsc-inst] z_variance_value :: combined_e2  (n=1706)
+  [hsc-inst] psf_fwhm_g :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_r :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_i :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_z :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_G :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_R :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_I :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_Z :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_G :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_R :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_I :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_Z :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_G :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_R :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_I :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_Z :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_G :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_R :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_I :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_Z :: combined_e1  (n=5469)
+  [legacy-inst] EBV :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_G :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_R :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_I :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_Z :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_g :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_r :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_i :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_z :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_G :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_R :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_I :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_Z :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_G :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_R :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_I :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_Z :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_G :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_R :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_I :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_Z :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_G :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_R :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_I :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_Z :: combined_e2  (n=5469)
+  [legacy-inst] EBV :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_G :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_R :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_I :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_Z :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_g :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_r :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_i :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_z :: combined_e2  (n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_hier-bn36x16-NG-DWNVAL.csv  (88 rows)
+Plot: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_hier-bn36x16-NG-DWNVAL_all.png
+Wide CSV: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_hier-bn36x16-NG-DWNVAL_all_merged.csv
+Done at Wed May  6 00:46:46 EDT 2026

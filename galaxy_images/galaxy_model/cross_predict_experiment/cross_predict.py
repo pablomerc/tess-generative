@@ -47,7 +47,7 @@ from galaxy_images.galaxy_model.neighbors import (
 # Config
 # ---------------------------------------------------------------------------
 
-NEIGHBORS_HDF5 = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
+NEIGHBORS_HDF5 = "/orcd/pool/007/pablomer/neighbours_v2.h5"
 BASELINE_CSV = _model_dir / "downstream_evaluation" / "final" / "predict_all_zdim16_nogeom_neighbors_table.csv"
 
 LEGACY_TARGETS = [
@@ -55,6 +55,7 @@ LEGACY_TARGETS = [
     "legacy_PSFDEPTH_G", "legacy_PSFDEPTH_R", "legacy_PSFDEPTH_I", "legacy_PSFDEPTH_Z",
     "legacy_GALDEPTH_G", "legacy_GALDEPTH_R", "legacy_GALDEPTH_I", "legacy_GALDEPTH_Z",
     "legacy_NOBS_G", "legacy_NOBS_R", "legacy_NOBS_I", "legacy_NOBS_Z",
+    "legacy_EBV",  # extinction E(B-V) — present in neighbours_v2.h5
 ]
 
 HSC_TARGETS_DIRECT = [
@@ -68,11 +69,19 @@ HSC_TARGETS_DERIVED = [
     "hsc_r_psf_fwhm",
     "hsc_z_psf_fwhm",
 ]
+# Targets that aren't in neighbours_v2.h5 — read from the cross-matched sidecar
+# parquet built by build_extra_targets.py. Aligned to H5 row indices [0..N-1].
+HSC_TARGETS_FROM_SIDECAR = [
+    "hsc_a_g", "hsc_a_r", "hsc_a_i", "hsc_a_z", "hsc_a_y",
+]
+SIDECAR_PARQUET = _script_dir / "extra_targets_per_h5_row.parquet"
 
 DISCORD_WEBHOOK = (
-    "https://discord.com/api/webhooks/1488692651334177071/"
-    "8b8KvACfQIVYCNY3ovee04BixCEWiqbqp1iQk4z9sXHlgR29kMkGIjl1pahV5uEPSbxe"
+    "https://discord.com/api/webhooks/1500242707522519183/"
+    "NqqAxuo5n0Ex4X81vMcq7gDOjrP3oAURAVZtgrZT5CramGNfBGPxuEvC2NnxwYBkfs9j"
 )
+
+PROGRESS_EVERY_EPOCHS = 5
 
 SEED = 42
 BATCH_SIZE = 64
@@ -116,11 +125,13 @@ class CrossPredictDataset(Dataset):
             self.survey = "hsc"
             self.target_keys = LEGACY_TARGETS
             self.derived_keys = []
+            self.sidecar_keys = []
         else:
             self.image_key = "images_legacy"
             self.survey = "legacy"
             self.target_keys = HSC_TARGETS_DIRECT
             self.derived_keys = HSC_TARGETS_DERIVED
+            self.sidecar_keys = HSC_TARGETS_FROM_SIDECAR
 
         self._init_indices_and_targets(target_mean, target_std)
 
@@ -133,7 +144,8 @@ class CrossPredictDataset(Dataset):
 
             n_direct = len(self.target_keys)
             n_derived = len(self.derived_keys)
-            n_total = n_direct + n_derived
+            n_sidecar = len(self.sidecar_keys)
+            n_total = n_direct + n_derived + n_sidecar
             self.all_targets = np.zeros((n, n_total), dtype=np.float32)
 
             for j, key in enumerate(self.target_keys):
@@ -146,6 +158,19 @@ class CrossPredictDataset(Dataset):
                     s22 = f[f"hsc_{band}_sdssshape_psf_shape22"][:][self.indexes_mmu].astype(np.float64)
                     self.all_targets[:, n_direct + k] = compute_hsc_psf_seeing(s11, s22).astype(np.float32)
                     print(f"    derived hsc_{band}_psf_fwhm", flush=True)
+
+        if self.sidecar_keys:
+            print(f"    reading sidecar {SIDECAR_PARQUET.name}", flush=True)
+            sidecar_df = pd.read_parquet(SIDECAR_PARQUET, columns=list(self.sidecar_keys))
+            if len(sidecar_df) != len(sources):
+                raise RuntimeError(
+                    f"Sidecar length {len(sidecar_df)} != H5 length {len(sources)}; "
+                    "regenerate via build_extra_targets.py"
+                )
+            for k, key in enumerate(self.sidecar_keys):
+                col = sidecar_df[key].to_numpy(dtype=np.float32)[self.indexes_mmu]
+                self.all_targets[:, n_direct + n_derived + k] = col
+                print(f"    sidecar  {key}", flush=True)
 
         valid_mask = np.isfinite(self.all_targets).all(axis=1)
         bad_count = (~valid_mask).sum()
@@ -165,7 +190,7 @@ class CrossPredictDataset(Dataset):
             self.target_std[self.target_std < 1e-8] = 1.0
 
         self.all_targets_z = (self.all_targets - self.target_mean) / self.target_std
-        self.all_target_names = self.target_keys + self.derived_keys
+        self.all_target_names = self.target_keys + self.derived_keys + self.sidecar_keys
         print(f"  {n_total} targets, {n} samples ready.", flush=True)
 
     def _open_file(self):
@@ -339,6 +364,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     parser.add_argument("--quick-test", action="store_true",
                         help="Limit dataset to 1024 samples for quick testing")
+    parser.add_argument("--max-samples", type=int, default=None,
+                        help="Cap dataset at this many random MMU samples "
+                             "(seeded with SEED for reproducibility). Useful "
+                             "when the full dataset doesn't fit in OS page cache.")
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-discord", action="store_true")
     parser.add_argument("--output-dir", type=str, default=str(_script_dir))
@@ -370,6 +399,12 @@ def main():
     if args.quick_test:
         n_use = min(1024, n_total)
         subset_indices = list(range(n_use))
+    elif args.max_samples is not None and args.max_samples < n_total:
+        rng = np.random.default_rng(SEED)
+        subset_indices = rng.choice(n_total, size=args.max_samples,
+                                    replace=False).tolist()
+        print(f"Random subset: {args.max_samples} of {n_total} samples "
+              f"(SEED={SEED})", flush=True)
     else:
         subset_indices = list(range(n_total))
     n_use = len(subset_indices)
@@ -458,6 +493,18 @@ def main():
             best_val_loss = val_loss
             best_r2 = list(val_r2)
 
+        # Periodic Discord progress ping so the user can monitor live.
+        if (not args.no_discord
+                and PROGRESS_EVERY_EPOCHS > 0
+                and (epoch % PROGRESS_EVERY_EPOCHS == 0 or epoch == args.epochs)):
+            direction_label = "HSC→Legacy" if args.direction == "hsc_to_legacy" else "Legacy→HSC"
+            job_id = os.environ.get("SLURM_JOB_ID", "local")
+            best_avg = float(np.mean(best_r2)) if best_r2 is not None else float("nan")
+            send_discord_notification(
+                f"⏳ xpred {direction_label} job `{job_id}` epoch {epoch}/{args.epochs}  "
+                f"avg R² (this epoch)={avg_r2:+.4f}  best avg R²={best_avg:+.4f}"
+            )
+
     # --- Final summary ---
     print("\n=== Final R² (best validation epoch) ===", flush=True)
     target_names = full_cross_ds.all_target_names
@@ -472,9 +519,13 @@ def main():
     r2_df.to_csv(r2_csv_path, index=False)
     print(f"R² results saved: {r2_csv_path}", flush=True)
 
-    # Comparison plot
+    # Comparison plot — skipped on engaging cluster (BASELINE_CSV not available here).
     plot_path = out_dir / f"comparison_{args.direction}.png"
-    make_comparison_plot(args.direction, target_names, best_r2, str(plot_path))
+    if BASELINE_CSV.exists():
+        make_comparison_plot(args.direction, target_names, best_r2, str(plot_path))
+    else:
+        print(f"[skip] BASELINE_CSV missing ({BASELINE_CSV}); not generating comparison plot.",
+              flush=True)
 
     # Discord notification
     if not args.no_discord:
@@ -486,7 +537,8 @@ def main():
             f"Job `{job_id}` | {args.epochs} epochs | "
             f"Avg R²={avg_r2_str}"
         )
-        send_discord_notification(msg, str(plot_path))
+        # Attach the comparison plot only if it was actually generated.
+        send_discord_notification(msg, str(plot_path) if plot_path.exists() else None)
 
     if use_wandb:
         if plot_path.exists():

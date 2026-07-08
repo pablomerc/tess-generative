@@ -1,0 +1,26 @@
+[setup] python=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python
+Loading model from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/checkpoints/base/snapshot.ckpt
+  instrument_zdim=None
+  Encoding 474954 examples (total: 474954)
+  raw_index: (474954,)
+  hsc_flat:  (474954, 64)  (n_tokens=4)
+  hsc_mean:  (474954, 16)
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_latents_ins_hscdown_474k.h5
+Loading latents from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_latents_ins_hscdown_474k.h5  (key=hsc_flat)
+  N=474954, dim=64
+  train=379963, test=94991
+
+=== ours-instrument :: Isolation Forest ===
+
+=== ours-instrument :: NSF (epochs=50) ===
+
+Saved scores: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_scores_ins_hscdown_474k.h5
+Score keys: ['ours/hsc_flat/iforest', 'ours/hsc_flat/flow']
+Loading dataset (HSC downstream memmap)...
+Loading top-6000 from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_scores_ins_hscdown_474k.h5 :: ours/hsc_flat/flow
+  kept 12 after RA/Dec dedup (10.0")
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/figures_hscdown_474k/top12_ins_flow_hscdown_474k.png
+Loading dataset (HSC downstream memmap)...
+Loading top-6000 from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_scores_ins_hscdown_474k.h5 :: ours/hsc_flat/iforest
+  kept 12 after RA/Dec dedup (10.0")
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/figures_hscdown_474k/top12_ins_iforest_hscdown_474k.png

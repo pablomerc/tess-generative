@@ -1,0 +1,2 @@
+=== [1/4] build_overlap_dataset (cap 512) ===
+Loading HSC catalog:    /work1/jeroenaudenaert/pablomer/data/hsc_downstream/catalog.parquet

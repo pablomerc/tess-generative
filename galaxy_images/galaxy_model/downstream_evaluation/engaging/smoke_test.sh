@@ -13,6 +13,7 @@ conda activate torchenv
 export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 export TORCH_BLAS_PREFER_HIPBLASLT=0
 export OMP_NUM_THREADS=1
+export WANDB_MODE=disabled
 
 cd "${REPO_ROOT}"
 
@@ -21,8 +22,8 @@ mkdir -p "${OUT}/index" "${OUT}/embeddings" "${OUT}/predictions" "${OUT}/plots"
 
 echo "=== [1/4] build_overlap_dataset (cap 512) ==="
 python "${SCRIPT_DIR}/build_overlap_dataset.py" \
-    --hsc-dir    /work1/jeroenaudenaert/pablomer/data/hsc_downstream \
-    --legacy-dir /work1/jeroenaudenaert/pablomer/data/legacy_downstream_quick \
+    --hsc-dir    /home/pablomer/orcd/scratch/hsc_downstream \
+    --legacy-dir /home/pablomer/orcd/scratch/legacy_downstream_full/full_1M \
     --out-dir    "${OUT}/index" \
     --max-per-subset 512 \
     --match-radius-arcsec 1.0 \

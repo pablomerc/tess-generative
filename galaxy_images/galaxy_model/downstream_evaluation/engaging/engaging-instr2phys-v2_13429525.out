@@ -1,0 +1,87 @@
+Reading labels from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base.h5
+Preprocess mode: v2
+  feature matrix: shape=(5469, 30), n_features=30
+  v2 transforms applied to 16 of 30 input columns
+  [physics] desi_z  (linear)  seed=0  (n=4666)
+  [physics] desi_z  (linear)  seed=1  (n=4666)
+  [physics] desi_z  (linear)  seed=2  (n=4666)
+  [physics] desi_z  (linear)  seed=3  (n=4666)
+  [physics] desi_z  (linear)  seed=4  (n=4666)
+  [physics] provabgs_logmstar  (linear)  seed=0  (n=4666)
+  [physics] provabgs_logmstar  (linear)  seed=1  (n=4666)
+  [physics] provabgs_logmstar  (linear)  seed=2  (n=4666)
+  [physics] provabgs_logmstar  (linear)  seed=3  (n=4666)
+  [physics] provabgs_logmstar  (linear)  seed=4  (n=4666)
+  [physics] provabgs_tage_mw  (linear)  seed=0  (n=4666)
+  [physics] provabgs_tage_mw  (linear)  seed=1  (n=4666)
+  [physics] provabgs_tage_mw  (linear)  seed=2  (n=4666)
+  [physics] provabgs_tage_mw  (linear)  seed=3  (n=4666)
+  [physics] provabgs_tage_mw  (linear)  seed=4  (n=4666)
+  [physics] provabgs_avg_sfr  (log10→linear)  seed=0  (n=4666)
+  [physics] provabgs_avg_sfr  (log10→linear)  seed=1  (n=4666)
+  [physics] provabgs_avg_sfr  (log10→linear)  seed=2  (n=4666)
+  [physics] provabgs_avg_sfr  (log10→linear)  seed=3  (n=4666)
+  [physics] provabgs_avg_sfr  (log10→linear)  seed=4  (n=4666)
+  [physics] provabgs_z_mw  (log10→linear)  seed=0  (n=4666)
+  [physics] provabgs_z_mw  (log10→linear)  seed=1  (n=4666)
+  [physics] provabgs_z_mw  (log10→linear)  seed=2  (n=4666)
+  [physics] provabgs_z_mw  (log10→linear)  seed=3  (n=4666)
+  [physics] provabgs_z_mw  (log10→linear)  seed=4  (n=4666)
+  [physics] ssfr  (linear)  seed=0  (n=4666)
+  [physics] ssfr  (linear)  seed=1  (n=4666)
+  [physics] ssfr  (linear)  seed=2  (n=4666)
+  [physics] ssfr  (linear)  seed=3  (n=4666)
+  [physics] ssfr  (linear)  seed=4  (n=4666)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_instrument_baseline_v2.csv  (30 rows, 5 seeds × 6 targets)
+
+Summary (mean ± std across seeds):
+  desi_z                    R² = +0.0063 ± 0.0140  (n_seeds=5)
+  provabgs_logmstar         R² = +0.0036 ± 0.0161  (n_seeds=5)
+  provabgs_tage_mw          R² = -0.0215 ± 0.0099  (n_seeds=5)
+  provabgs_avg_sfr          R² = -0.0749 ± 0.0140  (n_seeds=5)
+  provabgs_z_mw             R² = -0.1141 ± 0.0068  (n_seeds=5)
+  ssfr                      R² = -0.0254 ± 0.0210  (n_seeds=5)
+=== Raw CSV ===
+checkpoint,task_family,target,latent_variant,score,score_metric,n_train,n_test,seed
+instrument-baseline-v2,physics_provabgs,desi_z,combined_instrument,-0.014974979658350707,r2,4199,467,0
+instrument-baseline-v2,physics_provabgs,desi_z,combined_instrument,0.023520341240842457,r2,4199,467,1
+instrument-baseline-v2,physics_provabgs,desi_z,combined_instrument,0.007448726801833616,r2,4199,467,2
+instrument-baseline-v2,physics_provabgs,desi_z,combined_instrument,0.01148196595111628,r2,4199,467,3
+instrument-baseline-v2,physics_provabgs,desi_z,combined_instrument,0.003957522268197233,r2,4199,467,4
+instrument-baseline-v2,physics_provabgs,provabgs_logmstar,combined_instrument,-0.01785203777120281,r2,4199,467,0
+instrument-baseline-v2,physics_provabgs,provabgs_logmstar,combined_instrument,-0.0014842344539314212,r2,4199,467,1
+instrument-baseline-v2,physics_provabgs,provabgs_logmstar,combined_instrument,0.003161696746559639,r2,4199,467,2
+instrument-baseline-v2,physics_provabgs,provabgs_logmstar,combined_instrument,0.026704365421583165,r2,4199,467,3
+instrument-baseline-v2,physics_provabgs,provabgs_logmstar,combined_instrument,0.0076934099423191515,r2,4199,467,4
+instrument-baseline-v2,physics_provabgs,provabgs_tage_mw,combined_instrument,-0.012627586860203932,r2,4199,467,0
+instrument-baseline-v2,physics_provabgs,provabgs_tage_mw,combined_instrument,-0.03720746897800953,r2,4199,467,1
+instrument-baseline-v2,physics_provabgs,provabgs_tage_mw,combined_instrument,-0.017695856281664923,r2,4199,467,2
+instrument-baseline-v2,physics_provabgs,provabgs_tage_mw,combined_instrument,-0.014955756588113989,r2,4199,467,3
+instrument-baseline-v2,physics_provabgs,provabgs_tage_mw,combined_instrument,-0.024925136094931855,r2,4199,467,4
+instrument-baseline-v2,physics_provabgs,provabgs_avg_sfr,combined_instrument,-0.0960604773637137,r2,4199,467,0
+instrument-baseline-v2,physics_provabgs,provabgs_avg_sfr,combined_instrument,-0.07899891436212148,r2,4199,467,1
+instrument-baseline-v2,physics_provabgs,provabgs_avg_sfr,combined_instrument,-0.057982739721881504,r2,4199,467,2
+instrument-baseline-v2,physics_provabgs,provabgs_avg_sfr,combined_instrument,-0.07018519018256097,r2,4199,467,3
+instrument-baseline-v2,physics_provabgs,provabgs_avg_sfr,combined_instrument,-0.07121910989045555,r2,4199,467,4
+instrument-baseline-v2,physics_provabgs,provabgs_z_mw,combined_instrument,-0.12405609952800467,r2,4199,467,0
+instrument-baseline-v2,physics_provabgs,provabgs_z_mw,combined_instrument,-0.10562952633746003,r2,4199,467,1
+instrument-baseline-v2,physics_provabgs,provabgs_z_mw,combined_instrument,-0.11546101367164674,r2,4199,467,2
+instrument-baseline-v2,physics_provabgs,provabgs_z_mw,combined_instrument,-0.1105057932237612,r2,4199,467,3
+instrument-baseline-v2,physics_provabgs,provabgs_z_mw,combined_instrument,-0.11486564260980026,r2,4199,467,4
+instrument-baseline-v2,physics_provabgs,ssfr,combined_instrument,-0.02092407555919551,r2,4199,467,0
+instrument-baseline-v2,physics_provabgs,ssfr,combined_instrument,-0.06086942266844986,r2,4199,467,1
+instrument-baseline-v2,physics_provabgs,ssfr,combined_instrument,-0.02532185642822604,r2,4199,467,2
+instrument-baseline-v2,physics_provabgs,ssfr,combined_instrument,-0.011525565126539572,r2,4199,467,3
+instrument-baseline-v2,physics_provabgs,ssfr,combined_instrument,-0.008499306833135378,r2,4199,467,4
+
+=== Summary ===
+instrument → physics R² (v2, mean ± std across 5 seeds, n_test=467):
+  target                              v1              v2
+  desi_z                         -0.0073    +0.0063 ± 0.0140
+  provabgs_logmstar              -0.0067    +0.0036 ± 0.0161
+  provabgs_tage_mw               -0.0138    -0.0215 ± 0.0099
+  provabgs_avg_sfr               -0.0099    -0.0749 ± 0.0140
+  provabgs_z_mw                  -0.0327    -0.1141 ± 0.0068
+  ssfr                           -0.0276    -0.0254 ± 0.0210
+Done at Wed May  6 10:59:49 EDT 2026

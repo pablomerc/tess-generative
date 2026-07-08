@@ -1,0 +1,27 @@
+cross_predict: loading imports...
+Device: cuda
+Loading CrossPredictDataset...
+  Loading targets for legacy_to_hsc...
+    read hsc_i_variance_value
+    read hsc_r_variance_value
+    read hsc_z_variance_value
+    derived hsc_g_psf_fwhm
+    derived hsc_i_psf_fwhm
+    derived hsc_r_psf_fwhm
+    derived hsc_z_psf_fwhm
+  Filtering 67936/103741 samples with non-finite targets.
+  35805 valid samples remain.
+  7 targets, 35805 samples ready.
+Train: 32225, Val: 3580
+Model: ResNet18 -> 7 targets
+  Total params:     11,183,239
+  Trainable params: 11,183,239
+  Model size:       42.7 MB (float32)
+  GPU: NVIDIA L40S
+  GPU memory: 44.4 GB
+Epoch 1/50  train_loss=0.96335  val_loss=0.90276  avg_r2=-0.0930  lr=9.99e-04
+Epoch 2/50  train_loss=0.86715  val_loss=0.64135  avg_r2=0.1893  lr=9.96e-04
+Epoch 3/50  train_loss=0.84959  val_loss=1.00413  avg_r2=-0.2095  lr=9.91e-04
+Epoch 4/50  train_loss=0.83368  val_loss=0.73342  avg_r2=0.1056  lr=9.84e-04
+Epoch 5/50  train_loss=0.81347  val_loss=0.74701  avg_r2=0.0486  lr=9.76e-04
+  Discord response code: 204

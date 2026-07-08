@@ -1,0 +1,99 @@
+=== arch=aion  variant=base ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_base__aion.csv  (78 rows)
+=== arch=aion  variant=base-meanpool ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_base-meanpool__aion.csv  (78 rows)
+=== arch=aion  variant=untrained-resnet-matched ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/untrained-resnet-matched.h5
+  checkpoint_name=untrained-resnet-matched  arch=random_resnet18_matched  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_untrained-resnet-matched__aion.csv  (78 rows)
+=== arch=aion  variant=aion-base ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/aion-base.h5
+  checkpoint_name=aion-base  arch=aion  has_e2=False
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_aion-base__aion.csv  (39 rows)
+=== Plotting arch=aion ===
+Plot:        /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion.png
+Merged CSV:  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion__merged.csv
+Convergence: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion__convergence.txt
+=== arch=aion_reg  variant=base ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion_reg
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_base__aion_reg.csv  (78 rows)
+=== arch=aion_reg  variant=base-meanpool ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion_reg
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_base-meanpool__aion_reg.csv  (78 rows)
+=== arch=aion_reg  variant=untrained-resnet-matched ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/untrained-resnet-matched.h5
+  checkpoint_name=untrained-resnet-matched  arch=random_resnet18_matched  has_e2=True
+  mlp_arch=aion_reg
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_untrained-resnet-matched__aion_reg.csv  (78 rows)
+=== arch=aion_reg  variant=aion-base ===
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/aion-base.h5
+  checkpoint_name=aion-base  arch=aion  has_e2=False
+  mlp_arch=aion_reg
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_aion-base__aion_reg.csv  (39 rows)
+=== Plotting arch=aion_reg ===
+Plot:        /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion_reg.png
+Merged CSV:  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion_reg__merged.csv
+Convergence: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion_reg__convergence.txt
+Done at Wed May  6 13:12:42 EDT 2026

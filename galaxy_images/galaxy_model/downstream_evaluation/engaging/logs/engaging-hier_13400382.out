@@ -1,0 +1,9 @@
+=== hier ===
+  ckpt   : /orcd/scratch/orcd/009/pablomer/checkpoints/hier/snapshot.ckpt
+  module : hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py
+  class  : HierarchicalGlobalInstrumentFlowMatchingModule
+[skip] /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/hier.h5 already exists
+[skip] /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_hier.csv already exists
+Plot: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_hier_all.png
+Wide CSV: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_hier_all_merged.csv
+Done at Wed May  6 00:34:27 EDT 2026

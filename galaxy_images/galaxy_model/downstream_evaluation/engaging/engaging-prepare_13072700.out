@@ -1,0 +1,119 @@
+=== Embedding for base ===
+Device: cuda
+Checkpoint: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/checkpoints/base/snapshot.ckpt
+Module/class: double_train_fm_neighbors.py :: ConditionalFlowMatchingModule
+Architecture: base  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (857.7 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (819.4 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/base.h5
+=== Embedding for hier ===
+Device: cuda
+Checkpoint: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/checkpoints/hier/snapshot.ckpt
+Module/class: hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py :: HierarchicalGlobalInstrumentFlowMatchingModule
+
+Encoder 1 (galaxy) configuration:
+  Level 0: 6x6 = 36 tokens x 16d = 576 values | RoPE=yes
+  Global: 64d
+  Total: 36 tokens + global = 640 values (14.4x compression from 9216)
+  Attention head dim: 64
+
+Encoder 2 (instrument): 1 token x 16d per image
+Setting up cross-attention processors (standard hierarchical RoPE)...
+  RoPE on down_blocks.3.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on down_blocks.3.attentions.1.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.1.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.2.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on mid_block.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+Done.
+
+Architecture: hier  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1962.2 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1733.4 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/hier.h5
+=== Embedding for hier-small ===
+Device: cuda
+Checkpoint: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/checkpoints/hier-small/snapshot.ckpt
+Module/class: hierarchical_attention/double_train_fm_neighbors_hier_global_ins.py :: HierarchicalGlobalInstrumentFlowMatchingModule
+
+Encoder 1 (galaxy) configuration:
+  Level 0: 6x6 = 36 tokens x 8d = 288 values | RoPE=yes
+  Global: 16d
+  Total: 36 tokens + global = 304 values (30.3x compression from 9216)
+  Attention head dim: 64
+
+Encoder 2 (instrument): 1 token x 16d per image
+Setting up cross-attention processors (standard hierarchical RoPE)...
+  RoPE on down_blocks.3.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on down_blocks.3.attentions.1.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.1.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on up_blocks.0.attentions.2.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+  RoPE on mid_block.attentions.0.transformer_blocks.0.attn2.processor (res=6, head_dim=8)
+Done.
+
+Architecture: hier  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (2064.3 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1826.2 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/hier-small.h5
+=== Embedding for single-baseline ===
+Device: cuda
+Checkpoint: /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/checkpoints/single-baseline/snapshot.ckpt
+Module/class: single_encoder_ablation/model.py :: SingleEncoderFlowMatchingModule
+Architecture: single  has_e2=False
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (2036.3 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1113.3 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/single-baseline.h5
+Done at Sat May  2 19:20:12 EDT 2026

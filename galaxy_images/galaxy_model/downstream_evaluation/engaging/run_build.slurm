@@ -3,18 +3,15 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=1:00:00
-# NOTE(engaging): pick the right --partition for the engaging cluster.
-# On the AMD cluster this was --partition=mi2104x; on engaging it's likely
-# a CPU partition since this stage is pure CPU + a few GB of RAM.
-##SBATCH --partition=<engaging-cpu-partition>
+#SBATCH --partition=mit_normal
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --open-mode=append
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+SCRIPT_DIR="/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging"
+REPO_ROOT="/home/pablomer/orcd/pool/tess-generative"
 
 source ~/.bashrc
 # NOTE(engaging): replace torchenv with whatever conda env you set up there.
@@ -24,8 +21,8 @@ export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 cd "${REPO_ROOT}"
 
 python "${SCRIPT_DIR}/build_overlap_dataset.py" \
-    --hsc-dir    /work1/jeroenaudenaert/pablomer/data/hsc_downstream \
-    --legacy-dir /work1/jeroenaudenaert/pablomer/data/legacy_downstream_quick \
+    --hsc-dir    /home/pablomer/orcd/scratch/hsc_downstream \
+    --legacy-dir /home/pablomer/orcd/scratch/legacy_downstream_full/full_1M \
     --out-dir    "${SCRIPT_DIR}/outputs/index" \
     --max-per-subset 16000 \
     --match-radius-arcsec 1.0 \

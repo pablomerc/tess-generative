@@ -1,0 +1,9 @@
+[setup] python=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python
+Loading HSC downstream memmap...
+  N=474954
+
+=== Building joint figure for method=flow ===
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/figures_hscdown_474k/joint_top12_flow_hscdown_474k.png
+
+=== Building joint figure for method=iforest ===
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/figures_hscdown_474k/joint_top12_iforest_hscdown_474k.png

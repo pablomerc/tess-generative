@@ -1,0 +1,30 @@
+cross_predict: loading imports...
+Device: cuda
+Loading CrossPredictDataset...
+  Loading targets for hsc_to_legacy...
+    read legacy_PSFSIZE_G
+    read legacy_PSFSIZE_I
+    read legacy_PSFSIZE_R
+    read legacy_PSFSIZE_Z
+    read legacy_PSFDEPTH_G
+    read legacy_PSFDEPTH_R
+    read legacy_PSFDEPTH_I
+    read legacy_PSFDEPTH_Z
+    read legacy_GALDEPTH_G
+    read legacy_GALDEPTH_R
+    read legacy_GALDEPTH_I
+    read legacy_GALDEPTH_Z
+    read legacy_NOBS_G
+    read legacy_NOBS_R
+    read legacy_NOBS_I
+    read legacy_NOBS_Z
+    read legacy_EBV
+  17 targets, 103741 samples ready.
+Train: 93367, Val: 10374
+Model: ResNet18 -> 17 targets
+  Total params:     11,188,369
+  Trainable params: 11,188,369
+  Model size:       42.7 MB (float32)
+  GPU: NVIDIA L40S
+  GPU memory: 44.4 GB
+Epoch 1/50  train_loss=0.86097  val_loss=0.98289  avg_r2=0.0367  lr=9.99e-04

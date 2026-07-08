@@ -112,12 +112,12 @@ def main():
     p.add_argument(
         "--hsc-dir",
         type=Path,
-        default=Path("/work1/jeroenaudenaert/pablomer/data/hsc_downstream"),
+        default=Path("/home/pablomer/orcd/scratch/hsc_downstream"),
     )
     p.add_argument(
         "--legacy-dir",
         type=Path,
-        default=Path("/work1/jeroenaudenaert/pablomer/data/legacy_downstream_quick"),
+        default=Path("/home/pablomer/orcd/scratch/legacy_downstream_full/full_1M"),
     )
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--max-per-subset", type=int, default=16000)

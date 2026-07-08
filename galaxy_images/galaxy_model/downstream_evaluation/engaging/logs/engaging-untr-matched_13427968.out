@@ -1,0 +1,151 @@
+Device: cuda
+encoder_1 output (1, 4, 16) -> flat (1, 64)
+encoder_2 output (1, 4, 16) -> flat (1, 64)
+Subsets: overlap=5469  (hsc_only / legacy_only intentionally skipped)
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/untrained-resnet-matched.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/untrained-resnet-matched.h5
+  checkpoint_name=untrained-resnet-matched  arch=random_resnet18_matched  has_e2=True
+  [physics] desi_z :: combined_e1  (n=4666)
+  [physics] provabgs_logmstar :: combined_e1  (n=4666)
+  [physics] provabgs_tage_mw :: combined_e1  (n=4666)
+  [physics] provabgs_avg_sfr :: combined_e1  (n=4666)
+  [physics] provabgs_z_mw :: combined_e1  (n=4666)
+  [physics] ssfr :: combined_e1  (n=4666)
+  [physics] desi_z :: combined_e2  (n=4666)
+  [physics] provabgs_logmstar :: combined_e2  (n=4666)
+  [physics] provabgs_tage_mw :: combined_e2  (n=4666)
+  [physics] provabgs_avg_sfr :: combined_e2  (n=4666)
+  [physics] provabgs_z_mw :: combined_e2  (n=4666)
+  [physics] ssfr :: combined_e2  (n=4666)
+  [hsc-inst] a_g :: combined_e1  (n=5469)
+  [hsc-inst] a_r :: combined_e1  (n=5469)
+  [hsc-inst] a_i :: combined_e1  (n=5469)
+  [hsc-inst] a_z :: combined_e1  (n=5469)
+  [hsc-inst] a_y :: combined_e1  (n=5469)
+  [hsc-inst] g_variance_value :: combined_e1  (n=1227)
+  [hsc-inst] r_variance_value :: combined_e1  (n=1181)
+  [hsc-inst] i_variance_value :: combined_e1  (n=1377)
+  [hsc-inst] z_variance_value :: combined_e1  (n=1706)
+  [hsc-inst] psf_fwhm_g :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_r :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_i :: combined_e1  (n=5469)
+  [hsc-inst] psf_fwhm_z :: combined_e1  (n=5469)
+  [hsc-inst] a_g :: combined_e2  (n=5469)
+  [hsc-inst] a_r :: combined_e2  (n=5469)
+  [hsc-inst] a_i :: combined_e2  (n=5469)
+  [hsc-inst] a_z :: combined_e2  (n=5469)
+  [hsc-inst] a_y :: combined_e2  (n=5469)
+  [hsc-inst] g_variance_value :: combined_e2  (n=1227)
+  [hsc-inst] r_variance_value :: combined_e2  (n=1181)
+  [hsc-inst] i_variance_value :: combined_e2  (n=1377)
+  [hsc-inst] z_variance_value :: combined_e2  (n=1706)
+  [hsc-inst] psf_fwhm_g :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_r :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_i :: combined_e2  (n=5469)
+  [hsc-inst] psf_fwhm_z :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_G :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_R :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_I :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_Z :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_G :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_R :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_I :: combined_e1  (n=5469)
+  [legacy-inst] PSFDEPTH_Z :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_G :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_R :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_I :: combined_e1  (n=5469)
+  [legacy-inst] GALDEPTH_Z :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_G :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_R :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_I :: combined_e1  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_Z :: combined_e1  (n=5469)
+  [legacy-inst] EBV :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_G :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_R :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_I :: combined_e1  (n=5469)
+  [legacy-inst] NOBS_Z :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_g :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_r :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_i :: combined_e1  (n=5469)
+  [legacy-inst] psf_fwhm_z :: combined_e1  (n=5469)
+  [legacy-inst] PSFSIZE_G :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_R :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_I :: combined_e2  (n=5469)
+  [legacy-inst] PSFSIZE_Z :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_G :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_R :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_I :: combined_e2  (n=5469)
+  [legacy-inst] PSFDEPTH_Z :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_G :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_R :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_I :: combined_e2  (n=5469)
+  [legacy-inst] GALDEPTH_Z :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_G :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_R :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_I :: combined_e2  (n=5469)
+  [legacy-inst] MW_TRANSMISSION_Z :: combined_e2  (n=5469)
+  [legacy-inst] EBV :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_G :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_R :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_I :: combined_e2  (n=5469)
+  [legacy-inst] NOBS_Z :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_g :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_r :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_i :: combined_e2  (n=5469)
+  [legacy-inst] psf_fwhm_z :: combined_e2  (n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_untrained-resnet-matched.csv  (88 rows)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/untrained_resnet_matched_compare.csv  (44 rows)
+      task_family            target latent_variant score_metric  score_512dim  score_matched  delta
+   instrument_hsc  g_variance_value    combined_e1           r2         0.494          0.591  0.097
+   instrument_hsc  i_variance_value    combined_e1           r2         0.472          0.541  0.069
+   instrument_hsc        psf_fwhm_z    combined_e1           r2         0.098          0.107  0.009
+   instrument_hsc        psf_fwhm_i    combined_e1           r2         0.064          0.043 -0.021
+   instrument_hsc               a_g    combined_e1           r2         0.052          0.212  0.161
+   instrument_hsc               a_r    combined_e1           r2         0.052          0.212  0.161
+   instrument_hsc               a_i    combined_e1           r2         0.052          0.212  0.161
+   instrument_hsc               a_z    combined_e1           r2         0.052          0.212  0.161
+   instrument_hsc               a_y    combined_e1           r2         0.052          0.212  0.161
+   instrument_hsc        psf_fwhm_g    combined_e1           r2         0.015          0.017  0.002
+   instrument_hsc        psf_fwhm_r    combined_e1           r2         0.001          0.008  0.008
+   instrument_hsc  r_variance_value    combined_e1           r2        -0.003          0.470  0.473
+   instrument_hsc  z_variance_value    combined_e1           r2        -0.032          0.534  0.565
+instrument_legacy        GALDEPTH_Z    combined_e1           r2         0.397          0.392 -0.005
+instrument_legacy        PSFDEPTH_Z    combined_e1           r2         0.364          0.346 -0.019
+instrument_legacy        GALDEPTH_R    combined_e1           r2         0.310          0.403  0.093
+instrument_legacy        PSFDEPTH_R    combined_e1           r2         0.265          0.381  0.117
+instrument_legacy         PSFSIZE_Z    combined_e1           r2         0.196          0.260  0.064
+instrument_legacy        psf_fwhm_z    combined_e1           r2         0.196          0.260  0.064
+instrument_legacy        PSFDEPTH_I    combined_e1           r2         0.141          0.266  0.125
+instrument_legacy        GALDEPTH_I    combined_e1           r2         0.130          0.254  0.124
+instrument_legacy         PSFSIZE_R    combined_e1           r2         0.088          0.111  0.023
+instrument_legacy        psf_fwhm_r    combined_e1           r2         0.088          0.111  0.023
+instrument_legacy            NOBS_R    combined_e1           r2         0.066          0.100  0.034
+instrument_legacy               EBV    combined_e1           r2         0.052          0.212  0.161
+instrument_legacy            NOBS_Z    combined_e1           r2         0.046          0.048  0.002
+instrument_legacy         PSFSIZE_G    combined_e1           r2         0.039          0.128  0.089
+instrument_legacy        psf_fwhm_g    combined_e1           r2         0.039          0.128  0.089
+instrument_legacy MW_TRANSMISSION_G    combined_e1           r2         0.036          0.260  0.224
+instrument_legacy MW_TRANSMISSION_I    combined_e1           r2         0.036          0.268  0.232
+instrument_legacy MW_TRANSMISSION_R    combined_e1           r2         0.036          0.265  0.230
+instrument_legacy MW_TRANSMISSION_Z    combined_e1           r2         0.035          0.268  0.232
+instrument_legacy        PSFDEPTH_G    combined_e1           r2         0.025          0.100  0.075
+instrument_legacy        GALDEPTH_G    combined_e1           r2         0.010          0.160  0.150
+instrument_legacy         PSFSIZE_I    combined_e1           r2        -0.000          0.141  0.141
+instrument_legacy        psf_fwhm_i    combined_e1           r2        -0.000          0.141  0.141
+instrument_legacy            NOBS_I    combined_e1           r2        -0.001          0.203  0.204
+instrument_legacy            NOBS_G    combined_e1           r2        -0.022          0.128  0.150
+ physics_provabgs            desi_z    combined_e1           r2         0.651          0.564 -0.087
+ physics_provabgs provabgs_logmstar    combined_e1           r2         0.647          0.576 -0.071
+ physics_provabgs              ssfr    combined_e1           r2         0.369          0.363 -0.006
+ physics_provabgs  provabgs_tage_mw    combined_e1           r2         0.100          0.093 -0.007
+ physics_provabgs     provabgs_z_mw    combined_e1           r2         0.079          0.057 -0.021
+ physics_provabgs  provabgs_avg_sfr    combined_e1           r2         0.063          0.050 -0.013
+Done at Wed May  6 10:29:37 EDT 2026
