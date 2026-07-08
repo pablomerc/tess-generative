@@ -81,7 +81,7 @@ def _load_source(src, top_n):
 
 def build_figure(top_n=12, n_cols_per=3,
                  img_size=1.30, group_gap=0.30,
-                 hspace=0.04, wspace=0.04, header_pad=0.32):
+                 hspace=0.04, wspace=0.04, header_pad=0.44):
     """Construct the figure (style-agnostic). Caller controls plt.style."""
     n_rows = top_n // n_cols_per
     n_groups = len(SOURCES)
@@ -151,7 +151,7 @@ def build_figure(top_n=12, n_cols_per=3,
             x_mid, title_y,
             src["label"],
             ha="center", va="top",
-            fontsize=13, fontweight="bold",
+            fontsize=17, fontweight="bold",
         )
 
     return fig

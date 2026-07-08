@@ -194,10 +194,13 @@ def draw_group_headers(fig, axes_row):
     fig.add_artist(line_out)
 
 
-def plot_row(ax_row, idx, target, samegal, sameins_stack, samples, mean_sample, metadata, vmin, vmax):
+def plot_row(ax_row, idx, target, samegal, sameins_stack, samples, mean_sample, metadata, vmin, vmax, row_num=None):
     """
     Helper to plot a single row.
     New Order: SameGal | SameIns | Target | Sample 1 | Sample 2 | Mean
+
+    If `row_num` is provided, it is prefixed to the row label as `#NN  …` so rows can be
+    referenced by index from the rendered figure.
     """
 
     # Determine Labels based on Metadata
@@ -265,17 +268,26 @@ def plot_row(ax_row, idx, target, samegal, sameins_stack, samples, mean_sample, 
     add_highlight(ax_row[5], COLOR_OUTPUT, Z_BLUE)
 
     # Add row label on the far left with "->" arrow notation
-    row_desc = f"{input_label} $\\to$ {target_label}"
+    prefix = f"#{row_num:02d}    " if row_num is not None else ""
+    row_desc = f"{prefix}{input_label} $\\to$ {target_label}"
     ax_row[0].text(-0.25, 0.5, row_desc,
                      transform=ax_row[0].transAxes,
                      ha='right', va='center', fontsize=11, weight='bold')
 
-def plot_examples(indices, targets, samegals, sameins, samples, mean_samples, metadata, output_path):
+def plot_examples(indices, targets, samegals, sameins, samples, mean_samples, metadata, output_path, row_numbers=None):
     """
     Plot reconstruction for one or more examples.
+
+    If `row_numbers` is provided (list of ints, same length as `indices`), each row's label
+    is prefixed with `#NN` so the figure is self-indexing.
     """
     num_cols = 6
     num_rows = len(indices)
+
+    if row_numbers is not None and len(row_numbers) != num_rows:
+        raise ValueError(
+            f"row_numbers length ({len(row_numbers)}) must match indices length ({num_rows})"
+        )
 
     # Tighter vertical height
     row_height = 2.1
@@ -297,7 +309,8 @@ def plot_examples(indices, targets, samegals, sameins, samples, mean_samples, me
         vmin = target_chw.amin(dim=(1, 2))
         vmax = target_chw.amax(dim=(1, 2))
 
-        plot_row(axes[i], idx, target, samegal, sameins_stack, current_samples, mean_sample, metadata[idx], vmin, vmax)
+        rn = row_numbers[i] if row_numbers is not None else None
+        plot_row(axes[i], idx, target, samegal, sameins_stack, current_samples, mean_sample, metadata[idx], vmin, vmax, row_num=rn)
 
     # Recalculate top fraction
     top_frac = 1.0 - (header_space / total_height)
