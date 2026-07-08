@@ -62,10 +62,16 @@ class ResNetEncoder(nn.Module):
         pretrained: bool = False,
         mean_pool: bool = False,
         stride_overrides: Optional[dict] = None,
+        global_conv: bool = False,
+        global_conv_kernel: Optional[int] = None,
     ):
         super().__init__()
 
+        if mean_pool and global_conv:
+            raise ValueError("mean_pool and global_conv cannot both be True")
+
         self.mean_pool = mean_pool
+        self.global_conv = global_conv
         self.backbone = timm.create_model(
             'resnet18',
             pretrained=pretrained,
@@ -89,6 +95,12 @@ class ResNetEncoder(nn.Module):
 
         if mean_pool:
             self.proj = nn.Linear(512, cross_attention_dim)
+        elif global_conv:
+            # The 2x2 conv consumes the entire layer4 spatial map at once,
+            # producing a single (B, cross_attention_dim, 1, 1) output that
+            # gets flattened to (B, 1, cross_attention_dim).
+            kernel = global_conv_kernel if global_conv_kernel is not None else 2
+            self.proj = nn.Conv2d(512, cross_attention_dim, kernel_size=kernel)
         else:
             self.proj = nn.Conv2d(512, cross_attention_dim, kernel_size=1)
 
@@ -171,6 +183,9 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         encoder_stride_overrides: Optional[dict] = None, # back-compat: applied to BOTH encoders unless per-encoder overrides are set
         encoder_1_stride_overrides: Optional[dict] = None, # only patches the physics (samegal) encoder
         encoder_2_stride_overrides: Optional[dict] = None, # only patches the instrument (sameins) encoder
+        instrument_flatten_to_one_token: bool = False, # V1: flatten encoder_2 output (B, S, instrument_zdim) -> (B, 1, S*instrument_zdim) and skip ins_proj
+        encoder_2_global_conv: bool = False, # V2/V3: encoder_2 uses a 2x2 conv as its final proj -> (B, 1, cross_attention_dim) directly
+        instrument_as_class_conditioning: bool = False, # V3: route the (masked-mean over k) instrument vector to UNet class_labels instead of cross-attn
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -226,7 +241,11 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 pretrained=pretrained_encoder,
                 mean_pool=pooled_conditioning,
                 stride_overrides=enc2_overrides,
+                global_conv=encoder_2_global_conv,
             )
+
+            self.instrument_flatten_to_one_token = instrument_flatten_to_one_token
+            self.instrument_as_class_conditioning = instrument_as_class_conditioning
 
             if all_attention:
                 down_block_types = (
@@ -255,10 +274,25 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                     "UpBlock2D",
                 )
 
-            if self.instrument_zdim != cross_attention_dim:
+            # ins_proj bridges instrument_zdim -> cross_attention_dim per-token.
+            # Skip it for V1 (instrument_flatten_to_one_token): the flatten path
+            # collapses (S, instrument_zdim) -> (1, S*instrument_zdim) and we
+            # require S * instrument_zdim == cross_attention_dim instead.
+            if instrument_flatten_to_one_token:
+                self.ins_proj = None  # forward will assert the shape match at runtime
+            elif self.instrument_zdim != cross_attention_dim:
                 self.ins_proj = nn.Linear(self.instrument_zdim, cross_attention_dim)
             else:
                 self.ins_proj = None
+
+            unet_extra_kwargs = {}
+            if instrument_as_class_conditioning:
+                # Route the per-batch (masked-mean over k) instrument vector to the
+                # UNet's class embedding instead of cross-attention.
+                unet_extra_kwargs["class_embed_type"] = "projection"
+                unet_extra_kwargs["projection_class_embeddings_input_dim"] = (
+                    self.instrument_zdim
+                )
 
             self.velocity_model = UNet2DConditionModel(
                 sample_size=image_size,
@@ -270,6 +304,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 up_block_types=up_block_types,
                 cross_attention_dim=cross_attention_dim,
                 attention_head_dim=attention_head_dim,
+                **unet_extra_kwargs,
             )
 
         # Initialize geometric loss function once (reused across all training steps)
@@ -310,10 +345,37 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         cond_image_sameins_flat = cond_image_sameins.flatten(0, 1)          # (B*k, C, H, W)
         cond_ins_embedding_flat = self.encoder_2(cond_image_sameins_flat)   # (B*k, seq_len, embed_dim)
 
-        if self.ins_proj is not None:
+        if self.instrument_flatten_to_one_token:
+            # V1: collapse (B*k, S, instrument_zdim) -> (B*k, 1, S*instrument_zdim).
+            # Requires S * instrument_zdim == cross_attention_dim.
+            bk, S, D = cond_ins_embedding_flat.shape
+            target_dim = self.hparams.cross_attention_dim
+            if S * D != target_dim:
+                raise ValueError(
+                    f"instrument_flatten_to_one_token requires S * instrument_zdim "
+                    f"== cross_attention_dim, got S={S} D={D} cross_attention_dim={target_dim}"
+                )
+            cond_ins_embedding_flat = cond_ins_embedding_flat.reshape(bk, 1, target_dim)
+        elif self.ins_proj is not None:
             cond_ins_embedding_flat = self.ins_proj(cond_ins_embedding_flat)
 
         cond_ins_embedding = cond_ins_embedding_flat.unflatten(0, (B, k))    # (B, k, seq_len, embed_dim)
+
+        if self.instrument_as_class_conditioning:
+            # V3: masked-mean over k neighbors -> (B, instrument_zdim) used as class_labels.
+            # encoder_2 is expected to produce a single token per neighbor (e.g. via
+            # encoder_2_global_conv=True), so seq_len here is 1.
+            ins_per_neighbor = cond_ins_embedding.squeeze(2)  # (B, k, instrument_zdim)
+            mask_f = masks.to(ins_per_neighbor.dtype).unsqueeze(-1)
+            denom = mask_f.sum(dim=1).clamp_min(1.0)
+            class_vec = (ins_per_neighbor * mask_f).sum(dim=1) / denom  # (B, instrument_zdim)
+
+            return self.velocity_model(
+                x_t,
+                timesteps,
+                encoder_hidden_states=cond_gal_embedding,
+                class_labels=class_vec,
+            ).sample
 
         # Zero out embeddings for padded neighbors before concatenation
         mask_expanded = masks.view(B, k, 1, 1).to(cond_ins_embedding.dtype)

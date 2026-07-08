@@ -1,0 +1,79 @@
+{
+  "run": {
+    "variant": "neighbors_base_ins_flatten",
+    "output_dir": "galaxy_images/galaxy_model/outputs",
+    "shared_checkpoint_dir": "galaxy_images/galaxy_model/checkpoints"
+  },
+  "data": {
+    "mode": "efficient",
+    "efficient_data_dir": "/work1/jeroenaudenaert/pablomer/data/neighbors_efficient",
+    "precomputed_h5": "/work1/jeroenaudenaert/pablomer/data/train_neighbors.vds",
+    "neighbors_h5": "/work1/jeroenaudenaert/pablomer/data/neighbours_v2.h5",
+    "max_neighbors": 5,
+    "val_ratio": 0.05,
+    "batch_size": 64,
+    "num_workers": 4,
+    "pin_memory": true,
+    "drop_last_train": true,
+    "save_heldout_validation": false,
+    "heldout_validation_dir": "/work1/jeroenaudenaert/pablomer/data/heldout_validation",
+    "heldout_num_batches": 4,
+    "heldout_file_name": "neighbors_efficient_base_ins_flatten_heldout_val_seed42.h5"
+  },
+  "model": {
+    "in_channels": 4,
+    "cond_channels": 4,
+    "image_size": 48,
+    "model_channels": 128,
+    "channel_mult": [1, 2, 4, 4],
+    "layers_per_block": 2,
+    "attention_head_dim": 8,
+    "cross_attention_dim": 16,
+    "pretrained_encoder": false,
+    "concat_conditioning": false,
+    "instrument_zdim": 4,
+    "instrument_flatten_to_one_token": true,
+    "lr": 0.0001,
+    "num_sample_images": 10,
+    "num_mse_images": 32,
+    "num_integration_steps": 250,
+    "lambda_generative": 1.0,
+    "lambda_geometric": 0.0,
+    "num_umap_batches": 8,
+    "mask_center": false,
+    "all_attention": true,
+    "figures_dir": null
+  },
+  "trainer": {
+    "seed": 42,
+    "num_steps": 1500000,
+    "devices": 4,
+    "accelerator": "auto",
+    "strategy": "ddp_find_unused_parameters_true",
+    "precision": "bf16-mixed",
+    "h100_precision": "bf16-mixed",
+    "h100_batch_size": 64,
+    "auto_adjust_for_h100": true,
+    "scale_steps_by_devices": true,
+    "val_check_interval": 1000,
+    "log_every_n_steps": 10,
+    "num_sanity_val_steps": 0,
+    "monitor_metric": "val/loss",
+    "checkpoint_every_n_train_steps": 1000
+  },
+  "lens_val": {
+    "enabled": true,
+    "lens_h5": "/work1/jeroenaudenaert/pablomer/tess-generative/galaxy_images/galaxy_model/lense_reconstruction/lens_reconstruction_dataset.h5",
+    "lens_indices_zero_based": [4, 7, 11, 17, 19, 28, 31, 32],
+    "exclude_from_train": true,
+    "every_n_validations": 5,
+    "num_integration_steps": 100,
+    "num_samples_per_cond": 5
+  },
+  "wandb": {
+    "enabled": true,
+    "project": "galaxy-flow-matching-neighbours",
+    "name": "base_ins_flatten",
+    "log_model": false
+  }
+}

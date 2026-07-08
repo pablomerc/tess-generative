@@ -61,6 +61,9 @@ class ModelConfig:
     encoder_stride_overrides: Optional[Dict[str, int]] = None
     encoder_1_stride_overrides: Optional[Dict[str, int]] = None
     encoder_2_stride_overrides: Optional[Dict[str, int]] = None
+    instrument_flatten_to_one_token: bool = False
+    encoder_2_global_conv: bool = False
+    instrument_as_class_conditioning: bool = False
 
 
 @dataclass

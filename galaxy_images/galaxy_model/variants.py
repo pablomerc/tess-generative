@@ -72,6 +72,46 @@ VARIANTS: Dict[str, VariantSpec] = {
             "encoder_2_stride_overrides": None,
         },
     ),
+    "neighbors_base_ins4x4": VariantSpec(
+        name="neighbors_base_ins4x4",
+        description="Same encoder spatial layout as `base` (2x2 -> 4 tokens) but the instrument encoder bottleneck is reduced to 4-d (instrument_zdim=4). An auto-inserted ins_proj (4 -> cross_attention_dim) keeps the UNet cross-attn dim consistent.",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "instrument_zdim": 4,
+        },
+    ),
+    "neighbors_base_ins_flatten": VariantSpec(
+        name="neighbors_base_ins_flatten",
+        description="Instrument encoder yields (B, 4, 4); flatten the 4 tokens of 4-d into a single (B, 1, 16) token per neighbor (no ins_proj). 1 instrument token per neighbor, dim 16.",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "instrument_zdim": 4,
+            "instrument_flatten_to_one_token": True,
+        },
+    ),
+    "neighbors_base_ins_globalconv": VariantSpec(
+        name="neighbors_base_ins_globalconv",
+        description="Instrument encoder uses a 2x2 conv (16 channels) on layer4 instead of the 1x1 per-token proj, producing a single (B, 1, 16) global-features token per neighbor.",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "instrument_zdim": 16,
+            "encoder_2_global_conv": True,
+        },
+    ),
+    "neighbors_base_ins_classcond": VariantSpec(
+        name="neighbors_base_ins_classcond",
+        description="Same encoder_2 as base_ins_globalconv (1x16 per neighbor via 2x2 conv); per-batch masked-mean across k neighbors gives a single 16-d vector that is fed to the UNet as class conditioning (added to time embedding) instead of cross-attention. encoder_1 / cross-attn unchanged.",
+        model_cls=ConditionalFlowMatchingModule,
+        model_overrides={
+            "all_attention": True,
+            "instrument_zdim": 16,
+            "encoder_2_global_conv": True,
+            "instrument_as_class_conditioning": True,
+        },
+    ),
 }
 
 
