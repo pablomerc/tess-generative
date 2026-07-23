@@ -29,6 +29,12 @@ os.environ.setdefault("NUMBA_CACHE_DIR", "/tmp/numba_cache")
 
 import pytorch_lightning as pl
 import torch
+# ROCm/AMD MI-series: prefer rocBLAS over the buggy hipBLASLt. Guarded -> no-op on NVIDIA/CUDA.
+try:
+    if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "preferred_blas_library"):
+        torch.backends.cuda.preferred_blas_library("hipblas")
+except Exception:
+    pass
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
@@ -139,8 +145,12 @@ def main(argv=None):
         logger = WandbLogger(
             project=args.wandb_project,
             name=run_name,
-            version=run_name,  # stable run id -> resume="allow" continues it
-            resume="allow" if args.resume_from is not None else "never",
+            version=run_name,  # stable run id -> resume continues the same run
+            # Always "allow": create the run if new, resume it if the id already exists.
+            # "never" errors out if the id exists (e.g. same run_name on a shared wandb entity,
+            # or a chained/auto-resubmitted segment) — brittle for a resumable run. "allow" is
+            # idempotent and is what the SLURM resume chain needs.
+            resume="allow",
             log_model=False,
             config=vars(args),
         )

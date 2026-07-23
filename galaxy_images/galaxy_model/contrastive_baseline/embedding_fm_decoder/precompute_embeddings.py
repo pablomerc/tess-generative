@@ -42,6 +42,14 @@ from pathlib import Path
 import h5py
 import numpy as np
 import torch
+# ROCm/AMD MI-series: prefer rocBLAS over the buggy hipBLASLt (HIPBLAS_STATUS_INVALID_VALUE on
+# certain shapes). Guarded so it stays a harmless no-op on NVIDIA/CUDA (Engaging). Pair with
+# TORCH_BLAS_PREFER_HIPBLASLT=0 in the launch env.
+try:
+    if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "preferred_blas_library"):
+        torch.backends.cuda.preferred_blas_library("hipblas")
+except Exception:
+    pass
 from torch.utils.data import DataLoader, Subset
 
 # Make the repo importable when run as a plain script.
