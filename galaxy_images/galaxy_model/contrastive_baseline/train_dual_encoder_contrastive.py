@@ -52,9 +52,15 @@ LR = 1e-4
 EMBEDDING_DIM = 64
 PROJECTION_DIM = 32
 PROJECTION_HIDDEN_DIM = 64
+IMAGE_SIZE = 48
+
+# Encoder pooling variant: "avg" (global average pool, original) or "conv1x1"
+# (1x1 conv keeping spatial tokens, mirrors double_train_fm_neighbors.py).
+# Select at launch, e.g. `ENCODER_POOL=conv1x1 python train_dual_encoder_contrastive.py`.
+ENCODER_POOL = os.environ.get("ENCODER_POOL", "avg")
 
 WANDB_PROJECT = "galaxy-contrastive-neighbours-baseline"
-RUN_NAME = "dual-encoder-contrastive-resnet18"
+RUN_NAME = f"dual-encoder-contrastive-resnet18-{ENCODER_POOL}"
 CHECKPOINT_DIR = "/work1/jeroenaudenaert/pablomer/outputs/contrastive_baseline"
 
 
@@ -166,6 +172,8 @@ def main():
         projection_dim=PROJECTION_DIM,
         projection_hidden_dim=PROJECTION_HIDDEN_DIM,
         pretrained_encoder=False,
+        encoder_pool=ENCODER_POOL,
+        image_size=IMAGE_SIZE,
         temperature_galaxy=0.1,
         temperature_instrument=0.1,
         lambda_galaxy=1.0,
@@ -185,6 +193,7 @@ def main():
         config={
             "batch_size": batch_size,
             "precision": precision_setting,
+            "encoder_pool": ENCODER_POOL,
             "val_type": VAL_TYPE,
             "dataset": PRECOMPUTED_H5 if VAL_TYPE == "random_batches" else TRAIN_SHARDS_VDS,
             "val_ratio": VAL_RATIO if VAL_TYPE == "random_batches" else None,

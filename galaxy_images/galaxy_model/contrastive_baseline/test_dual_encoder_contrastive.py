@@ -20,13 +20,15 @@ TEST_PRECOMPUTED_H5 = Path(
 )
 
 
-def _make_model() -> DualEncoderContrastiveModule:
+def _make_model(encoder_pool: str = "avg") -> DualEncoderContrastiveModule:
     return DualEncoderContrastiveModule(
         in_channels=4,
         embedding_dim=32,
         projection_dim=16,
         projection_hidden_dim=32,
         pretrained_encoder=False,
+        encoder_pool=encoder_pool,
+        image_size=48,
         temperature_galaxy=0.1,
         temperature_instrument=0.1,
         lambda_galaxy=1.0,
@@ -36,9 +38,9 @@ def _make_model() -> DualEncoderContrastiveModule:
     )
 
 
-def test_compute_losses_synthetic_batch_backward():
+def _run_synthetic_batch(encoder_pool: str):
     torch.manual_seed(0)
-    model = _make_model()
+    model = _make_model(encoder_pool=encoder_pool)
     model.train()
 
     b, c, h, w = 3, 4, 48, 48
@@ -67,6 +69,23 @@ def test_compute_losses_synthetic_batch_backward():
     loss.backward()
     has_grad = any(p.grad is not None for p in model.parameters() if p.requires_grad)
     assert has_grad
+    return model
+
+
+def test_compute_losses_synthetic_batch_backward():
+    _run_synthetic_batch("avg")
+
+
+def test_compute_losses_synthetic_batch_backward_conv1x1():
+    # "conv1x1" keeps spatial tokens (mirrors double_train_fm_neighbors.py) via a 1x1
+    # conv rather than global pooling. By default token_dim = embedding_dim // (H'*W'),
+    # so the flattened output width equals embedding_dim (dim-matched to "avg").
+    import torch.nn as nn
+    model = _run_synthetic_batch("conv1x1")
+    assert isinstance(model.encoder_galaxy.proj, nn.Conv2d)          # not global-pool + Linear
+    assert model.encoder_galaxy.out_dim == 32                        # == embedding_dim
+    assert model.encoder_galaxy.out_dim == model.head_galaxy.net[0].in_features
+    assert model.encoder_galaxy.proj.out_channels < 32              # token_dim < embedding_dim (spatial preserved)
 
 
 def test_real_dataset_batch_shapes_and_loss():

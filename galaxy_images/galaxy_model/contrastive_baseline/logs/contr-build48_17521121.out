@@ -1,0 +1,26 @@
+[build] 468197 rows -> /orcd/pool/007/pablomer/efficient_neighs_48
+[build] 20480/468197  (341 rows/s, ETA 21.9 min)
+[build] 40960/468197  (424 rows/s, ETA 16.8 min)
+[build] 61440/468197  (498 rows/s, ETA 13.6 min)
+[build] 81920/468197  (550 rows/s, ETA 11.7 min)
+[build] 102400/468197  (583 rows/s, ETA 10.5 min)
+[build] 122880/468197  (610 rows/s, ETA 9.4 min)
+[build] 143360/468197  (634 rows/s, ETA 8.5 min)
+[build] 163840/468197  (654 rows/s, ETA 7.8 min)
+[build] 184320/468197  (671 rows/s, ETA 7.0 min)
+[build] 204800/468197  (685 rows/s, ETA 6.4 min)
+[build] 225280/468197  (699 rows/s, ETA 5.8 min)
+[build] 245760/468197  (705 rows/s, ETA 5.3 min)
+[build] 266240/468197  (712 rows/s, ETA 4.7 min)
+[build] 286720/468197  (711 rows/s, ETA 4.3 min)
+[build] 307200/468197  (718 rows/s, ETA 3.7 min)
+[build] 327680/468197  (717 rows/s, ETA 3.3 min)
+[build] 348160/468197  (725 rows/s, ETA 2.8 min)
+[build] 368640/468197  (733 rows/s, ETA 2.3 min)
+[build] 389120/468197  (739 rows/s, ETA 1.8 min)
+[build] 409600/468197  (745 rows/s, ETA 1.3 min)
+[build] 430080/468197  (748 rows/s, ETA 0.8 min)
+[build] 450560/468197  (772 rows/s, ETA 0.4 min)
+[build] DONE 468197 rows in 9.8 min
+BUILD_RAM48_OK
+BUILD_SLURM_DONE

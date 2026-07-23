@@ -9,10 +9,42 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 class ResNetEncoder(nn.Module):
-    """ResNet18 image encoder returning one vector per image."""
+    """ResNet18 image encoder returning one flat vector per image.
 
-    def __init__(self, in_channels: int = 4, embedding_dim: int = 256, pretrained: bool = False):
+    ``pool`` selects how the final (B, 512, H', W') feature map is collapsed into
+    the per-image embedding used by both the contrastive loss and downstream probes:
+
+      - "avg":     global average pool over H'xW', then Linear(512 -> embedding_dim).
+                   Spatially invariant, so position/texture cues (e.g. PSF/blur) are
+                   discarded. This is the original baseline behavior.
+      - "conv1x1": 1x1 conv (512 -> token_dim) that keeps every spatial location as a
+                   token, then flatten -> (B, token_dim * H' * W'). Mirrors the encoder
+                   in double_train_fm_neighbors.py (nn.Conv2d(512, C, 1) with spatial
+                   tokens preserved), so spatial cues survive into the embedding.
+                   By default ``token_dim`` is chosen as embedding_dim // (H' * W') so
+                   the flattened output width equals ``embedding_dim`` -- i.e. the same
+                   latent size as the "avg" variant (a dim-matched ablation). Pass an
+                   explicit ``token_dim`` to override.
+
+    ``out_dim`` reports the resulting embedding width and is read by the parent module
+    to size the projection heads. With the defaults it is ``embedding_dim`` for both
+    pooling modes.
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 4,
+        embedding_dim: int = 256,
+        pretrained: bool = False,
+        pool: str = "avg",
+        token_dim: int = None,
+        image_size: int = 48,
+    ):
         super().__init__()
+        if pool not in ("avg", "conv1x1"):
+            raise ValueError(f"pool must be 'avg' or 'conv1x1', got {pool!r}")
+        self.pool = pool
+
         self.backbone = timm.create_model(
             "resnet18",
             pretrained=pretrained,
@@ -31,12 +63,45 @@ class ResNetEncoder(nn.Module):
                 bias=old_conv.bias is not None,
             )
 
-        self.proj = nn.Linear(512, embedding_dim)
+        if pool == "avg":
+            self.proj = nn.Linear(512, embedding_dim)
+        else:  # "conv1x1": keep spatial tokens, exactly like the main model's encoder.
+            # Probe the backbone's spatial output (H' x W') so that, by default, we can
+            # pick token_dim = embedding_dim // (H'*W') and have the flattened output
+            # land back on exactly embedding_dim (dim-matched to the "avg" variant).
+            was_training = self.training
+            self.eval()
+            with torch.no_grad():
+                probe = self.backbone(torch.zeros(1, in_channels, image_size, image_size))[0]
+            self.train(was_training)
+            spatial = probe.shape[2] * probe.shape[3]  # H' * W'
+            if token_dim is None:
+                if embedding_dim % spatial != 0:
+                    raise ValueError(
+                        f"conv1x1 default token_dim needs embedding_dim ({embedding_dim}) divisible by "
+                        f"the {probe.shape[2]}x{probe.shape[3]}={spatial} feature-map size; "
+                        f"pass encoder_token_dim explicitly."
+                    )
+                token_dim = embedding_dim // spatial
+            self.proj = nn.Conv2d(512, token_dim, kernel_size=1)
+
+        # Infer the output width from a dummy forward so the parent can size the
+        # projection heads and so checkpoints reload without shape surprises. Run in
+        # eval mode to avoid polluting BatchNorm running stats with the dummy input.
+        was_training = self.training
+        self.eval()
+        with torch.no_grad():
+            self.out_dim = self.forward(torch.zeros(1, in_channels, image_size, image_size)).shape[1]
+        self.train(was_training)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         feat = self.backbone(x)[0]  # (B, 512, H', W')
-        feat = feat.mean(dim=(2, 3))  # global average pool -> (B, 512)
-        feat = self.proj(feat)  # (B, embedding_dim)
+        if self.pool == "avg":
+            feat = feat.mean(dim=(2, 3))  # global average pool -> (B, 512)
+            feat = self.proj(feat)        # (B, embedding_dim)
+        else:  # "conv1x1"
+            feat = self.proj(feat)        # (B, token_dim, H', W')
+            feat = feat.flatten(1)        # (B, token_dim * H' * W')
         return feat
 
 
@@ -75,6 +140,9 @@ class DualEncoderContrastiveModule(pl.LightningModule):
         projection_dim: int = 64,
         projection_hidden_dim: int = 128,
         pretrained_encoder: bool = False,
+        encoder_pool: str = "avg",           # "avg" (global pool) or "conv1x1" (keep spatial tokens)
+        encoder_token_dim: int = None,       # conv1x1 per-location width; default embedding_dim//(H'*W') -> out_dim == embedding_dim
+        image_size: int = 48,                # input spatial size, used to size the conv1x1 flatten
         temperature_galaxy: float = 0.1,
         temperature_instrument: float = 0.1,
         lambda_galaxy: float = 1.0,
@@ -95,15 +163,23 @@ class DualEncoderContrastiveModule(pl.LightningModule):
             in_channels=in_channels,
             embedding_dim=embedding_dim,
             pretrained=pretrained_encoder,
+            pool=encoder_pool,
+            token_dim=encoder_token_dim,
+            image_size=image_size,
         )
         self.encoder_instrument = ResNetEncoder(
             in_channels=in_channels,
             embedding_dim=embedding_dim,
             pretrained=pretrained_encoder,
+            pool=encoder_pool,
+            token_dim=encoder_token_dim,
+            image_size=image_size,
         )
 
-        self.head_galaxy = ProjectionHead(embedding_dim, projection_hidden_dim, projection_dim)
-        self.head_instrument = ProjectionHead(embedding_dim, projection_hidden_dim, projection_dim)
+        # Heads consume the encoder output, whose width depends on the pooling mode
+        # ("avg" -> embedding_dim; "conv1x1" -> token_dim * H' * W').
+        self.head_galaxy = ProjectionHead(self.encoder_galaxy.out_dim, projection_hidden_dim, projection_dim)
+        self.head_instrument = ProjectionHead(self.encoder_instrument.out_dim, projection_hidden_dim, projection_dim)
 
     def _clip_style_loss(self, anchors: torch.Tensor, positives: torch.Tensor, temperature: float):
         """Symmetric in-batch InfoNCE where diagonal pairs are positives."""

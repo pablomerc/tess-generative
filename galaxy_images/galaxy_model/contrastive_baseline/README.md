@@ -45,13 +45,41 @@ Total loss:
   - Valid neighbors from other anchors are negatives.
   - `masks` are used to ignore padded neighbor slots.
 
+## Encoder pooling variants
+
+`ResNetEncoder` supports two ways of collapsing the ResNet18 `(B, 512, H', W')`
+feature map into the per-image embedding, selected by `encoder_pool`:
+
+- `"avg"` (default): global average pool over `H'×W'` then `Linear(512 → embedding_dim)`.
+  Spatially invariant, so position/texture cues (PSF/blur) are discarded.
+  Output width = `embedding_dim`.
+- `"conv1x1"`: `Conv2d(512 → token_dim, 1)` keeping every spatial location as a token,
+  then flatten. Mirrors the encoder in `double_train_fm_neighbors.py`
+  (`nn.Conv2d(512, cross_attention_dim, 1)` with spatial tokens preserved), so spatial
+  cues survive into the embedding. By default `token_dim = embedding_dim // (H'×W')`,
+  so the flattened output width **equals `embedding_dim`** — i.e. dim-matched to `avg`
+  (e.g. 48×48 → 2×2 map → `token_dim = 64/4 = 16` → 16×4 = 64-d). Override with
+  `encoder_token_dim` for a wider latent. `embedding_dim` must be divisible by `H'×W'`.
+
+The projection heads and all downstream code size themselves from
+`encoder.out_dim`, so both variants are drop-in. Existing `avg` checkpoints keep
+loading unchanged (missing hparams default to `avg`).
+
 ## Run
 
 From `tess-generative` root (or with equivalent `PYTHONPATH`):
 
 ```bash
+# Variant 1: average pooling (original)
 python galaxy_images/galaxy_model/contrastive_baseline/train_dual_encoder_contrastive.py
+
+# Variant 2: no pooling / 1x1-conv spatial tokens (main-model-consistent)
+ENCODER_POOL=conv1x1 python galaxy_images/galaxy_model/contrastive_baseline/train_dual_encoder_contrastive.py
 ```
+
+`ENCODER_POOL` feeds the run name and checkpoint directory
+(`dual-encoder-contrastive-resnet18-{avg,conv1x1}`), so the two runs never
+collide.
 
 ## Notes
 

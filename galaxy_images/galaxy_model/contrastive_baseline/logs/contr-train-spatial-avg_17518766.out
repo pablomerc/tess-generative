@@ -1,0 +1,22 @@
+[chain] attempt 1/15 for contrastive-spatial-avg (job 17518766)
+Submitted batch job 17518808
+[wandb] WANDB_MODE=online  WANDB_DIR=/orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-avg
+[ckpt] run directory: /orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-avg
+[cfg] encoder_pool=avg random_neighbors=False max_steps=100000 batch_size=64
+[NeighborsEfficientDataset] 103,741 anchors out of 468,197 total rows | crop_size=48 | max_neighbors=5 | random_neighbors=False
+[data] total=103,741  train=98,554  val=5,187
+┏━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name               ┃ Type           ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ encoder_galaxy     │ ResNetEncoder  │ 11.2 M │ train │     0 │
+│ 1 │ encoder_instrument │ ResNetEncoder  │ 11.2 M │ train │     0 │
+│ 2 │ head_galaxy        │ ProjectionHead │  6.2 K │ train │     0 │
+│ 3 │ head_instrument    │ ProjectionHead │  6.2 K │ train │     0 │
+└───┴────────────────────┴────────────────┴────────┴───────┴───────┘
+Trainable params: 22.4 M                                                        
+Non-trainable params: 0                                                         
+Total params: 22.4 M                                                            
+Total estimated model params size (MB): 89                                      
+Modules in train mode: 194                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
