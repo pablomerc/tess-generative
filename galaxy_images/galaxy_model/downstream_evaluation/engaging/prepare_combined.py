@@ -161,10 +161,21 @@ def _is_single_encoder(model) -> bool:
     return hasattr(model, "encoder") and not hasattr(model, "encoder_1")
 
 
+def _is_contrastive(model) -> bool:
+    # DualEncoderContrastiveModule: galaxy (physics) + instrument encoders.
+    return hasattr(model, "encoder_galaxy") and hasattr(model, "encoder_instrument")
+
+
 @torch.no_grad()
 def _embed_batch(model, imgs: torch.Tensor, has_e2: bool):
     """Return (e1, e2) for a batch. e2 is None if the model has only one encoder."""
-    if _is_hierarchical(model):
+    if _is_contrastive(model):
+        # e1 = physics/galaxy branch, e2 = instrument branch (raw encoder outputs,
+        # NOT the projection heads). Width auto-infers, so both the "avg" and
+        # "conv1x1" pooling variants flow through unchanged.
+        e1 = model.encoder_galaxy(imgs).flatten(start_dim=1)
+        e2 = model.encoder_instrument(imgs).flatten(start_dim=1)
+    elif _is_hierarchical(model):
         enc = model.encode_image(imgs)
         p = enc["physics"]
         e1 = torch.cat([p["global_vec"], p["spatial_flat"]], dim=1)   # global_concat
@@ -266,6 +277,7 @@ def main():
     model = _load_model(args.checkpoint, args.module, args.model_class, device)
     has_e2 = not _is_single_encoder(model)
     arch_tag = (
+        "contrastive" if _is_contrastive(model) else
         "hier" if _is_hierarchical(model) else
         ("single" if _is_single_encoder(model) else "base")
     )

@@ -7,6 +7,9 @@ from typing import Any, Dict, Type
 import pytorch_lightning as pl
 
 from galaxy_images.galaxy_model.double_train_fm_neighbors import ConditionalFlowMatchingModule
+from galaxy_images.galaxy_model.diffusion_ablation.double_train_ddpm_neighbors import (
+    ConditionalDDPMModule,
+)
 from galaxy_images.galaxy_model.hierarchical_attention.double_train_fm_neighbors_hier_global_ins import (
     HierarchicalGlobalInstrumentFlowMatchingModule,
 )
@@ -25,6 +28,12 @@ VARIANTS: Dict[str, VariantSpec] = {
         name="neighbors_all_attn",
         description="Double-encoder neighbors model with cross-attention in all UNet blocks.",
         model_cls=ConditionalFlowMatchingModule,
+        model_overrides={"all_attention": True},
+    ),
+    "neighbors_all_attn_ddpm": VariantSpec(
+        name="neighbors_all_attn_ddpm",
+        description="DDPM-objective ablation of neighbors_all_attn (identical arch/data, ε-prediction)",
+        model_cls=ConditionalDDPMModule,
         model_overrides={"all_attention": True},
     ),
     "neighbors_mixed_attn": VariantSpec(

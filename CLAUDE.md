@@ -10,7 +10,7 @@ Trains dual-encoder generative models that learn **physics** and **instrument** 
 
 **Active clusters: AMD (this one) and Engaging.** Development happens on both; they share the GitHub remote `git@github.com:pablomerc/tess-generative.git` and the working branch is `galaxy-engaging`.
 
-- **AMD** (this cluster, `/work1/jeroenaudenaert/pablomer/`): AMD MI210 GPUs plus an H100 partition. **Needs the hipBLASLt workaround** (see below).
+- **AMD** (this cluster, `/work1/jeroenaudenaert/pablomer/`): AMD GPUs only — MI210 (`mi2101x` 1×/12h, `mi2104x` 4×/24h), MI250 (`mi2508x` 8×/12h), MI300X/MI325X/MI350X 8-GPU nodes (`mi3008x`/`mi3258x`/`mi3508x`, 12h batch). No NVIDIA hardware here; H100/H200 are on Engaging. **Needs the hipBLASLt workaround** (see below).
 - **Engaging** (`/orcd/pool/007/pablomer/tess-generative`, alias `/home/pablomer/orcd/pool/tess-generative`): NVIDIA GPUs (CUDA). **Does not need the hipBLASLt workaround.**
 
 The old MIT/CSAIL cluster (`/data/vision/billf/scratch/pablomer/`) is **no longer in active use** — treat its hardcoded paths in older downstream scripts as legacy to parameterize before running anywhere. **Only the neighbors dataset is available on the AMD cluster.**
@@ -164,7 +164,7 @@ export TORCH_BLAS_PREFER_HIPBLASLT=0
 import torch
 torch.backends.cuda.preferred_blas_library("hipblas")
 ```
-Both are required (env var for new processes, Python call for the main process). If you see HIPBLAS errors, confirm both are present. The H100 partition is unaffected (config has `auto_adjust_for_h100: true`).
+Both are required (env var for new processes, Python call for the main process). If you see HIPBLAS errors, confirm both are present. (The `auto_adjust_for_h100` config flag is only relevant on NVIDIA clusters, i.e. Engaging — there are no H100s on the AMD cluster.)
 
 ---
 

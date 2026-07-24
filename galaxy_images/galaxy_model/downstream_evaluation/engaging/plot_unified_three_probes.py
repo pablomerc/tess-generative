@@ -213,7 +213,13 @@ def average_by_patterns(df: pd.DataFrame, numeric_cols: list[str]) -> pd.DataFra
     return df
 
 
-def build_table(arch: str, instr_source: str, phys_source: str = "flat") -> pd.DataFrame:
+def extra_column_names(label: str) -> tuple[str, str]:
+    """(physics_col, instrument_col) for an overlaid extra variant with `label`."""
+    return f"{label} (physics)", f"{label} (instr)"
+
+
+def build_table(arch: str, instr_source: str, phys_source: str = "flat",
+                extra_variants: list[tuple[str, str]] | None = None) -> pd.DataFrame:
     instr_variant = "base-meanpool" if instr_source == "pooled" else "base"
     phys_variant  = "base-meanpool" if phys_source  == "pooled" else "base"
     ours_phys   = _series_from_variant(phys_variant,                "combined_e1", "Ours (physics)",   arch)
@@ -237,10 +243,25 @@ def build_table(arch: str, instr_source: str, phys_source: str = "flat") -> pd.D
     else:
         out["Cross-predict"] = np.nan
 
+    # Overlay any extra variants (e.g. the contrastive baseline): a physics series
+    # from combined_e1 and an instrument series from combined_e2, one column each.
+    extra_cols: list[str] = []
+    for (variant, label) in (extra_variants or []):
+        phys_col, inst_col = extra_column_names(label)
+        ep = _series_from_variant(variant, "combined_e1", phys_col, arch)
+        ei = _series_from_variant(variant, "combined_e2", inst_col, arch)
+        if not ep.empty:
+            out = out.merge(ep, on="target", how="outer")
+            extra_cols.append(phys_col)
+        if not ei.empty:
+            out = out.merge(ei, on="target", how="outer")
+            extra_cols.append(inst_col)
+
     out = out[~out["target"].isin(EXCLUDE_TARGETS)].reset_index(drop=True)
 
     numeric_cols = [c for c in
-                    ["Ours (physics)", "Ours (instr)", "AION", "ResNet baseline", "Cross-predict"]
+                    (["Ours (physics)", "Ours (instr)", "AION", "ResNet baseline", "Cross-predict"]
+                     + extra_cols)
                     if c in out.columns]
     out = average_by_patterns(out, numeric_cols)
     out = out[~out["target"].isin(EXCLUDE_TARGETS)].reset_index(drop=True)
@@ -256,8 +277,26 @@ def build_table(arch: str, instr_source: str, phys_source: str = "flat") -> pd.D
     return out
 
 
+# Palette for overlaid extra series (distinct from the 5 built-in bar colors).
+EXTRA_PALETTE = ["#7D3C98", "#17A2A2", "#D4A017", "#C0392B",
+                 "#2C3E50", "#E67E22", "#1ABC9C", "#8E44AD"]
+
+
+def _extra_specs(extra_variants: list[tuple[str, str]] | None):
+    """Return render specs (col, legend, color, hatch) for overlaid variants."""
+    specs = []
+    ci = 0
+    for (_variant, label) in (extra_variants or []):
+        phys_col, inst_col = extra_column_names(label)
+        specs.append((phys_col, f"{label} (Physics)", EXTRA_PALETTE[ci % len(EXTRA_PALETTE)], False))
+        ci += 1
+        specs.append((inst_col, f"{label} (Instrument)", EXTRA_PALETTE[ci % len(EXTRA_PALETTE)], False))
+        ci += 1
+    return specs
+
+
 def render(df: pd.DataFrame, arch: str, instr_source: str, out_png: Path,
-           phys_source: str = "flat") -> Path:
+           phys_source: str = "flat", extra_specs: list | None = None) -> Path:
     out_png.parent.mkdir(parents=True, exist_ok=True)
     targets = df["target"].tolist()
     display_labels = [LABEL_MAPPING.get(t, t) for t in targets]
@@ -281,6 +320,7 @@ def render(df: pd.DataFrame, arch: str, instr_source: str, out_png: Path,
         ("ResNet baseline", "Rand. Init. ResNet Baseline",    None,      True),
         ("Cross-predict",   "Cross-predict",                  "#BF823B", False),
     ]
+    label_specs += (extra_specs or [])
     series = []
     for (col_name, label, color, hatch) in label_specs:
         if col_name not in df.columns:
@@ -459,9 +499,19 @@ def main():
     ap.add_argument("--suffix", default=None,
                     help="Override the output filename suffix (default derives "
                          "from mlp_arch/phys/instr).")
+    ap.add_argument("--extra-variant", action="append", default=[],
+                    help="Overlay an extra model as 'variant:label' — adds its "
+                         "physics (combined_e1) and instrument (combined_e2) series. "
+                         "Repeatable. Reads predict_<variant>__<arch>.csv.")
     args = ap.parse_args()
 
-    df = build_table(args.mlp_arch, args.instr_source, args.phys_source)
+    extra_variants = []
+    for spec in args.extra_variant:
+        variant, _, label = spec.partition(":")
+        extra_variants.append((variant, label or variant))
+
+    df = build_table(args.mlp_arch, args.instr_source, args.phys_source,
+                     extra_variants=extra_variants)
     if args.no_cross_predict and "Cross-predict" in df.columns:
         df = df.drop(columns=["Cross-predict"])
     suffix = args.suffix or f"{args.mlp_arch}_phys-{args.phys_source}_instr-{args.instr_source}"
@@ -471,7 +521,8 @@ def main():
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_csv, index=False)
-    render(df, args.mlp_arch, args.instr_source, out_png, phys_source=args.phys_source)
+    render(df, args.mlp_arch, args.instr_source, out_png, phys_source=args.phys_source,
+           extra_specs=_extra_specs(extra_variants))
     build_convergence_summary(args.mlp_arch, out_txt)
     out_pdf = out_png.with_suffix(".pdf")
     print(f"Plot (PNG):  {out_png}")
@@ -483,7 +534,9 @@ def main():
         bars = "Ours(physics) + Ours(Instrument) + AION-1 + Rand. Init. ResNet Baseline"
         if not args.no_cross_predict:
             bars += " + Cross-predict"
-        msg = (f"3-probe-per-encoder · mlp_arch=**{args.mlp_arch}** · "
+        for (_v, label) in extra_variants:
+            bars += f" + {label}(Phys/Instr)"
+        msg = (f"R² per-property · mlp_arch=**{args.mlp_arch}** · "
                f"physics={args.phys_source} · instr={args.instr_source}. {bars}.")
         notify(WEBHOOK_URL, msg, str(out_pdf if out_pdf.exists() else out_png))
 

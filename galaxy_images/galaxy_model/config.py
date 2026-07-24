@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class DataConfig:
-    mode: str = "precomputed"  # precomputed | neighbors | efficient
+    mode: str = "precomputed"  # precomputed | neighbors | efficient | ram48
     precomputed_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
     neighbors_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
     efficient_data_dir: Optional[str] = None
@@ -64,6 +64,10 @@ class ModelConfig:
     instrument_flatten_to_one_token: bool = False
     encoder_2_global_conv: bool = False
     instrument_as_class_conditioning: bool = False
+    # Diffusion-ablation fields (ignored by FM modules via filter_supported_model_kwargs)
+    prediction_type: str = "epsilon"
+    num_train_timesteps: int = 1000
+    beta_schedule: str = "squaredcos_cap_v2"
 
 
 @dataclass
@@ -143,14 +147,19 @@ class ExperimentConfig:
         )
 
     def validate(self) -> None:
-        if self.data.mode not in {"precomputed", "neighbors", "efficient"}:
-            raise ValueError(f"Unsupported data.mode={self.data.mode!r}. Use 'precomputed', 'neighbors', or 'efficient'.")
+        if self.data.mode not in {"precomputed", "neighbors", "efficient", "ram48"}:
+            raise ValueError(
+                f"Unsupported data.mode={self.data.mode!r}. "
+                "Use 'precomputed', 'neighbors', 'efficient', or 'ram48'."
+            )
         if self.data.mode == "precomputed" and not self.data.precomputed_h5:
             raise ValueError("data.precomputed_h5 must be set for data.mode='precomputed'.")
         if self.data.mode == "neighbors" and not self.data.neighbors_h5:
             raise ValueError("data.neighbors_h5 must be set for data.mode='neighbors'.")
         if self.data.mode == "efficient" and not self.data.efficient_data_dir:
             raise ValueError("data.efficient_data_dir must be set for data.mode='efficient'.")
+        if self.data.mode == "ram48" and not self.data.efficient_data_dir:
+            raise ValueError("data.efficient_data_dir must be set for data.mode='ram48'.")
         if self.data.heldout_num_batches < 1:
             raise ValueError("data.heldout_num_batches must be >= 1.")
 

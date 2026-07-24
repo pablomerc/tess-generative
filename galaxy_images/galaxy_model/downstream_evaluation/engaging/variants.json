@@ -89,6 +89,18 @@
       "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/single-baseline/*.ckpt:/orcd/scratch/orcd/009/pablomer/checkpoints/single-baseline/snapshot.ckpt",
       "module": "single_encoder_ablation/model.py",
       "model_class": "SingleEncoderFlowMatchingModule"
+    },
+    {
+      "name": "diffusion-base",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/runs/neighbors_all_attn_ddpm/*/checkpoints/latest-step=step=75000.ckpt",
+      "module": "diffusion_ablation/double_train_ddpm_neighbors.py",
+      "model_class": "ConditionalDDPMModule"
+    },
+    {
+      "name": "fm-control",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/runs/neighbors_all_attn/*/checkpoints/latest-step=step=75000.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
     }
   ]
 }

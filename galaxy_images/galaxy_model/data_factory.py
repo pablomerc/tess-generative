@@ -213,6 +213,17 @@ def build_neighbors_dataloaders(
             random_neighbors=config.data.random_neighbors,
         )
         collate_fn = _collate_for_neighbors
+    elif config.data.mode == "ram48":
+        from galaxy_images.galaxy_model.contrastive_baseline.neighbors_ram48 import (
+            NeighborsRAM48Dataset,
+        )
+        dataset = NeighborsRAM48Dataset(
+            data_dir=config.data.efficient_data_dir,
+            max_neighbors=config.data.max_neighbors,
+            crop_size=config.model.image_size,
+            random_neighbors=config.data.random_neighbors,
+        )
+        collate_fn = _collate_for_neighbors
     else:
         raise ValueError(f"Unsupported data mode: {config.data.mode}")
 
