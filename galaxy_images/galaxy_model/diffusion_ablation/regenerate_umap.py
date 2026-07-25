@@ -119,7 +119,9 @@ def _build_dataset(data_dir: Path, crop_size: int, data_backend: str):
             data_dir=str(data_dir),
             crop_size=crop_size,
             max_neighbors=0,
-            load_into_ram=True,
+            # memmap fallback: this job touches ~num_anchors rows near-sequentially,
+            # so pulling the full ~17 GB store into RAM is pure OOM risk.
+            load_into_ram=False,
         )
     if data_backend == "efficient":
         return NeighborsEfficientDataset(
@@ -176,6 +178,18 @@ def main(argv=None) -> None:
         )
 
         t = time.perf_counter()
+        # Guard against silent wrong-arm figures: an FM checkpoint loads WITHOUT
+        # error under ConditionalDDPMModule (state dicts are key-identical, unknown
+        # hparams are filtered), so cross-check hparams before loading.
+        ckpt_blob = torch.load(str(args.checkpoint), map_location="cpu", weights_only=False)
+        ckpt_hp = ckpt_blob.get("hyper_parameters", {}) or {}
+        has_prediction_type = "prediction_type" in ckpt_hp
+        if has_prediction_type != (args.arm == "ddpm"):
+            raise ValueError(
+                f"--arm {args.arm} does not match checkpoint hparams (prediction_type "
+                f"{'present' if has_prediction_type else 'absent'}): {args.checkpoint}"
+            )
+        del ckpt_blob
         model = model_cls.load_from_checkpoint(str(args.checkpoint), map_location="cpu")
         model.eval()
         torch.set_grad_enabled(False)
@@ -263,7 +277,9 @@ def main(argv=None) -> None:
         ).astype(np.int64)
 
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        stem = f"umap_both_encoders_zdim{dim}_zoom_flat_{args.tag}"
+        # arm is part of the stem so identical tags across concurrently-run arms
+        # can never collide/overwrite each other.
+        stem = f"umap_both_encoders_zdim{dim}_zoom_flat_{args.arm}_{args.tag}"
         data_path = OUT_DIR / f"{stem}_data.npz"
         meta_path = OUT_DIR / f"{stem}_metadata.json"
         if data_path.exists() or meta_path.exists():

@@ -92,13 +92,37 @@
     },
     {
       "name": "diffusion-base",
-      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/runs/neighbors_all_attn_ddpm/*/checkpoints/latest-step=step=75000.ckpt",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/frozen/ddpm-eps-75k-fixed.ckpt",
       "module": "diffusion_ablation/double_train_ddpm_neighbors.py",
       "model_class": "ConditionalDDPMModule"
     },
     {
       "name": "fm-control",
-      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/runs/neighbors_all_attn/*/checkpoints/latest-step=step=75000.ckpt",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/frozen/fm-control-75k-fixed.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "diffusion-base-28k",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/ddpm-eps-ram48-h200-75k/best-epoch=72-step=28000_copy.ckpt",
+      "module": "diffusion_ablation/double_train_ddpm_neighbors.py",
+      "model_class": "ConditionalDDPMModule"
+    },
+    {
+      "name": "fm-control-29k",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/fm-control-ram48-h200-75k/best-epoch=75-step=29000_copy.ckpt",
+      "module": "double_train_fm_neighbors.py",
+      "model_class": "ConditionalFlowMatchingModule"
+    },
+    {
+      "name": "diffusion-base-74k",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/ddpm-eps-ram48-h200-75k/best-epoch=192-step=74000.ckpt",
+      "module": "diffusion_ablation/double_train_ddpm_neighbors.py",
+      "model_class": "ConditionalDDPMModule"
+    },
+    {
+      "name": "fm-control-58k",
+      "ckpt_glob": "/orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/fm-control-ram48-h200-75k/best-epoch=151-step=58000.ckpt",
       "module": "double_train_fm_neighbors.py",
       "model_class": "ConditionalFlowMatchingModule"
     }

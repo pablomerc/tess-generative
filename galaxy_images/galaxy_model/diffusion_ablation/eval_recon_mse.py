@@ -12,11 +12,41 @@ import csv
 import json
 import math
 import sys
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+
+
+def _ping(webhook: str, content: str) -> None:
+    """Post a partial-progress line to Discord; never raises. Echoes to stdout."""
+    print(f"[ping] {content}", flush=True)
+    if not webhook:
+        return
+    try:
+        req = urllib.request.Request(
+            webhook,
+            data=json.dumps({"content": content}).encode(),
+            # Discord/Cloudflare 403s the default Python-urllib user agent.
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (compatible; recon-mse-eval)",
+            },
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[eval] ping failed (ignored): {exc}")
+
+
+def _ping_line(by_survey: Dict[str, List[float]]) -> str:
+    parts = []
+    for survey in ("hsc", "legacy"):
+        vals = by_survey.get(survey, [])
+        if vals:
+            parts.append(f"{survey.upper()} {sum(vals) / len(vals):.4f}")
+    return " | ".join(parts) or "no data"
 
 REPO = Path(__file__).resolve().parents[3]  # tess-generative
 if str(REPO) not in sys.path:
@@ -105,9 +135,10 @@ def _load_or_create_manifest(
     val_loader,
     n: int,
     noise_seed: int,
-    num_steps: int,
+    num_steps,
     val_ratio: float,
     split_seed: int,
+    batch_size: int,
 ) -> Dict[str, Any]:
     records, dataset_indices, catalog_idxs = _collect_eval_set(val_loader, n)
     rebuilt = {
@@ -116,20 +147,33 @@ def _load_or_create_manifest(
         "num_steps": num_steps,
         "val_ratio": val_ratio,
         "split_seed": split_seed,
+        # batch_size is part of the protocol identity: noise is drawn per-batch,
+        # so a different batch size silently reassigns noise across anchors.
+        "batch_size": batch_size,
         "dataset_indices": dataset_indices,
         "catalog_idxs": catalog_idxs,
         "anchor_surveys": [r["anchor_survey"] for r in records],
     }
+    compared = (
+        "dataset_indices", "catalog_idxs", "n", "val_ratio", "split_seed",
+        "noise_seed", "batch_size",
+    )
     if manifest_path.exists():
         with manifest_path.open() as f:
             stored = json.load(f)
-        for key in ("dataset_indices", "catalog_idxs", "n", "val_ratio", "split_seed"):
-            if stored.get(key) != rebuilt.get(key):
+        for key in compared:
+            if key in stored and stored[key] != rebuilt[key]:
                 raise RuntimeError(
-                    f"Manifest mismatch on {key!r}: stored={stored.get(key)!r} "
-                    f"rebuilt={rebuilt.get(key)!r}. Refusing to eval on a different set. "
+                    f"Manifest mismatch on {key!r}: stored={stored[key]!r} "
+                    f"rebuilt={rebuilt[key]!r}. Refusing to eval on a different set. "
                     f"Delete {manifest_path} only if intentional."
                 )
+        missing = [k for k in compared if k not in stored]
+        if missing:
+            stored.update({k: rebuilt[k] for k in missing})
+            with manifest_path.open("w") as f:
+                json.dump(stored, f, indent=2)
+            print(f"[eval] manifest upgraded with {missing}: {manifest_path}")
         print(f"[eval] manifest OK: {manifest_path}")
         return stored
 
@@ -225,6 +269,7 @@ def _aggregate_rows(
     eta: Optional[float],
     by_survey: Dict[str, List[float]],
     note: str = "",
+    num_steps: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     rows = []
     for survey in ("hsc", "legacy"):
@@ -234,6 +279,7 @@ def _aggregate_rows(
                 "model_label": label,
                 "objective": objective,
                 "eta": "" if eta is None else eta,
+                "num_steps": "" if num_steps is None else num_steps,
                 "anchor_survey": survey,
                 "n": len(vals),
                 "mse_mean": sum(vals) / len(vals) if vals else float("nan"),
@@ -246,13 +292,14 @@ def _aggregate_rows(
 
 def _print_markdown(rows: List[Dict[str, Any]]) -> None:
     print()
-    print("| model | objective | η | survey | n | MSE mean | SEM | note |")
-    print("|---|---|---|---|---:|---:|---:|---|")
+    print("| model | objective | η | steps | survey | n | MSE mean | SEM | note |")
+    print("|---|---|---|---|---|---:|---:|---:|---|")
     for r in rows:
         eta = r["eta"] if r["eta"] != "" else "—"
+        steps = r.get("num_steps", "") or "—"
         note = r.get("note", "")
         print(
-            f"| {r['model_label']} | {r['objective']} | {eta} | {r['anchor_survey']} | "
+            f"| {r['model_label']} | {r['objective']} | {eta} | {steps} | {r['anchor_survey']} | "
             f"{r['n']} | {r['mse_mean']:.6f} | {r['mse_sem']:.6f} | {note} |"
         )
     print()
@@ -270,7 +317,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--ddpm-checkpoint", type=Path, default=None)
     p.add_argument("--config", type=Path, required=True, help="DDPM (or FM-control) JSON for loaders")
     p.add_argument("--n", type=int, default=256)
-    p.add_argument("--num-steps", type=int, default=250)
+    p.add_argument(
+        "--num-steps",
+        type=int,
+        action="append",
+        default=None,
+        help="Sampler step counts (repeatable). Default: 250",
+    )
     p.add_argument(
         "--eta",
         type=float,
@@ -279,6 +332,16 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="DDIM η for DDPM rows (repeatable). Default: 0.0",
     )
     p.add_argument("--noise-seed", type=int, default=1234)
+    p.add_argument(
+        "--ddpm-clip-range",
+        type=float,
+        default=None,
+        help="If set, rebuild the DDPM inference scheduler with clip_sample=True and "
+        "this clip_sample_range — a wide x0-space guard against low-SNR 1/sqrt(alpha) "
+        "blowups that is harmless to z-scored pixel values (e.g. 50).",
+    )
+    p.add_argument("--discord-webhook", type=str, default="")
+    p.add_argument("--ping-prefix", type=str, default="recon-mse partial")
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -292,6 +355,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = p.parse_args(argv)
 
     etas = args.eta if args.eta is not None else [0.0]
+    steps_list = args.num_steps if args.num_steps else [250]
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
     if args.device.startswith("cuda") and not torch.cuda.is_available():
         print("[eval] WARNING: CUDA unavailable, falling back to CPU")
@@ -309,12 +373,32 @@ def main(argv: Optional[List[str]] = None) -> None:
         val_loader=val_loader,
         n=args.n,
         noise_seed=args.noise_seed,
-        num_steps=args.num_steps,
+        num_steps=steps_list,
         val_ratio=config.data.val_ratio,
         split_seed=config.trainer.seed,
+        batch_size=config.data.batch_size,
     )
 
     rows: List[Dict[str, Any]] = []
+    fieldnames = [
+        "model_label",
+        "objective",
+        "eta",
+        "num_steps",
+        "anchor_survey",
+        "n",
+        "mse_mean",
+        "mse_sem",
+        "note",
+    ]
+
+    def _flush() -> None:
+        # Persist after every model/η block: a late failure must not lose earlier rows.
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        with args.out.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
 
     # FM checkpoints
     for spec in args.fm_checkpoint:
@@ -325,62 +409,96 @@ def main(argv: Optional[List[str]] = None) -> None:
         path = Path(path_s)
         print(f"[eval] FM {label}: {path}")
         model = _load_model(path, "fm", device)
-        by_survey = _eval_model(
-            model, val_loader, args.n, args.num_steps, args.noise_seed, device, eta=None
-        )
-        rows.extend(_aggregate_rows(label, "flow_matching", None, by_survey))
+        for steps in steps_list:
+            by_survey = _eval_model(
+                model, val_loader, args.n, steps, args.noise_seed, device, eta=None
+            )
+            rows.extend(
+                _aggregate_rows(label, "flow_matching", None, by_survey, num_steps=steps)
+            )
+            _flush()
+            _ping(
+                args.discord_webhook,
+                f"🧩 {args.ping_prefix} · `{label}` steps={steps} → {_ping_line(by_survey)}",
+            )
         del model
         torch.cuda.empty_cache()
 
     # DDPM checkpoint at each η
+    if args.ddpm_checkpoint is None:
+        print("[eval] WARNING: --ddpm-checkpoint not given — DDPM rows omitted entirely")
     if args.ddpm_checkpoint is not None:
         print(f"[eval] DDPM: {args.ddpm_checkpoint}")
         model = _load_model(args.ddpm_checkpoint, "ddpm", device)
-        for eta in etas:
+        clip_note = ""
+        if args.ddpm_clip_range is not None:
+            from diffusers import DDIMScheduler
+
+            sched_cfg = dict(model.inference_scheduler.config)
+            sched_cfg.update(
+                clip_sample=True, clip_sample_range=args.ddpm_clip_range
+            )
+            model.inference_scheduler = DDIMScheduler.from_config(sched_cfg)
+            clip_note = f"x0 clip ±{args.ddpm_clip_range:g}"
+            print(f"[eval] DDPM inference scheduler rebuilt with {clip_note}")
+        for steps in steps_list:
+            for eta in etas:
+                by_survey = _eval_model(
+                    model, val_loader, args.n, steps, args.noise_seed, device, eta=eta
+                )
+                rows.extend(
+                    _aggregate_rows(
+                        "ddpm-eps",
+                        "ddpm_epsilon",
+                        eta,
+                        by_survey,
+                        num_steps=steps,
+                        note=clip_note,
+                    )
+                )
+                _flush()
+                _ping(
+                    args.discord_webhook,
+                    f"🧩 {args.ping_prefix} · `ddpm-eps` steps={steps} η={eta:g}"
+                    f"{' ' + clip_note if clip_note else ''} → {_ping_line(by_survey)}",
+                )
+        del model
+        torch.cuda.empty_cache()
+
+    # Paper base — context row only; must never take down the main results.
+    # NOTE: Path("") normalizes to PosixPath('.') which is truthy and exists,
+    # so test the string form, not the Path.
+    paper_ckpt = str(args.paper_checkpoint) if args.paper_checkpoint else ""
+    if not args.skip_paper and paper_ckpt not in ("", ".") and Path(paper_ckpt).is_file():
+        try:
+            print(f"[eval] paper base: {paper_ckpt}")
+            model = _load_model(Path(paper_ckpt), "fm", device)
+            paper_steps = max(steps_list)
             by_survey = _eval_model(
-                model, val_loader, args.n, args.num_steps, args.noise_seed, device, eta=eta
+                model, val_loader, args.n, paper_steps, args.noise_seed, device, eta=None
             )
             rows.extend(
-                _aggregate_rows("ddpm-eps", "ddpm_epsilon", eta, by_survey)
+                _aggregate_rows(
+                    "fm-paper",
+                    "flow_matching",
+                    None,
+                    by_survey,
+                    note="different training setup (paper run)",
+                    num_steps=paper_steps,
+                )
             )
-        del model
-        torch.cuda.empty_cache()
-
-    # Paper base (context)
-    if not args.skip_paper and args.paper_checkpoint and Path(args.paper_checkpoint).exists():
-        print(f"[eval] paper base: {args.paper_checkpoint}")
-        model = _load_model(Path(args.paper_checkpoint), "fm", device)
-        by_survey = _eval_model(
-            model, val_loader, args.n, args.num_steps, args.noise_seed, device, eta=None
+            _flush()
+            del model
+            torch.cuda.empty_cache()
+        except Exception as exc:
+            print(f"[eval] WARNING: paper-base context row failed and was skipped: {exc}")
+    elif not args.skip_paper:
+        print(
+            "[eval] WARNING: paper row skipped — checkpoint not usable: "
+            f"{args.paper_checkpoint!r}"
         )
-        rows.extend(
-            _aggregate_rows(
-                "fm-paper",
-                "flow_matching",
-                None,
-                by_survey,
-                note="different training setup (paper run)",
-            )
-        )
-        del model
-        torch.cuda.empty_cache()
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "model_label",
-        "objective",
-        "eta",
-        "anchor_survey",
-        "n",
-        "mse_mean",
-        "mse_sem",
-        "note",
-    ]
-    with args.out.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
+    _flush()
     _print_markdown(rows)
     print(f"[eval] wrote {args.out}")
 

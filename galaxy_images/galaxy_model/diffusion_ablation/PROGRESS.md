@@ -34,9 +34,42 @@
 - SUBMITTED: ddpm-eps-75k=18669496 (RUNNING on node4900), fm-ctrl-75k=18669497 (PD Resources),
   smoke-ddpm=18669498, smoke-fm=18669499 (mit_normal_gpu). WandB online (netrc verified).
 
+## 2026-07-23 ~23:55 — eval-script review fixes applied (Claude, monitoring session)
+
+3-agent adversarial review (wf_11a970ba-df6) of the Phase-7 scripts; plumbing/config/module
+parity verified clean. Fixes applied (all py_compile-checked; training untouched):
+
+- `eval_recon_mse.py`: (MAJOR) `--paper-checkpoint ""` crashed post-eval pre-write
+  (`Path("")`→`'.'` is truthy+exists) — string-guard + try/except around the context row;
+  (MAJOR) CSV now flushed incrementally after every model/η block instead of end-only;
+  (minor) manifest now records+compares `noise_seed`/`batch_size` (legacy manifests upgraded
+  in place); loud WARNINGs replace silent row omission.
+- `regenerate_umap.py`: arm/checkpoint hparams cross-check (FM ckpt loaded silently under
+  the DDPM class → wrong-arm figure); `--arm` folded into output stem (concurrent-arm tag
+  collisions impossible); ram48 backend now memmaps (`load_into_ram=False`) instead of
+  pulling 17 GB into RAM for ~2000 anchors.
+- `double_train_ddpm_neighbors.py`: raise on `eta>0` without seeded generator; raise on
+  `lambda_geometric>0` (Sinkhorn branch is intentionally absent).
+
+Training at fix time: DDPM 44.8k/75k, FM 45.4k/75k, both ~3 steps/s, ETA ~02:45.
+
 ### Next
 
-1. Watch smokes (~30 min) — if either fails, scancel 18669496/18669497, fix, resubmit.
-2. Verify "Starting with 4 processes" + sane loss curves in real-job logs/W&B.
-3. Phase 7 once `latest-step=step=75000.ckpt` exists for both arms: downstream R², recon MSE
-   (η=0 headline + η=1 robustness), UMAPs via `regenerate_umap.py` → `RESULTS.md`.
+1. Monitor armed (both-ckpts-ready / job-death); heartbeat every 30 min.
+2. Phase 7 once `latest-step=step=75000.ckpt` exists for both arms: downstream R², recon MSE
+   (η=0 headline + η=1 robustness, --skip-paper NOT needed anymore), UMAPs via
+   `regenerate_umap.py` (distinct tags per arm) → `RESULTS.md` + Discord headline numbers.
+
+## 2026-07-23 late — mid-training preview evals (Claude)
+
+- Reviewed `eval_recon_mse.py` (sound; matched noise, manifest enforcement, per-survey MSE).
+- New `eval_recon_mse.slurm` (runs eval + posts the numbers table to Discord) and
+  `summary_r2_ping.slurm` (CPU job, afterany on the R² jobs, posts base-vs-fm-vs-ddpm R² lines).
+- Preview registry entries `diffusion-base-28k` / `fm-control-29k` → the `_copy` best ckpts
+  (28k / 29k steps). Pinned 75k `diffusion-base` / `fm-control` entries untouched.
+- Jobs: recon-mse=18685421 (η∈{0,1}, n=256, 250 steps → Discord table);
+  R²: 18685533 (ddpm, running) + 18685535 (fm, pending on the 2-GPU mit_normal_gpu QOS cap);
+  r2-ping=18685639 (dependency-held). Training arms 18669496/97 at ~3h10m, ETA ~02:45–03:00.
+- Morning TODO: rerun recon-MSE + R² on the final 75k ckpts (pinned entries), UMAPs, RESULTS.md.
+- NOTE: preview R² CSVs are named `predict_<v>-28k.csv`-style (default aion arch); rebuttal
+  numbers come from the 75k finals, previews are directional only.

@@ -1,0 +1,7 @@
+=== diffusion-base-74k ===
+  ckpt   : /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/ddpm-eps-ram48-h200-75k/best-epoch=192-step=74000.ckpt
+  module : diffusion_ablation/double_train_ddpm_neighbors.py
+  class  : ConditionalDDPMModule
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/ddpm-eps-ram48-h200-75k/best-epoch=192-step=74000.ckpt
+Module/class: diffusion_ablation/double_train_ddpm_neighbors.py :: ConditionalDDPMModule

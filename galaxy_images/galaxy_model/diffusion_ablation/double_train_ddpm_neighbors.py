@@ -32,6 +32,11 @@ class ConditionalDDPMModule(ConditionalFlowMatchingModule):
             k: v for k, v in kwargs.items() if k in parent_params and k != "self"
         }
         super().__init__(**parent_kwargs)
+        if getattr(self, "lambda_geometric", 0.0):
+            raise ValueError(
+                "ConditionalDDPMModule omits the Sinkhorn/geometric branch; "
+                "lambda_geometric must be 0.0"
+            )
         # REQUIRED: subclass args must land in hparams for load_from_checkpoint.
         self.save_hyperparameters()
         self.train_scheduler = DDPMScheduler(
@@ -178,6 +183,11 @@ class ConditionalDDPMModule(ConditionalFlowMatchingModule):
                 )
 
         x = x * sched.init_noise_sigma
+
+        if eta > 0 and generator is None:
+            raise ValueError(
+                "eta>0 requires a seeded `generator` for reproducible stochastic sampling"
+            )
 
         for t in sched.timesteps:
             t_batch = t.expand(num_samples).float() / 1000.0

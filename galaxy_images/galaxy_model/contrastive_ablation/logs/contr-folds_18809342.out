@@ -1,0 +1,41 @@
+[folds] 5-fold CV over: base base-meanpool contrastive-spatial-conv1x1 contrastive-spatial-conv1x1-meanpool
+[folds] base fold 0/5
+Reading embeddings from outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 0 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base__aion_f0of5.csv  (78 rows)
+[folds] base fold 1/5
+Reading embeddings from outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 1 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base__aion_f1of5.csv  (78 rows)
+[folds] base fold 2/5
+Reading embeddings from outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 2 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base__aion_f2of5.csv  (78 rows)
+[folds] base fold 3/5

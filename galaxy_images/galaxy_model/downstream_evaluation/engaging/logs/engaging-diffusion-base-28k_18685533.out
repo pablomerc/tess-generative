@@ -1,0 +1,38 @@
+=== diffusion-base-28k ===
+  ckpt   : /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/ddpm-eps-ram48-h200-75k/best-epoch=72-step=28000_copy.ckpt
+  module : diffusion_ablation/double_train_ddpm_neighbors.py
+  class  : ConditionalDDPMModule
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/ddpm-eps-ram48-h200-75k/best-epoch=72-step=28000_copy.ckpt
+Module/class: diffusion_ablation/double_train_ddpm_neighbors.py :: ConditionalDDPMModule
+Architecture: base  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (627.5 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (530.5 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/diffusion-base-28k.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/diffusion-base-28k.h5
+  checkpoint_name=ddpm-eps-ram48-h200-75k  arch=base  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_diffusion-base-28k.csv  (78 rows)
+Plot: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_diffusion-base-28k_all.png
+Wide CSV: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/aion_vs_diffusion-base-28k_all_merged.csv
+Done at Thu Jul 23 22:48:39 EDT 2026
