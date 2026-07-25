@@ -13,7 +13,7 @@ Reads the source SEQUENTIALLY (shuffle=False) which is fast on Ceph, unlike the
 random access training would do on the 160x160 store. Preprocessing is identical to
 NeighborsEfficientDataset._preprocess so downstream tensors are bit-for-bit the same.
 """
-import os, sys, json, time, shutil
+import argparse, os, sys, json, time, shutil
 for v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ[v] = "1"
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
@@ -25,9 +25,13 @@ import torch
 torch.set_num_threads(1)
 from torch.utils.data import Dataset, DataLoader
 
-sys.path.insert(0, "/home/pablomer/orcd/pool/tess-generative")
+from pathlib import Path
+# Derive the repo root from this file so the builder runs on any cluster (it used to
+# hardcode the Engaging path, which made it unusable on AMD).
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from galaxy_images.galaxy_model.neighbors import preprocess_raw_image
 
+# Engaging defaults, kept so existing no-argument invocations behave exactly as before.
 SRC = "/orcd/pool/007/pablomer/efficient_neighs"
 OUT = "/orcd/pool/007/pablomer/efficient_neighs_48"
 CROP = 48
@@ -65,17 +69,27 @@ class _RowPreprocessor(Dataset):
 
 
 def main():
+    global SRC, OUT, CROP
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--src", default=SRC, help=f"source efficient store (default: {SRC})")
+    ap.add_argument("--out", default=OUT, help=f"destination 48x48 store (default: {OUT})")
+    ap.add_argument("--crop", type=int, default=CROP)
+    ap.add_argument("--workers", type=int, default=32)
+    ap.add_argument("--batch-size", type=int, default=256)
+    args = ap.parse_args()
+    SRC, OUT, CROP = args.src, args.out, args.crop
+
     os.makedirs(OUT, exist_ok=True)
     ds = _RowPreprocessor(SRC)
     n = len(ds)
-    print(f"[build] {n} rows -> {OUT}", flush=True)
+    print(f"[build] {n} rows -> {OUT} (crop={CROP}, workers={args.workers})", flush=True)
 
     hsc_out = np.memmap(os.path.join(OUT, "hsc48.bin"), dtype="float16", mode="w+",
                         shape=(n, 4, CROP, CROP))
     leg_out = np.memmap(os.path.join(OUT, "legacy48.bin"), dtype="float16", mode="w+",
                         shape=(n, 4, CROP, CROP))
 
-    dl = DataLoader(ds, batch_size=256, shuffle=False, num_workers=32,
+    dl = DataLoader(ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers,
                     prefetch_factor=4, collate_fn=lambda b: b)  # list of tuples
 
     done = 0
