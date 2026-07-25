@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -114,6 +115,71 @@ def _resolve_downstream_holdout_positions(
             "encoding in the catalog vs the holdout file."
         )
     return positions
+
+
+def _apply_train_subset(
+    kept_dataset: Dataset,
+    kept_positions: List[int],
+    train_ds: Dataset,
+    subset_json: str | Path,
+    tile_to: int,
+) -> Dataset:
+    """Restrict training to a fixed anchor set, then tile it to a constant epoch length.
+
+    The JSON lists RAW anchor positions (into the full dataset, before any holdout or
+    lens exclusion) so the file means the same thing regardless of which exclusions are
+    active; they are translated into kept-space here.
+
+    Tiling keeps steps-per-epoch identical across data scales. That is not cosmetic: the
+    LR scheduler steps once per EPOCH, so epoch length sets the LR waveform period. Without
+    tiling, a small subset would get a very different optimization schedule and the
+    data-scale comparison would be confounded by it.
+    """
+    subset_json = Path(subset_json)
+    if not subset_json.exists():
+        raise FileNotFoundError(f"data.train_subset_json not found: {subset_json}")
+    with open(subset_json) as f:
+        payload = json.load(f)
+    requested_raw = payload["positions"] if isinstance(payload, dict) else payload
+    requested_raw = [int(p) for p in requested_raw]
+    if not requested_raw:
+        raise ValueError(f"{subset_json} lists no positions")
+    if len(set(requested_raw)) != len(requested_raw):
+        raise ValueError(f"{subset_json} contains duplicate positions")
+
+    raw_to_kept = {int(raw): k for k, raw in enumerate(kept_positions)}
+    missing = [p for p in requested_raw if p not in raw_to_kept]
+    if missing:
+        raise ValueError(
+            f"{subset_json}: {len(missing)} requested positions are excluded from the kept "
+            f"set (downstream holdout / lens). First few: {missing[:5]}"
+        )
+    requested_kept = [raw_to_kept[p] for p in requested_raw]
+
+    allowed = {int(i) for i in getattr(train_ds, "indices", [])}
+    if not allowed:
+        raise RuntimeError("train split exposes no .indices; cannot verify subset membership")
+    stray = [p for p in requested_kept if p not in allowed]
+    if stray:
+        raise ValueError(
+            f"{subset_json}: {len(stray)} requested positions land in the VALIDATION split, "
+            f"not the training split. Regenerate the subset with the same seed and val_ratio."
+        )
+
+    if int(tile_to) < len(requested_kept):
+        raise ValueError(
+            f"train_subset_tile_to={tile_to} is smaller than the subset itself "
+            f"({len(requested_kept)}); that would silently drop anchors."
+        )
+    tiled = np.resize(np.asarray(requested_kept, dtype=np.int64), int(tile_to))
+    n_even = sum(1 for p in requested_raw if p % 2 == 0)
+    print(
+        f"[train-subset] {subset_json.name}: distinct anchors={len(requested_kept):,} "
+        f"(HSC-role {n_even:,} / Legacy-role {len(requested_raw) - n_even:,}) | "
+        f"tiled to {len(tiled):,} items "
+        f"(~{len(tiled) / len(requested_kept):.1f} repeats per anchor per epoch)"
+    )
+    return Subset(kept_dataset, tiled.tolist())
 
 
 def _collate_for_neighbors(batch):
@@ -245,7 +311,7 @@ def build_neighbors_dataloaders(
 
     # Resolve downstream-holdout anchor positions to exclude from train/val.
     holdout_positions: List[int] = []
-    if config.data.downstream_holdout_ids_txt and config.data.mode == "efficient":
+    if config.data.downstream_holdout_ids_txt and config.data.mode in ("efficient", "ram48"):
         holdout_positions = _resolve_downstream_holdout_positions(
             holdout_txt=config.data.downstream_holdout_ids_txt,
             efficient_data_dir=config.data.efficient_data_dir,
@@ -267,6 +333,7 @@ def build_neighbors_dataloaders(
         kept_positions = [i for i in range(total_size) if i not in excluded_set]
         kept_dataset: Dataset = Subset(dataset, kept_positions)
     else:
+        kept_positions = list(range(total_size))
         kept_dataset = dataset
 
     kept_size = len(kept_dataset)
@@ -280,6 +347,18 @@ def build_neighbors_dataloaders(
     train_ds, val_ds = random_split(kept_dataset, [train_size, val_size], generator=generator)
     if hasattr(val_ds, "indices"):
         _save_heldout_validation_subset(kept_dataset, list(val_ds.indices), config, batch_size)
+
+    # Data-scale ablation: swap the train split for a fixed subset of anchors, tiled to a
+    # constant epoch length. The validation split above is deliberately left untouched so
+    # every arm of the sweep validates on exactly the same galaxies.
+    if config.data.train_subset_json:
+        train_ds = _apply_train_subset(
+            kept_dataset=kept_dataset,
+            kept_positions=kept_positions,
+            train_ds=train_ds,
+            subset_json=config.data.train_subset_json,
+            tile_to=config.data.train_subset_tile_to or train_size,
+        )
 
     train_loader = DataLoader(
         train_ds,

@@ -1,0 +1,91 @@
+{
+  "run": {
+    "variant": "neighbors_all_attn",
+    "output_dir": "/orcd/pool/007/pablomer/checkpoints_new/lr_schedule_probe/runs/base_constlr_37500",
+    "shared_checkpoint_dir": "/orcd/pool/007/pablomer/checkpoints_new/lr_schedule_probe/best"
+  },
+  "data": {
+    "mode": "ram48",
+    "efficient_data_dir": "/orcd/pool/007/pablomer/efficient_neighs_48",
+    "precomputed_h5": "/work1/jeroenaudenaert/pablomer/data/train_neighbors.vds",
+    "neighbors_h5": "/work1/jeroenaudenaert/pablomer/data/neighbours_v2.h5",
+    "max_neighbors": 5,
+    "val_ratio": 0.05,
+    "batch_size": 64,
+    "num_workers": 4,
+    "pin_memory": true,
+    "drop_last_train": true,
+    "save_heldout_validation": false,
+    "heldout_validation_dir": null,
+    "heldout_num_batches": 4,
+    "heldout_file_name": null
+  },
+  "model": {
+    "in_channels": 4,
+    "cond_channels": 4,
+    "image_size": 48,
+    "model_channels": 128,
+    "channel_mult": [
+      1,
+      2,
+      4,
+      4
+    ],
+    "layers_per_block": 2,
+    "attention_head_dim": 8,
+    "cross_attention_dim": 16,
+    "pretrained_encoder": false,
+    "concat_conditioning": false,
+    "lr": 0.0001,
+    "num_sample_images": 10,
+    "num_mse_images": 32,
+    "num_integration_steps": 250,
+    "lambda_generative": 1.0,
+    "lambda_geometric": 0.0,
+    "num_umap_batches": 8,
+    "mask_center": false,
+    "all_attention": true,
+    "figures_dir": null,
+    "lr_schedule": "constant"
+  },
+  "trainer": {
+    "seed": 42,
+    "num_steps": 37500,
+    "devices": 4,
+    "accelerator": "auto",
+    "strategy": "ddp_find_unused_parameters_true",
+    "precision": "bf16-mixed",
+    "h100_precision": "bf16-mixed",
+    "h100_batch_size": 64,
+    "auto_adjust_for_h100": false,
+    "scale_steps_by_devices": false,
+    "val_check_interval": 1000,
+    "log_every_n_steps": 10,
+    "num_sanity_val_steps": 0,
+    "monitor_metric": "val/mse",
+    "checkpoint_every_n_train_steps": 5000
+  },
+  "wandb": {
+    "enabled": true,
+    "project": "galaxy-flow-matching-neighbours",
+    "name": "base-constlr-37k5",
+    "log_model": false,
+    "group": "lr-schedule-probe",
+    "job_type": "train",
+    "tags": [
+      "lr-schedule-probe",
+      "flow-matching",
+      "constant-lr",
+      "37500",
+      "full-data"
+    ],
+    "extra_config": {
+      "probe/lr_schedule": "constant",
+      "probe/nominal_steps": 37500,
+      "probe/effective_updates": 37500,
+      "probe/reference_run": "fm-control-ram48-h200-75k",
+      "probe/reference_nominal_steps": 75000,
+      "probe/reference_effective_updates": 37500
+    }
+  }
+}

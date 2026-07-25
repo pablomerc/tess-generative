@@ -112,6 +112,9 @@ def main(argv: Optional[List[str]] = None) -> None:
             name=config.wandb.name,
             log_model=config.wandb.log_model,
             resume="allow" if resume_ckpt is not None else "never",
+            group=config.wandb.group,
+            tags=list(config.wandb.tags) or None,
+            job_type=config.wandb.job_type,
             config={
                 **asdict(config),
                 "runtime": {
@@ -120,6 +123,9 @@ def main(argv: Optional[List[str]] = None) -> None:
                     "precision": runtime_precision,
                     "variant": variant.name,
                 },
+                # Flat, plottable sweep metadata (e.g. scale/n_anchors) so W&B can
+                # chart metrics against the sweep's independent variable.
+                **dict(config.wandb.extra_config),
             },
         )
     else:

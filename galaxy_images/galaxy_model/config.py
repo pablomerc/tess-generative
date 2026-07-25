@@ -30,6 +30,17 @@ class DataConfig:
     # If True, the same-instrument neighbors are sampled uniformly at random
     # instead of using the precomputed nearest-neighbor list.
     random_neighbors: bool = False
+    # Data-scale ablation: path to a JSON file listing the RAW anchor positions
+    # (into the full dataset, before any holdout/lens exclusion) to train on.
+    # All listed positions must fall inside the seeded train split.
+    train_subset_json: Optional[str] = None
+    # Cyclically tile the subset's index list up to this many items so that every
+    # arm of a data-scale sweep has the SAME epoch length. This matters because the
+    # LR scheduler steps per epoch, so epoch length sets the LR waveform period --
+    # without tiling, a smaller subset would get different optimization dynamics
+    # and the data-scale comparison would be confounded. Defaults to the full
+    # train split size when train_subset_json is set.
+    train_subset_tile_to: Optional[int] = None
 
 
 @dataclass
@@ -95,6 +106,16 @@ class WandbConfig:
     project: str = "galaxy-flow-matching-neighbours"
     name: str = "neighbours-48x48-zdim16-geom0.0-amd-5nbs"
     log_model: bool = False
+    # Grouping metadata for sweeps/ablations. `group` puts sibling runs in one
+    # W&B group so they can be compared as a family; `tags` are filterable;
+    # `job_type` distinguishes e.g. train vs eval runs within a group.
+    group: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    job_type: Optional[str] = None
+    # Extra scalars merged into the W&B run config. Use this for the independent
+    # variable of a sweep (e.g. {"scale/n_anchors": 1000}) so W&B can plot metrics
+    # against it -- a config path string is not plottable.
+    extra_config: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
