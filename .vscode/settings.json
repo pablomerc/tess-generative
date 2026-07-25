@@ -1,0 +1,21 @@
+{
+  // scale_ablation/snapshots is a symlink into /orcd/data/mki_aryeh/001 (200 TB group
+  // allocation) holding ~2.2 GB checkpoint files. Without these excludes VSCode's
+  // recursive file watcher churns the extension host against a network mount, and every
+  // project-wide search crawls multi-gigabyte binaries.
+  "files.watcherExclude": {
+    "**/scale_ablation/snapshots/**": true,
+    "**/checkpoints_new/**": true,
+    "**/wandb/**": true,
+    "**/lightning_logs/**": true
+  },
+  "search.exclude": {
+    "**/scale_ablation/snapshots/**": true,
+    "**/*.ckpt": true,
+    "**/*.bin": true,
+    "**/wandb/**": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true
+  }
+}
