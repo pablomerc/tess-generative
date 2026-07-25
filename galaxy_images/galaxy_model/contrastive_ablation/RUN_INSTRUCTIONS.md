@@ -222,35 +222,35 @@ baseline's R² pattern.
 ## Other arms (B-D)
 
 Same procedure as arm A: preflight once for the store (it is arm-independent), then
-submit. These deliberately run WITHOUT the holdout so they compare directly against
-the published `contrastive-spatial-conv1x1`; arm A separately establishes that the
-holdout makes no difference.
+submit. All arms hold out the downstream-eval galaxies (the default), so the set is
+internally consistent -- each of B/C/D differs from arm A in exactly one axis, and no
+arm can be dismissed on contamination grounds.
 
 ```bash
 # C -- instrument negatives restricted to the anchor's own survey (highest value)
-sbatch --export=ALL,RUN_TAG=instrneg-samesurvey,INSTRUMENT_NEGATIVES=same_survey,HOLDOUT=0 \
+sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-DWNVAL,INSTRUMENT_NEGATIVES=same_survey \
   galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 
 # B -- galaxy negatives restricted to the positive's survey
-sbatch --export=ALL,RUN_TAG=galneg-samesurvey,GALAXY_NEGATIVES=same_survey,HOLDOUT=0 \
+sbatch --export=ALL,RUN_TAG=galneg-samesurvey-DWNVAL,GALAXY_NEGATIVES=same_survey \
   galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 
 # D -- no SimCLR head: InfoNCE directly on the representation the probes read
-sbatch --export=ALL,RUN_TAG=nohead,PROJECTION_HEAD=0,HOLDOUT=0 \
+sbatch --export=ALL,RUN_TAG=nohead-DWNVAL,PROJECTION_HEAD=0 \
   galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 ```
 
 Sanity line to expect in each log (it records the axes actually in force):
 
 ```
-[cfg] galaxy_negatives=mixed instrument_negatives=same_survey projection_head=True holdout=NO
+[cfg] galaxy_negatives=mixed instrument_negatives=same_survey projection_head=True holdout=yes
 ```
 
 For B and C, if the result moves, also run the negative-COUNT control at double batch
 size so "harder negatives" is separated from "fewer negatives":
 
 ```bash
-sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-b128,INSTRUMENT_NEGATIVES=same_survey,HOLDOUT=0,BATCH_SIZE=128 \
+sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-DWNVAL-b128,INSTRUMENT_NEGATIVES=same_survey,BATCH_SIZE=128 \
   galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 ```
 

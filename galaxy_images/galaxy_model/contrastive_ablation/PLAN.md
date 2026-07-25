@@ -118,17 +118,25 @@ check its throughput benchmark before committing an allocation.
 | # | arm | command (from repo root on AMD) | why |
 |---|---|---|---|
 | A | `spatial-conv1x1-DWNVAL` | `sbatch galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm` | contamination hygiene (§5) |
-| C | `instrneg-samesurvey` | `sbatch --export=ALL,RUN_TAG=instrneg-samesurvey,INSTRUMENT_NEGATIVES=same_survey,HOLDOUT=0 …/train_ablation_amd.slurm` | is the instrument win a survey classifier? (§3) — **highest value** |
-| B | `galneg-samesurvey` | `sbatch --export=ALL,RUN_TAG=galneg-samesurvey,GALAXY_NEGATIVES=same_survey,HOLDOUT=0 …/train_ablation_amd.slurm` | harder galaxy task → better physics? (§2) |
-| D | `nohead` | `sbatch --export=ALL,RUN_TAG=nohead,PROJECTION_HEAD=0,HOLDOUT=0 …/train_ablation_amd.slurm` | is the SimCLR head doing the work? (§4) |
+| C | `instrneg-samesurvey-DWNVAL` | `sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-DWNVAL,INSTRUMENT_NEGATIVES=same_survey …/train_ablation_amd.slurm` | is the instrument win a survey classifier? (§3) — **highest value** |
+| B | `galneg-samesurvey-DWNVAL` | `sbatch --export=ALL,RUN_TAG=galneg-samesurvey-DWNVAL,GALAXY_NEGATIVES=same_survey …/train_ablation_amd.slurm` | harder galaxy task → better physics? (§2) |
+| D | `nohead-DWNVAL` | `sbatch --export=ALL,RUN_TAG=nohead-DWNVAL,PROJECTION_HEAD=0 …/train_ablation_amd.slurm` | is the SimCLR head doing the work? (§4) |
 
 Optional follow-ups, only if B or C move the numbers:
 `--export=…,BATCH_SIZE=128` on that arm (negative-count control, §3), and a
 compute-matched arm at `MAX_STEPS=350000` (Ours saw ~22M images, contrastive ~6.4M).
 
-B/C/D deliberately run **without** holdout so they compare directly to the published
-`contrastive-spatial-conv1x1`; A establishes that the holdout doesn't matter, which
-covers all of them.
+**All four arms hold out the downstream-eval galaxies** (`HOLDOUT=1`, the default), so
+the whole set is internally consistent and no arm can be dismissed on contamination
+grounds. That makes **A the reference arm for B/C/D** — each mechanism arm differs from
+A in exactly one axis. The published `contrastive-spatial-conv1x1` stays in the picture
+as the A-vs-published pair that measures contamination itself. So when evaluating B/C/D,
+set the comparison reference accordingly:
+
+```bash
+sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-DWNVAL,REF_VAR=contrastive-spatial-conv1x1-DWNVAL \
+  galaxy_images/galaxy_model/contrastive_ablation/eval_ablation_engaging.slurm
+```
 
 Hand back per arm: `best-*.ckpt` + `DONE` → `/orcd/pool/007/pablomer/checkpoints_new/contrastive-<RUN_TAG>/`.
 
