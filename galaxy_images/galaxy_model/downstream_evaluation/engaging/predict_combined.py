@@ -268,12 +268,19 @@ def _train_classification(X: np.ndarray, y: np.ndarray, max_epochs: int, seed: i
 
 
 def _train_family(X: np.ndarray, Y_dict: dict, target_names: list[str],
-                  max_epochs: int, seed: int, device: str, mlp_arch: str):
+                  max_epochs: int, seed: int, device: str, mlp_arch: str,
+                  n_folds: int = 0, fold: int = 0):
     """Multi-target masked regression probe — one MLP for the whole task family.
 
     Returns a list of per-target dicts:
         target, score, score_metric, n_train, n_test,
         best_epoch, epochs_run, max_epochs, early_stopped
+
+    n_folds=0 (default) keeps the original single 90/10 split, which produced every
+    published number. n_folds>0 instead evaluates on fold `fold` of a disjoint
+    n_folds-way partition of the same shuffled order, so running folds 0..n_folds-1
+    tests every galaxy exactly once and the spread across folds is a real error bar
+    rather than a resampling artefact.
     """
     pl.seed_everything(seed, workers=True)
 
@@ -295,8 +302,17 @@ def _train_family(X: np.ndarray, Y_dict: dict, target_names: list[str],
     rng = np.random.default_rng(seed)
     idx = np.arange(n_total)
     rng.shuffle(idx)
-    n_tr = int(TRAIN_FRAC * n_total)
-    tr, va = idx[:n_tr], idx[n_tr:]
+    if n_folds and n_folds > 1:
+        if not (0 <= fold < n_folds):
+            raise ValueError(f"fold must be in [0, {n_folds}), got {fold}")
+        # np.array_split handles n_total % n_folds != 0 by making the first few folds
+        # one larger, so the folds stay disjoint and jointly cover every index.
+        chunks = np.array_split(idx, n_folds)
+        va = chunks[fold]
+        tr = np.concatenate([c for i, c in enumerate(chunks) if i != fold])
+    else:
+        n_tr = int(TRAIN_FRAC * n_total)
+        tr, va = idx[:n_tr], idx[n_tr:]
 
     # Per-column standardization on finite training entries only.
     mu = np.zeros(K, dtype=np.float32)
@@ -497,7 +513,9 @@ def _run_family(h5, rows, ck, task_family, targets, variants, label_resolver_fac
         print(f"  [{tag}] family probe :: {variant}  ({len(target_names)} targets, n={X.shape[0]})")
         results = _train_family(X, Y_dict, target_names,
                                 max_epochs=h5._max_epochs, seed=h5._seed,
-                                device=h5._device, mlp_arch=h5._mlp_arch)
+                                device=h5._device, mlp_arch=h5._mlp_arch,
+                                n_folds=getattr(h5, "_n_folds", 0),
+                                fold=getattr(h5, "_fold", 0))
         for r in results:
             rows.append(dict(
                 checkpoint=ck, task_family=task_family,
@@ -509,7 +527,8 @@ def _run_family(h5, rows, ck, task_family, targets, variants, label_resolver_fac
             ))
 
 
-def run_all(h5: CkptH5, max_epochs: int, seed: int, device: str, mlp_arch: str) -> list[dict]:
+def run_all(h5: CkptH5, max_epochs: int, seed: int, device: str, mlp_arch: str,
+            n_folds: int = 0, fold: int = 0) -> list[dict]:
     """Three multi-target regression probes per latent variant
     (physics / instrument_hsc / instrument_legacy), plus the existing
     single-target morphology classifier.
@@ -519,6 +538,9 @@ def run_all(h5: CkptH5, max_epochs: int, seed: int, device: str, mlp_arch: str) 
     has_e2 = h5.has_e2
 
     h5._max_epochs, h5._seed, h5._device, h5._mlp_arch = max_epochs, seed, device, mlp_arch
+    # Only the multi-target regression probes honour folds; the morphology classifier
+    # below keeps its original split so its numbers stay comparable.
+    h5._n_folds, h5._fold = n_folds, fold
 
     combined_variants = [("combined_e1", [("overlap", "combined_e1")])]
     if has_e2:
@@ -578,6 +600,11 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--mlp-arch", choices=["aion", "aion_reg"], default="aion",
                    help="aion: Linear→GELU→Linear (hidden=256). aion_reg: + LN + Dropout(0.2).")
+    p.add_argument("--n-folds", type=int, default=0,
+                   help="0 (default) = the original single 90/10 split, unchanged. >1 = "
+                        "evaluate on fold --fold of a disjoint n-way partition; run every "
+                        "fold and aggregate to get error bars on R2.")
+    p.add_argument("--fold", type=int, default=0, help="Which fold to hold out (0-indexed).")
     args = p.parse_args()
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -587,13 +614,22 @@ def main():
     print(f"  checkpoint_name={h5.checkpoint_name}  arch={h5.architecture}  has_e2={h5.has_e2}")
     print(f"  mlp_arch={args.mlp_arch}")
 
+    if args.n_folds and args.n_folds > 1:
+        print(f"  cross-validation: fold {args.fold} of {args.n_folds} (disjoint partition)")
     rows = run_all(h5, max_epochs=args.max_epochs, seed=args.seed,
-                   device=args.device, mlp_arch=args.mlp_arch)
+                   device=args.device, mlp_arch=args.mlp_arch,
+                   n_folds=args.n_folds, fold=args.fold)
     h5.close()
 
     columns = ["checkpoint", "task_family", "target", "latent_variant",
                "score", "score_metric", "n_train", "n_test",
                "best_epoch", "epochs_run", "max_epochs", "early_stopped"]
+    # Fold bookkeeping is appended only in CV mode, so the default CSV schema that the
+    # plotting scripts read is untouched.
+    if args.n_folds and args.n_folds > 1:
+        for r in rows:
+            r["n_folds"], r["fold"] = args.n_folds, args.fold
+        columns += ["n_folds", "fold"]
     if not rows:
         print("No probe results — writing empty CSV with header only.")
         df = pd.DataFrame(columns=columns)

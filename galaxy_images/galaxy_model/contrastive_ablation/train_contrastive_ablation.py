@@ -1,8 +1,21 @@
 """
-Contrastive baseline trained with the DOWNSTREAM-EVAL GALAXIES EXCLUDED (DWNVAL).
+Trainer for every post-review contrastive ablation arm.
 
-Why this run exists
--------------------
+Three independent axes, all defaulting to the published `contrastive-spatial-conv1x1`
+configuration so that any single flag isolates one variable:
+
+  --holdout-ids-txt PATH     exclude the n=5,469 downstream-eval galaxies (DWNVAL)
+  --galaxy-negatives MODE     mixed | same_survey | cross_survey
+  --instrument-negatives MODE mixed | same_survey
+  --projection-head 0|1       SimCLR head (default 1) vs InfoNCE on the representation
+
+With all defaults and no holdout this reproduces the published arm; the loss path is
+literally delegated to the unmodified baseline class in that case (see
+dual_encoder_contrastive_variants.py), so "default == baseline" is enforced by code,
+not by comment. `test_negative_variants.py` asserts it numerically.
+
+The DWNVAL axis — why it exists
+-------------------------------
 Rebuttal audit (`contrastive_ablation/ANALYSIS.md`) established that neither the
 paper's `base` flow-matching checkpoint nor any of the four contrastive runs
 excluded the n=5,469 downstream-overlap galaxies from SSL training. For the FM
@@ -14,14 +27,13 @@ galaxy. This script produces the missing arm.
 
 Relationship to the existing runs
 ---------------------------------
-This is `contrastive_baseline/train_contrastive_engaging.py` with ONE change:
-anchors whose `object_id_legacy` appears in the downstream-holdout list are
-removed before the train/val split. Everything else is deliberately identical to
-`contrastive-spatial-conv1x1` so the pair is a clean A/B:
+This is `contrastive_baseline/train_contrastive_engaging.py` with the axes above
+bolted on. Everything else is deliberately identical to
+`contrastive-spatial-conv1x1` so every comparison is a clean A/B:
 
-  * same model class, unmodified: contrastive_baseline.dual_encoder_contrastive
-    .DualEncoderContrastiveModule  (so the repo-wide LR-schedule quirk documented
-    in CLAUDE.md applies identically to both arms and cannot confound the pair)
+  * same model class or a subclass of it that delegates to it when unrestricted (so
+    the repo-wide LR-schedule quirk documented in CLAUDE.md applies identically to
+    every arm and cannot confound any comparison)
   * same hyperparameters (embedding 64, projection 32, T=0.1, lr 1e-4, wd 1e-4,
     batch 64, K=5, bf16-mixed, 1 GPU, seed 42, val_fraction 0.05, 100k steps)
   * same anchor-survey parity (`idx % 2`), preserved because exclusion goes
@@ -90,8 +102,8 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from galaxy_images.galaxy_model.neighbors import collate_neighbors
-from galaxy_images.galaxy_model.contrastive_baseline.dual_encoder_contrastive import (
-    DualEncoderContrastiveModule,
+from galaxy_images.galaxy_model.contrastive_ablation.dual_encoder_contrastive_variants import (
+    ContrastiveNegativeAblationModule,
 )
 
 # Frozen to match contrastive-spatial-conv1x1 exactly. Do not "improve" these:
@@ -126,9 +138,29 @@ def parse_args():
     p.add_argument("--data-dir", required=True,
                    help="Neighbors store. ram48: efficient_neighs_48; efficient: neighbors_efficient.")
     p.add_argument("--loader", choices=["ram48", "efficient"], required=True)
-    p.add_argument("--holdout-ids-txt", required=True,
+    p.add_argument("--holdout-ids-txt", default=None,
                    help="One legacy object_id per line; anchors matching these are excluded. "
-                        "A tracked copy ships at contrastive_ablation/holdout_legacy_ids.txt.")
+                        "A tracked copy ships at contrastive_ablation/holdout_legacy_ids.txt. "
+                        "Omit for a run comparable to the published (non-holdout) arms, but "
+                        "then --no-holdout must be passed explicitly.")
+    p.add_argument("--no-holdout", action="store_true",
+                   help="Acknowledge that no holdout is applied. Required when "
+                        "--holdout-ids-txt is omitted, so a forgotten flag cannot silently "
+                        "produce a contaminated run that looks like a DWNVAL one.")
+    # Negative-sampling / projection-head axes (see dual_encoder_contrastive_variants.py).
+    p.add_argument("--galaxy-negatives", choices=["mixed", "same_survey", "cross_survey"],
+                   default="mixed",
+                   help="Which in-batch items may act as negatives for the galaxy branch. "
+                        "mixed = published behaviour (~half the negatives differ from the "
+                        "positive by survey, so survey identity partly solves the task).")
+    p.add_argument("--instrument-negatives", choices=["mixed", "same_survey"], default="mixed",
+                   help="Which neighbours may act as negatives for the instrument branch. "
+                        "mixed = published behaviour (pool spans both surveys, so a survey "
+                        "classifier scores well); same_survey forces within-survey seeing/"
+                        "depth discrimination.")
+    p.add_argument("--projection-head", type=int, choices=[0, 1], default=1,
+                   help="1 = SimCLR MLP head (published); 0 = InfoNCE directly on the "
+                        "encoder output that the probes consume.")
     p.add_argument("--min-holdout-matches", type=int, default=5000,
                    help="Fail fast if fewer anchors than this matched (guards against an "
                         "object_id encoding mismatch silently training a non-holdout run).")
@@ -182,6 +214,10 @@ def main():
     print(f"[ckpt] run directory: {ckpt_dir}", flush=True)
     print(f"[cfg] encoder_pool={args.encoder_pool} random_neighbors={bool(args.random_neighbors)} "
           f"loader={args.loader} max_steps={args.max_steps} batch_size={args.batch_size}", flush=True)
+    print(f"[cfg] galaxy_negatives={args.galaxy_negatives} "
+          f"instrument_negatives={args.instrument_negatives} "
+          f"projection_head={bool(args.projection_head)} "
+          f"holdout={'yes' if args.holdout_ids_txt else 'NO'}", flush=True)
 
     # ---- data ----------------------------------------------------------------
     dataset = build_dataset(args)
@@ -189,25 +225,40 @@ def main():
 
     # Exclude the downstream-eval galaxies. Import the FM pipeline's resolver so the
     # anchor matching is bit-identical to how the *-DWNVAL flow-matching runs did it.
-    from galaxy_images.galaxy_model.data_factory import (
-        _resolve_downstream_holdout_positions,
-    )
-    holdout_positions = _resolve_downstream_holdout_positions(
-        holdout_txt=args.holdout_ids_txt,
-        efficient_data_dir=args.data_dir,
-    )
-    if len(holdout_positions) < args.min_holdout_matches:
-        raise SystemExit(
-            f"[FATAL] only {len(holdout_positions):,} anchors matched the holdout list "
-            f"(expected >= {args.min_holdout_matches:,}). This would silently train a "
-            f"NON-holdout run. Check object_id_legacy encoding in "
-            f"{Path(args.data_dir) / 'catalog.parquet'} against {args.holdout_ids_txt}, "
-            f"then re-run contrastive_ablation/preflight_holdout.py."
+    if args.holdout_ids_txt:
+        from galaxy_images.galaxy_model.data_factory import (
+            _resolve_downstream_holdout_positions,
         )
+        holdout_positions = _resolve_downstream_holdout_positions(
+            holdout_txt=args.holdout_ids_txt,
+            efficient_data_dir=args.data_dir,
+        )
+        if len(holdout_positions) < args.min_holdout_matches:
+            raise SystemExit(
+                f"[FATAL] only {len(holdout_positions):,} anchors matched the holdout list "
+                f"(expected >= {args.min_holdout_matches:,}). This would silently train a "
+                f"NON-holdout run. Check object_id_legacy encoding in "
+                f"{Path(args.data_dir) / 'catalog.parquet'} against {args.holdout_ids_txt}, "
+                f"then re-run contrastive_ablation/preflight_holdout.py."
+            )
+    else:
+        if not args.no_holdout:
+            raise SystemExit(
+                "[FATAL] no --holdout-ids-txt given. Pass --no-holdout to confirm this arm "
+                "is deliberately trained on all anchors (comparable to the published runs)."
+            )
+        holdout_positions = []
+        print("[downstream-holdout] DISABLED — training on all anchors, matching the "
+              "published contrastive arms.", flush=True)
 
     excluded = set(holdout_positions)
-    kept_positions = [i for i in range(total) if i not in excluded]
-    kept_dataset = Subset(dataset, kept_positions)
+    if excluded:
+        kept_positions = [i for i in range(total) if i not in excluded]
+        kept_dataset = Subset(dataset, kept_positions)
+    else:
+        # Keep the un-Subset dataset so the split is bit-identical to the published arms.
+        kept_positions = list(range(total))
+        kept_dataset = dataset
 
     # Parity audit: the anchor survey is fixed by dataset-index parity (CLAUDE.md), so an
     # exclusion that happened to be parity-skewed would change the HSC/Legacy training mix
@@ -245,8 +296,13 @@ def main():
         persistent_workers=persistent, pin_memory=True,
     )
 
-    # ---- model (unmodified baseline class) -----------------------------------
-    model = DualEncoderContrastiveModule(
+    # ---- model ---------------------------------------------------------------
+    # Subclass of the published module; with mixed/mixed negatives and the head on, its
+    # loss path delegates straight to the baseline implementation.
+    model = ContrastiveNegativeAblationModule(
+        galaxy_negatives=args.galaxy_negatives,
+        instrument_negatives=args.instrument_negatives,
+        use_projection_head=bool(args.projection_head),
         in_channels=4,
         embedding_dim=EMBEDDING_DIM,
         projection_dim=PROJECTION_DIM,
@@ -277,8 +333,11 @@ def main():
             config={
                 "encoder_pool": args.encoder_pool,
                 "random_neighbors": bool(args.random_neighbors),
-                "downstream_holdout": True,
-                "holdout_ids_txt": args.holdout_ids_txt,
+                "downstream_holdout": bool(args.holdout_ids_txt),
+                "holdout_ids_txt": args.holdout_ids_txt or "",
+                "galaxy_negatives": args.galaxy_negatives,
+                "instrument_negatives": args.instrument_negatives,
+                "projection_head": bool(args.projection_head),
                 "n_anchors_total": total,
                 "n_anchors_excluded": len(excluded),
                 "n_anchors_kept": kept_size,
@@ -332,7 +391,11 @@ def main():
             f"global_step={trainer.global_step}\n"
             f"n_anchors_excluded={len(excluded)}\n"
             f"n_anchors_kept={kept_size}\n"
-            f"holdout_ids_txt={args.holdout_ids_txt}\n"
+            f"holdout_ids_txt={args.holdout_ids_txt or '(none)'}\n"
+            f"encoder_pool={args.encoder_pool}\n"
+            f"galaxy_negatives={args.galaxy_negatives}\n"
+            f"instrument_negatives={args.instrument_negatives}\n"
+            f"projection_head={bool(args.projection_head)}\n"
             f"loader={args.loader}\ndata_dir={args.data_dir}\n"
         )
         print(f"[done] reached {trainer.global_step} steps; wrote DONE marker.", flush=True)

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=contr-dwnval
+#SBATCH --job-name=contr-abl
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=12:00:00
@@ -8,7 +8,7 @@
 #SBATCH --error=/work1/jeroenaudenaert/pablomer/logs/%x_%j.err
 #SBATCH --open-mode=append
 #
-# Contrastive DWNVAL training — AMD cluster (MI210). TRAINING ONLY.
+# Contrastive ablation training — AMD cluster (MI210). TRAINING ONLY.
 # The downstream evaluation runs on Engaging (it needs the downstream image
 # stores under /orcd/.../scratch, which do not exist here); see RUN_INSTRUCTIONS.md.
 #
@@ -17,11 +17,23 @@
 # successor before training starts, so a wall-limit kill resumes from last.ckpt.
 # The python entry writes a DONE marker at --max-steps; the next link sees it and exits.
 #
-# Submit (defaults are the Ours-matched arm: spatial neighbors + conv1x1 head):
-#   sbatch galaxy_images/galaxy_model/contrastive_ablation/train_dwnval_amd.slurm
+# Defaults reproduce the published contrastive-spatial-conv1x1 arm plus the DWNVAL
+# holdout. Every other arm is one env override; see RUN_INSTRUCTIONS.md for the queue.
 #
-# Overrides:
-#   sbatch --export=ALL,ENCODER_POOL=avg,RUN_TAG=spatial-avg-DWNVAL ... train_dwnval_amd.slurm
+#   # A. holdout hygiene (default)
+#   sbatch train_ablation_amd.slurm
+#
+#   # B. instrument negatives restricted to the anchor's own survey
+#   sbatch --export=ALL,RUN_TAG=instrneg-samesurvey,INSTRUMENT_NEGATIVES=same_survey,HOLDOUT=0 \
+#          train_ablation_amd.slurm
+#
+#   # C. galaxy negatives restricted to the positive's survey
+#   sbatch --export=ALL,RUN_TAG=galneg-samesurvey,GALAXY_NEGATIVES=same_survey,HOLDOUT=0 \
+#          train_ablation_amd.slurm
+#
+#   # D. no SimCLR head — InfoNCE on the representation the probes read
+#   sbatch --export=ALL,RUN_TAG=nohead,PROJECTION_HEAD=0,HOLDOUT=0 train_ablation_amd.slurm
+#
 #   sbatch --partition=mi2104x --time=24:00:00 ...        # if mi2101x is congested
 #
 # Optional env: DISCORD_WEBHOOK (progress pings), WANDB_API_KEY (online logging).
@@ -36,6 +48,16 @@ ENCODER_POOL="${ENCODER_POOL:-conv1x1}"
 RANDOM_NEIGHBORS="${RANDOM_NEIGHBORS:-0}"
 MAX_STEPS="${MAX_STEPS:-100000}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-15}"
+# Ablation axes. Defaults = published behaviour, so each override isolates one variable.
+GALAXY_NEGATIVES="${GALAXY_NEGATIVES:-mixed}"
+INSTRUMENT_NEGATIVES="${INSTRUMENT_NEGATIVES:-mixed}"
+PROJECTION_HEAD="${PROJECTION_HEAD:-1}"
+# Raise to 128 for the negative-COUNT control: restricting negatives to one survey also
+# halves how many there are, and InfoNCE quality depends on the count.
+BATCH_SIZE="${BATCH_SIZE:-64}"
+# HOLDOUT=1 (default) excludes the downstream-eval galaxies; 0 trains on all anchors,
+# which is what the mechanism arms (B-D) want so they compare to the published run.
+HOLDOUT="${HOLDOUT:-1}"
 
 # AMD data paths. The 160x160 mmap store is the one the *-DWNVAL flow-matching runs
 # used here, so `efficient` keeps this arm consistent with how DWNVAL is already done
@@ -76,8 +98,8 @@ fi
 # --- Queue the successor now, so a wall-limit kill still continues the run ---
 sbatch --dependency=afterany:${SLURM_JOB_ID} \
        --partition="${SLURM_JOB_PARTITION:-mi2101x}" \
-       --export=ALL,RUN_TAG=${RUN_TAG},ENCODER_POOL=${ENCODER_POOL},RANDOM_NEIGHBORS=${RANDOM_NEIGHBORS},MAX_STEPS=${MAX_STEPS},MAX_ATTEMPTS=${MAX_ATTEMPTS},LOADER=${LOADER},DATA_DIR=${DATA_DIR},HOLDOUT_TXT=${HOLDOUT_TXT},CKPT_DIR=${CKPT_DIR},REPO_ROOT=${REPO_ROOT} \
-       "${CA_DIR}/train_dwnval_amd.slurm" || echo "[chain] WARNING: could not queue successor"
+       --export=ALL,RUN_TAG=${RUN_TAG},ENCODER_POOL=${ENCODER_POOL},RANDOM_NEIGHBORS=${RANDOM_NEIGHBORS},MAX_STEPS=${MAX_STEPS},MAX_ATTEMPTS=${MAX_ATTEMPTS},LOADER=${LOADER},DATA_DIR=${DATA_DIR},HOLDOUT_TXT=${HOLDOUT_TXT},HOLDOUT=${HOLDOUT},GALAXY_NEGATIVES=${GALAXY_NEGATIVES},INSTRUMENT_NEGATIVES=${INSTRUMENT_NEGATIVES},PROJECTION_HEAD=${PROJECTION_HEAD},BATCH_SIZE=${BATCH_SIZE},CKPT_DIR=${CKPT_DIR},REPO_ROOT=${REPO_ROOT} \
+       "${CA_DIR}/train_ablation_amd.slurm" || echo "[chain] WARNING: could not queue successor"
 
 source ~/.bashrc
 conda activate torchenv
@@ -109,6 +131,7 @@ cd "${REPO_ROOT}"
 # --- Preflight on the first attempt: refuse to burn a GPU on a broken holdout ---
 if [[ "${ATTEMPT}" -eq 1 ]]; then
     echo "[preflight] verifying holdout resolution before training"
+    echo "[preflight] note: the holdout report below is informational; the actual exclusion is controlled by HOLDOUT=${HOLDOUT}"
     python "${CA_DIR}/preflight_holdout.py" \
         --loader "${LOADER}" \
         --data-dir "${DATA_DIR}" \
@@ -123,16 +146,27 @@ if [[ "${ATTEMPT}" -eq 1 ]]; then
     _ping "contr-${RUN_TAG} 🚀 training started on AMD · pool=${ENCODER_POOL} loader=${LOADER} · target ${MAX_STEPS} steps · job ${SLURM_JOB_ID:-?}"
 fi
 
-srun python -u "${CA_DIR}/train_contrastive_dwnval.py" \
-    --encoder-pool     "${ENCODER_POOL}" \
-    --random-neighbors "${RANDOM_NEIGHBORS}" \
-    --max-steps        "${MAX_STEPS}" \
-    --loader           "${LOADER}" \
-    --data-dir         "${DATA_DIR}" \
-    --holdout-ids-txt  "${HOLDOUT_TXT}" \
-    --ckpt-dir         "${CKPT_DIR}" \
-    --run-name         "contrastive-${RUN_TAG}" \
-    --num-workers      "${SLURM_CPUS_PER_TASK:-8}"
+# Holdout is a flag pair, not a value: pass the id list, or explicitly acknowledge none.
+if [[ "${HOLDOUT}" == "1" ]]; then
+    HOLDOUT_ARGS=(--holdout-ids-txt "${HOLDOUT_TXT}")
+else
+    HOLDOUT_ARGS=(--no-holdout)
+fi
+
+srun python -u "${CA_DIR}/train_contrastive_ablation.py" \
+    --encoder-pool          "${ENCODER_POOL}" \
+    --random-neighbors      "${RANDOM_NEIGHBORS}" \
+    --max-steps             "${MAX_STEPS}" \
+    --loader                "${LOADER}" \
+    --data-dir              "${DATA_DIR}" \
+    "${HOLDOUT_ARGS[@]}" \
+    --galaxy-negatives      "${GALAXY_NEGATIVES}" \
+    --instrument-negatives  "${INSTRUMENT_NEGATIVES}" \
+    --projection-head       "${PROJECTION_HEAD}" \
+    --ckpt-dir              "${CKPT_DIR}" \
+    --run-name              "contrastive-${RUN_TAG}" \
+    --batch-size            "${BATCH_SIZE}" \
+    --num-workers           "${SLURM_CPUS_PER_TASK:-8}"
 
 if [[ -f "${CKPT_DIR}/DONE" ]]; then
     echo "[done] training complete. Checkpoints in ${CKPT_DIR}:"
@@ -142,7 +176,7 @@ if [[ -f "${CKPT_DIR}/DONE" ]]; then
     echo "NEXT STEP (on Engaging, not here):"
     echo "  1. rsync the best checkpoint to /orcd/pool/007/pablomer/checkpoints_new/contrastive-${RUN_TAG}/"
     echo "  2. sbatch --export=ALL,RUN_TAG=${RUN_TAG} \\"
-    echo "       galaxy_images/galaxy_model/contrastive_ablation/eval_dwnval_engaging.slurm"
+    echo "       galaxy_images/galaxy_model/contrastive_ablation/eval_ablation_engaging.slurm"
 fi
 
 echo "Job finished at $(date)"

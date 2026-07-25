@@ -139,6 +139,11 @@ generative objective is the point.
 
 ## 4. Experiment plan
 
+> **Superseded by `PLAN.md`**, which carries the live queue, per-cluster commands, and
+> the results of the items already finished (notably §A1 below — the dim-fair
+> instrument comparison is DONE, and dim-matching turns out to explain only about a
+> quarter of the instrument gap). The list below is kept as the original reasoning.
+
 ### A. Zero-training fixes (≤1 day, CPU/1 GPU) — make existing numbers rebuttal-grade
 1. **Dim-fair instrument comparison.** Produce mean-pooled e2 for
    `contrastive-spatial-conv1x1` (16-D/image → 32-D combined; reuse

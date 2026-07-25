@@ -1,11 +1,16 @@
-# Contrastive DWNVAL run — instructions for the training-cluster agent
+# Contrastive ablation runs — instructions for the training-cluster agent
 
 **Split of work: you train, Engaging evaluates.** The downstream evaluation needs
 image stores that only exist on Engaging, so your job ends when the checkpoint is
 trained and copied back. Everything you need is committed on branch
 `galaxy-engaging`.
 
-## What this run is
+**There are four arms to run (A-D).** They share one launcher; defaults reproduce the
+published `contrastive-spatial-conv1x1` arm, so each override isolates one variable.
+`PLAN.md` explains why each exists and what we expect. Arm A is described in detail
+below; B-D are the same procedure with different env vars (see "Other arms").
+
+## What arm A is
 
 The paper's contrastive ablation (reviewer JcH2 Q1) trained on *all* galaxies,
 including the 5,469 used for the downstream R² probes. This run repeats the
@@ -103,7 +108,7 @@ The preflight prints:
 
   # re-run preflight against the new store, then train from it
   sbatch --export=ALL,LOADER=ram48,DATA_DIR=/work1/jeroenaudenaert/pablomer/data/efficient_neighs_48 \
-    --mem=64G galaxy_images/galaxy_model/contrastive_ablation/train_dwnval_amd.slurm
+    --mem=64G galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
   ```
 
   `ram48` also makes this arm match the Engaging arm's loader exactly, so it's the
@@ -113,7 +118,7 @@ The preflight prints:
 ## Step 2 — submit training
 
 ```bash
-sbatch galaxy_images/galaxy_model/contrastive_ablation/train_dwnval_amd.slurm
+sbatch galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 ```
 
 Defaults: `RUN_TAG=spatial-conv1x1-DWNVAL`, `ENCODER_POOL=conv1x1`,
@@ -132,11 +137,11 @@ Useful overrides:
 ```bash
 # congested queue -> 4-GPU partition, 24h wall (the run still uses devices=1)
 sbatch --partition=mi2104x --time=24:00:00 \
-  galaxy_images/galaxy_model/contrastive_ablation/train_dwnval_amd.slurm
+  galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 
 # progress pings (optional; no secret is committed, pass your own webhook)
 sbatch --export=ALL,DISCORD_WEBHOOK='https://discord.com/api/webhooks/...' \
-  galaxy_images/galaxy_model/contrastive_ablation/train_dwnval_amd.slurm
+  galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
 ```
 
 `WANDB_MODE` is chosen automatically: online if `WANDB_API_KEY` or a wandb
@@ -189,7 +194,7 @@ and `legacy_downstream_full`, which don't exist on your cluster.
 
 ```bash
 sbatch --export=ALL,RUN_TAG=spatial-conv1x1-DWNVAL \
-  galaxy_images/galaxy_model/contrastive_ablation/eval_dwnval_engaging.slurm
+  galaxy_images/galaxy_model/contrastive_ablation/eval_ablation_engaging.slurm
 ```
 
 Extracts frozen embeddings on the fixed n=5,469 sample → `aion` MLP probes,
@@ -205,8 +210,55 @@ baseline's R² pattern.
 |---|---|
 | `ANALYSIS.md` | why this run exists; full audit of the contrastive ablation |
 | `preflight_holdout.py` | 5 checks + loader smoke test; run before submitting |
-| `train_contrastive_dwnval.py` | trainer; cluster-agnostic, holdout-aware |
-| `train_dwnval_amd.slurm` | AMD launcher (self-chaining, runs preflight, MI210 workaround) |
+| `PLAN.md` | the full experiment queue and what each arm tests |
+| `train_contrastive_ablation.py` | trainer; cluster-agnostic, holdout + negative-sampling + head axes |
+| `dual_encoder_contrastive_variants.py` | the loss variants (delegates to the baseline when unrestricted) |
+| `test_negative_variants.py` | fast CPU tests; asserts default == published baseline |
+| `train_ablation_amd.slurm` | AMD launcher (self-chaining, runs preflight, MI210 workaround) |
 | `holdout_legacy_ids.txt` | the 5,361 legacy ids to exclude (tracked so both clusters share one list) |
-| `eval_dwnval_engaging.slurm` | Engaging-only downstream eval (do not run on AMD) |
+| `eval_ablation_engaging.slurm` | Engaging-only downstream eval (do not run on AMD) |
 | `compare_dwnval.py` | ΔR² report vs the non-holdout arm → `DWNVAL_RESULT.md` |
+
+## Other arms (B-D)
+
+Same procedure as arm A: preflight once for the store (it is arm-independent), then
+submit. These deliberately run WITHOUT the holdout so they compare directly against
+the published `contrastive-spatial-conv1x1`; arm A separately establishes that the
+holdout makes no difference.
+
+```bash
+# C -- instrument negatives restricted to the anchor's own survey (highest value)
+sbatch --export=ALL,RUN_TAG=instrneg-samesurvey,INSTRUMENT_NEGATIVES=same_survey,HOLDOUT=0 \
+  galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
+
+# B -- galaxy negatives restricted to the positive's survey
+sbatch --export=ALL,RUN_TAG=galneg-samesurvey,GALAXY_NEGATIVES=same_survey,HOLDOUT=0 \
+  galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
+
+# D -- no SimCLR head: InfoNCE directly on the representation the probes read
+sbatch --export=ALL,RUN_TAG=nohead,PROJECTION_HEAD=0,HOLDOUT=0 \
+  galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
+```
+
+Sanity line to expect in each log (it records the axes actually in force):
+
+```
+[cfg] galaxy_negatives=mixed instrument_negatives=same_survey projection_head=True holdout=NO
+```
+
+For B and C, if the result moves, also run the negative-COUNT control at double batch
+size so "harder negatives" is separated from "fewer negatives":
+
+```bash
+sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-b128,INSTRUMENT_NEGATIVES=same_survey,HOLDOUT=0,BATCH_SIZE=128 \
+  galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
+```
+
+Before running anything, you can verify the loss variants are wired correctly without
+a GPU (a few seconds, CPU only) -- it asserts that the default configuration
+reproduces the published baseline's loss exactly:
+
+```bash
+python galaxy_images/galaxy_model/contrastive_ablation/test_negative_variants.py
+# expect: ALL CHECKS PASSED
+```

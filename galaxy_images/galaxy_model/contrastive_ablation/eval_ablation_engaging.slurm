@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=contr-dwnval-eval
+#SBATCH --job-name=contr-abl-eval
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
@@ -10,7 +10,7 @@
 #SBATCH --error=/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/logs/%x_%j.err
 #SBATCH --open-mode=append
 #
-# Downstream evaluation of the contrastive DWNVAL checkpoint — ENGAGING ONLY.
+# Downstream evaluation of any contrastive_ablation checkpoint — ENGAGING ONLY.
 #
 # This half must run here: prepare_combined.py reads the downstream image stores
 # (/home/pablomer/orcd/scratch/{hsc_downstream,legacy_downstream_full}) and the
@@ -26,7 +26,11 @@
 #
 # Submit:
 #   sbatch --export=ALL,RUN_TAG=spatial-conv1x1-DWNVAL \
-#     galaxy_images/galaxy_model/contrastive_ablation/eval_dwnval_engaging.slurm
+#     galaxy_images/galaxy_model/contrastive_ablation/eval_ablation_engaging.slurm
+#
+# Works for every arm trained by train_contrastive_ablation.py (they all share the
+# ContrastiveNegativeAblationModule class). To evaluate a checkpoint from the ORIGINAL
+# contrastive_baseline trainer instead, override MODULE/MODEL_CLASS.
 #
 # Optional env: CKPT (explicit checkpoint path), CKPT_DIR, SEEDS (default "0"),
 #               DISCORD_WEBHOOK.
@@ -43,6 +47,12 @@ CKPT_DIR="${CKPT_DIR:-/orcd/pool/007/pablomer/checkpoints_new/${VAR}}"
 # The reference arm this run is an A/B against.
 REF_VAR="${REF_VAR:-contrastive-spatial-conv1x1}"
 SEEDS="${SEEDS:-0}"
+# Arms trained by train_contrastive_ablation.py are the subclass; the pre-review arms in
+# contrastive_baseline/ are the parent class. prepare_combined.py duck-types either as
+# "contrastive" and pulls encoder_galaxy / encoder_instrument, so only the import target
+# differs.
+MODULE="${MODULE:-contrastive_ablation/dual_encoder_contrastive_variants.py}"
+MODEL_CLASS="${MODEL_CLASS:-ContrastiveNegativeAblationModule}"
 
 mkdir -p "${CA_DIR}/logs"
 
@@ -87,8 +97,8 @@ EMB="${ENG_DIR}/outputs/embeddings/${VAR}.h5"
 #    Same model class as the non-holdout arm, so no eval-side change is needed.
 python "${ENG_DIR}/prepare_combined.py" \
     --checkpoint  "${CKPT}" \
-    --module      contrastive_baseline/dual_encoder_contrastive.py \
-    --model-class DualEncoderContrastiveModule \
+    --module      "${MODULE}" \
+    --model-class "${MODEL_CLASS}" \
     --index-dir   "${ENG_DIR}/outputs/index" \
     --out         "${EMB}"
 
@@ -113,7 +123,7 @@ done
 python "${CA_DIR}/compare_dwnval.py" \
     --holdout-csv    "${ENG_DIR}/outputs/predictions/predict_${VAR}__aion.csv" \
     --reference-csv  "${ENG_DIR}/outputs/predictions/predict_${REF_VAR}__aion.csv" \
-    --out-md         "${CA_DIR}/DWNVAL_RESULT.md"
+    --out-md         "${CA_DIR}/RESULT_${VAR}.md"
 
 # 4) Overlay against Ours on the paper figure (same call the other arms used).
 python "${ENG_DIR}/plot_unified_three_probes.py" \
@@ -122,5 +132,5 @@ python "${ENG_DIR}/plot_unified_three_probes.py" \
     --extra-variant "${VAR}:Contrastive (holdout)" \
     --suffix "${VAR}_vs_ours"
 
-_ping "${VAR} ✅ eval done — see contrastive_ablation/DWNVAL_RESULT.md for the ΔR² table."
+_ping "${VAR} ✅ eval done — see contrastive_ablation/RESULT_${VAR}.md for the ΔR² table."
 echo "Done at $(date)"
