@@ -11,7 +11,7 @@ from pathlib import Path
 from diffusers import UNet2DConditionModel, UNet2DModel
 from typing import Optional
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR
 import geomloss
 import umap
 import numpy as np
@@ -171,6 +171,13 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         pooled_conditioning: bool = False, # if true -> pool encoder features to one global conditioning token per image
         # Optimization params
         lr: float = 1e-4,
+        # LR schedule. "paper" reproduces the published runs EXACTLY, including a latent
+        # quirk: it builds CosineAnnealingLR(T_max=trainer.max_epochs), and because training
+        # is step-based (train.py passes only max_steps) max_epochs is -1, so the LR does not
+        # anneal -- it ALTERNATES between `lr` and 0.0 at every epoch boundary, meaning ~50%
+        # of optimizer steps apply no update. Kept as the default for reproducibility.
+        # Use "cosine" / "linear" / "constant" for new runs. See CLAUDE.md.
+        lr_schedule: str = "paper",
         num_sample_images: int = 8, # number of exmaples cached for first validation batch for W&B
         num_mse_images: int = 64, # number of examples cached for MSE tracking
         num_integration_steps: int = 500,
@@ -191,6 +198,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         self.save_hyperparameters()
 
         self.lr = lr
+        self.lr_schedule = lr_schedule
         self.num_sample_images = num_sample_images
         self.num_mse_images = num_mse_images
         self.num_integration_steps = num_integration_steps
@@ -960,9 +968,61 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
                 traceback.print_exc()
 
     def configure_optimizers(self):
+        """Build the optimizer and LR schedule.
+
+        `lr_schedule` options:
+          "paper"    (DEFAULT) reproduce the published runs bit-for-bit. Keeps the original
+                     CosineAnnealingLR(T_max=self.trainer.max_epochs). Under step-based
+                     training max_epochs == -1, so this does NOT anneal: the LR alternates
+                     between self.lr and exactly 0.0 at each epoch boundary, and roughly half
+                     of all optimizer steps therefore apply no parameter update (AdamW's
+                     decoupled weight decay is also lr-scaled, so it pauses too). The moment
+                     buffers and BatchNorm running stats do keep updating. The alternation
+                     PERIOD is the epoch length, so it is dataset-size dependent -- see
+                     CLAUDE.md and scale_ablation/PLAN.md for why that matters for ablations.
+          "constant" no scheduler at all: a flat self.lr for every step. Same wall clock,
+                     ~2x the effective updates of "paper".
+          "cosine"   what the original line evidently intended: cosine anneal from self.lr to
+                     0 across trainer.max_steps, stepped per optimizer step.
+          "linear"   linear decay from self.lr to 0 across trainer.max_steps, per step.
+        """
         optimizer = AdamW(self.parameters(), lr=self.lr)
-        scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        schedule = getattr(self, "lr_schedule", "paper") or "paper"
+
+        if schedule == "paper":
+            scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs)
+            return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+        if schedule == "constant":
+            return optimizer
+
+        max_steps = int(getattr(self.trainer, "max_steps", -1) or -1)
+        if max_steps <= 0:
+            raise ValueError(
+                f"lr_schedule='{schedule}' anneals over trainer.max_steps, but max_steps="
+                f"{max_steps}. Set trainer.num_steps (step-based training) or use "
+                f"lr_schedule='constant'."
+            )
+
+        if schedule == "cosine":
+            scheduler = CosineAnnealingLR(optimizer, T_max=max_steps)
+        elif schedule == "linear":
+            scheduler = LinearLR(
+                optimizer, start_factor=1.0, end_factor=0.0, total_iters=max_steps
+            )
+        else:
+            raise ValueError(
+                f"Unknown lr_schedule={schedule!r}; expected one of "
+                f"'paper', 'constant', 'cosine', 'linear'."
+            )
+
+        print(f"[optim] lr_schedule={schedule} lr={self.lr} over {max_steps:,} steps (per-step)")
+        # interval="step" is essential: the default is "epoch", which is what produced the
+        # "paper" quirk in the first place.
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step", "frequency": 1},
+        }
 
 
     @torch.no_grad()

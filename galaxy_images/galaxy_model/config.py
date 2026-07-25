@@ -59,6 +59,10 @@ class ModelConfig:
     instrument_zdim: Optional[int] = None
     instrument_pooling: str = "masked_mean"
     lr: float = 1e-4
+    # "paper" (default) reproduces published runs exactly, including the epoch-boundary LR
+    # alternation between lr and 0.0 documented in CLAUDE.md. Prefer "cosine" (anneal to 0
+    # over max_steps), "linear", or "constant" for new runs.
+    lr_schedule: str = "paper"
     num_sample_images: int = 10
     num_mse_images: int = 32
     num_integration_steps: int = 250
