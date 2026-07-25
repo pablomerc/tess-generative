@@ -39,3 +39,251 @@ Reading embeddings from outputs/embeddings/base.h5
 
 Wrote outputs/predictions/folds/predict_base__aion_f2of5.csv  (78 rows)
 [folds] base fold 3/5
+Reading embeddings from outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 3 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base__aion_f3of5.csv  (78 rows)
+[folds] base fold 4/5
+Reading embeddings from outputs/embeddings/base.h5
+  checkpoint_name=base  arch=base  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 4 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base__aion_f4of5.csv  (78 rows)
+[folds] base-meanpool fold 0/5
+Reading embeddings from outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 0 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base-meanpool__aion_f0of5.csv  (78 rows)
+[folds] base-meanpool fold 1/5
+Reading embeddings from outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 1 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base-meanpool__aion_f1of5.csv  (78 rows)
+[folds] base-meanpool fold 2/5
+Reading embeddings from outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 2 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base-meanpool__aion_f2of5.csv  (78 rows)
+[folds] base-meanpool fold 3/5
+Reading embeddings from outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 3 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base-meanpool__aion_f3of5.csv  (78 rows)
+[folds] base-meanpool fold 4/5
+Reading embeddings from outputs/embeddings/base-meanpool.h5
+  checkpoint_name=base-meanpool  arch=base-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 4 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_base-meanpool__aion_f4of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1 fold 0/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1.h5
+  checkpoint_name=contrastive-spatial-conv1x1  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 0 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1__aion_f0of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1 fold 1/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1.h5
+  checkpoint_name=contrastive-spatial-conv1x1  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 1 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1__aion_f1of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1 fold 2/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1.h5
+  checkpoint_name=contrastive-spatial-conv1x1  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 2 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1__aion_f2of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1 fold 3/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1.h5
+  checkpoint_name=contrastive-spatial-conv1x1  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 3 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1__aion_f3of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1 fold 4/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1.h5
+  checkpoint_name=contrastive-spatial-conv1x1  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 4 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1__aion_f4of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1-meanpool fold 0/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1-meanpool.h5
+  checkpoint_name=contrastive-spatial-conv1x1-meanpool  arch=contrastive-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 0 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1-meanpool__aion_f0of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1-meanpool fold 1/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1-meanpool.h5
+  checkpoint_name=contrastive-spatial-conv1x1-meanpool  arch=contrastive-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 1 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1-meanpool__aion_f1of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1-meanpool fold 2/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1-meanpool.h5
+  checkpoint_name=contrastive-spatial-conv1x1-meanpool  arch=contrastive-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 2 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1-meanpool__aion_f2of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1-meanpool fold 3/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1-meanpool.h5
+  checkpoint_name=contrastive-spatial-conv1x1-meanpool  arch=contrastive-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 3 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1-meanpool__aion_f3of5.csv  (78 rows)
+[folds] contrastive-spatial-conv1x1-meanpool fold 4/5
+Reading embeddings from outputs/embeddings/contrastive-spatial-conv1x1-meanpool.h5
+  checkpoint_name=contrastive-spatial-conv1x1-meanpool  arch=contrastive-meanpool  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 4 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote outputs/predictions/folds/predict_contrastive-spatial-conv1x1-meanpool__aion_f4of5.csv  (78 rows)
+[aggregate] 20 fold CSVs | 4 variants | 312 cells (312 with all 5 folds)
+[aggregate] wrote outputs/predictions/folds_r2_summary.csv (312 rows)
+
+# 5-fold R² with error bars
+
+Disjoint 5-way partition (seed 0), `--mlp-arch aion`; every galaxy tested exactly once. Values are mean ± std across folds.
+
+Variants: `base`, `base-meanpool`, `contrastive-spatial-conv1x1`, `contrastive-spatial-conv1x1-meanpool`
+
+| cell | base | base-meanpool | contrastive-spatial-conv1x1 | contrastive-spatial-conv1x1-meanpool |
+|---|---|---|---|---|
+| Redshift z | +0.784±0.005 | +0.717±0.010 | +0.752±0.006 | +0.693±0.016 |
+| log M* | +0.745±0.008 | +0.624±0.023 | +0.697±0.004 | +0.597±0.011 |
+| sSFR | +0.511±0.014 | +0.472±0.014 | +0.484±0.029 | +0.415±0.023 |
+| Ellipticity (legacy) | +0.933±0.005 | +0.729±0.014 | +0.920±0.006 | +0.860±0.010 |
+| Ellipticity (HSC) | +0.938±0.006 | +0.695±0.016 | +0.899±0.007 | +0.840±0.011 |
+| Galaxy Depth | +0.751±0.011 | +0.688±0.020 | +0.852±0.016 | +0.750±0.027 |
+| PSF Depth | +0.742±0.013 | +0.671±0.023 | +0.846±0.020 | +0.741±0.032 |
+| # Observations | +0.535±0.014 | +0.482±0.012 | +0.699±0.009 | +0.567±0.011 |
+| E(B-V) | +0.591±0.025 | +0.541±0.023 | +0.770±0.017 | +0.681±0.020 |
+| PSF FWHM (HSC) | +0.500±0.017 | +0.420±0.017 | +0.684±0.018 | +0.526±0.019 |
+| LEAK: z from instrument | +0.669±0.010 | +0.513±0.012 | +0.536±0.026 | +0.397±0.015 |
+| LEAK: depth from physics | +0.170±0.010 | +0.098±0.011 | -0.008±0.006 | +0.001±0.007 |
+
+**Typical fold-to-fold spread:** median std 0.020, 90th pct 0.032. Differences smaller than ~2x this are not resolvable with n=5,469.
+
+[aggregate] wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/RESULT_folds.md
+Done at Fri Jul 24 23:21:59 EDT 2026

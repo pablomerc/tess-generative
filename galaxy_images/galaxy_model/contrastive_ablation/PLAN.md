@@ -97,7 +97,56 @@ DWNVAL twin, but `base-5NB` / `base-5NB-DWNVAL` do. So quote the contamination d
 against that pair, giving a clean 2×2 of {FM, contrastive} × {all-data, holdout}.
 Already measured for FM: mean ΔR² −0.005 (5NB) / +0.005 (15NB) — noise.
 
-## 6. Five folds with error bars — **READY** (exp E)
+## 6. Five folds with error bars — **DONE** (exp E)
+
+Job 18809342, 56 min on `mit_normal`. Full tables: `RESULT_folds.md` (mean ± std per
+cell) and `RESULT_paired_{flat128,pooled32}.md`. Typical fold-to-fold std is **0.020**
+(90th pct 0.032), so unpaired differences below ~0.04 are not resolvable.
+
+**Read the differences paired**, not by combining the two variants' std's: every fold
+tests the same galaxies for both models, so that noise is common and cancels. It makes a
+large difference — the redshift gap is 0.032 ± 0.008 unpaired but **0.032 ± 0.002**
+paired. `paired_fold_test.py` does this.
+
+Dim-matched flat (128-D), Ours − contrastive, ± SE over folds:
+
+| cell | Ours − Contr | verdict |
+|---|---|---|
+| Redshift z | **+0.032 ± 0.002** | Ours wins |
+| log M\* | **+0.048 ± 0.004** | Ours wins |
+| sSFR | +0.027 ± 0.010 | marginal |
+| Ellipticity (Legacy-measured) | **+0.013 ± 0.001** | ~tied |
+| Ellipticity (HSC-measured) | **+0.040 ± 0.002** | Ours wins |
+| Galaxy Depth | **−0.100 ± 0.002** | contrastive wins |
+| E(B−V) | **−0.179 ± 0.009** | contrastive wins |
+| *leak:* z from instrument | **+0.133 ± 0.014** | contrastive cleaner |
+| *leak:* depth from physics | **+0.178 ± 0.003** | contrastive cleaner (Ours 0.170, Contr −0.008) |
+
+At matched pooled 32-D the instrument gap shrinks but survives (Galaxy Depth
+−0.062 ± 0.007, E(B−V) −0.140 ± 0.013), and the physics gap becomes marginal
+(z +0.024 ± 0.010).
+
+### The headline result: "collapse to lowest resolution", quantified
+
+> (Ours − Contr on **HSC** shapes) − (Ours − Contr on **Legacy** shapes)
+> = **+0.026 ± 0.003**, t = +10.6
+
+Contrastive's shape deficit is **3× larger on the higher-resolution survey's shapes**
+than on the lower-resolution one's. As a difference of differences this cannot be
+explained by either model being better overall, and it is a direct quantitative
+confirmation of the intro's claim (tex:177-178) that aligning views "collapses toward
+the lowest-resolution observation and discards fine-grained features visible in
+higher-quality instruments" — previously asserted, never measured. **This belongs in
+the rebuttal.**
+
+Caveat to state if we quote absolute numbers: 5-fold trains each probe on 80% of the
+sample versus 90% for the published single split, so absolute R² sits slightly lower
+(base redshift 0.784 ± 0.005 vs the published 0.801). That is a training-set-size
+effect, not a bad draw, and it applies identically to every variant, so all
+*comparisons* are unaffected. Quote the published 90/10 numbers in tables and these
+folds as the uncertainty on the differences.
+
+### Original rationale
 
 `ENG/predict_combined.py` now takes `--n-folds 5 --fold {0..4}`: a disjoint partition
 so every galaxy is tested exactly once, rather than 5 correlated random 90/10 draws.
@@ -145,7 +194,7 @@ Hand back per arm: `best-*.ckpt` + `DONE` → `/orcd/pool/007/pablomer/checkpoin
 | # | task | command | status |
 |---|---|---|---|
 | — | dim-fair pooled instrument comparison (§1) | `build_meanpool_h5.py` + probe | **DONE** |
-| E | 5-fold error bars for `base`, `base-meanpool`, `contrastive-spatial-conv1x1(-meanpool)` | `for f in 0 1 2 3 4: predict_combined.py --n-folds 5 --fold $f …` | **READY** |
+| E | 5-fold error bars (4 variants x 5 folds) | `sbatch …/folds_engaging.slurm` then `paired_fold_test.py` | **DONE** (job 18809342, §6) |
 | — | eval each returned checkpoint | `sbatch --export=ALL,RUN_TAG=<tag> …/eval_ablation_engaging.slurm` | **READY** |
 | F | cross-survey retrieval, physics space, Ours vs contrastive | reviewer asked for it | **TODO** |
 | G | NSF-flow outlier detection on contrastive physics latents | reviewer asked for it | **TODO** |
