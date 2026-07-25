@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> None:
         "--num-steps",
         type=int,
         nargs="+",
-        default=[25, 50, 100, 250],
+        default=[25, 50, 100, 250, 1000],
         help="DDIM inference-step counts.",
     )
     parser.add_argument(
