@@ -1,0 +1,102 @@
+[eval] checkpoint: /home/pablomer/orcd/pool/contrastive_ablation_checkpoints/contrastive-nohead-DWNVAL/best-epoch=43-step=63000.ckpt
+Device: cuda
+Checkpoint: /home/pablomer/orcd/pool/contrastive_ablation_checkpoints/contrastive-nohead-DWNVAL/best-epoch=43-step=63000.ckpt
+Module/class: contrastive_ablation/dual_encoder_contrastive_variants.py :: ContrastiveNegativeAblationModule
+[ContrastiveNegativeAblationModule] galaxy_negatives=mixed instrument_negatives=mixed use_projection_head=False
+Architecture: contrastive  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1092.5 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (891.6 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/contrastive-nohead-DWNVAL.h5
+[eval] probe seed=0 -> /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_contrastive-nohead-DWNVAL__aion.csv
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/contrastive-nohead-DWNVAL.h5
+  checkpoint_name=contrastive-nohead-DWNVAL  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_contrastive-nohead-DWNVAL__aion.csv  (78 rows)
+# Contrastive DWNVAL — SSL-contamination result
+
+- holdout run   : `predict_contrastive-nohead-DWNVAL__aion.csv`
+- reference run : `predict_contrastive-spatial-conv1x1__aion.csv`
+- shared cells  : 78
+
+## Aggregate ΔR² (holdout − reference)
+
+| statistic | value |
+|---|---|
+| mean | -0.0206 |
+| median | -0.0184 |
+| stdev | 0.0346 |
+| max abs | -0.1203 |
+| cells with abs(Δ) > 0.05 | 11 / 78 |
+
+Flow-matching reference for the same comparison (already measured): `base-5NB` mean -0.0047, `base-15NB` mean +0.0052.
+
+## By encoder x task family
+
+| latent | task family | n | mean Δ | median Δ | max abs Δ |
+|---|---|---|---|---|---|
+| combined_e1 | instrument_hsc | 9 | -0.0175 | -0.0109 | -0.0638 |
+| combined_e1 | instrument_legacy | 21 | -0.0080 | -0.0090 | +0.0423 |
+| combined_e1 | physics_provabgs | 9 | -0.0471 | -0.0481 | -0.0914 |
+| combined_e2 | instrument_hsc | 9 | +0.0078 | +0.0035 | +0.0674 |
+| combined_e2 | instrument_legacy | 21 | -0.0223 | -0.0214 | -0.0468 |
+| combined_e2 | physics_provabgs | 9 | -0.0516 | -0.0363 | -0.1203 |
+
+## Headline cells (paper Table 5 / Fig. 4)
+
+| cell | reference | holdout | Δ |
+|---|---|---|---|
+| Redshift z (physics latent) | +0.740 | +0.715 | -0.025 |
+| log M* (physics latent) | +0.675 | +0.671 | -0.004 |
+| Ellipticity e1 (physics latent) | +0.918 | +0.849 | -0.069 |
+| HSC ellipticity e1 (physics latent) | +0.882 | +0.836 | -0.047 |
+| Galaxy Depth R (instrument latent) | +0.914 | +0.894 | -0.020 |
+| PSF Depth R (instrument latent) | +0.909 | +0.891 | -0.018 |
+| # Observations R (instrument latent) | +0.659 | +0.644 | -0.015 |
+| E(B-V) (instrument latent) | +0.740 | +0.718 | -0.022 |
+| Galaxy Depth R (physics latent — expect ~0) | +0.010 | -0.015 | -0.025 |
+| Redshift z (instrument latent — the leak) | +0.568 | +0.569 | +0.001 |
+
+## Top 8 movers
+
+| task family | target | latent | reference | holdout | Δ |
+|---|---|---|---|---|---|
+| physics_provabgs | hsc_shape_e2_i | combined_e2 | +0.532 | +0.412 | -0.120 |
+| physics_provabgs | legacy_shape_e2 | combined_e2 | +0.545 | +0.426 | -0.119 |
+| physics_provabgs | hsc_shape_e1_i | combined_e2 | +0.371 | +0.259 | -0.112 |
+| physics_provabgs | legacy_shape_e1 | combined_e2 | +0.380 | +0.275 | -0.105 |
+| physics_provabgs | legacy_shape_e2 | combined_e1 | +0.895 | +0.803 | -0.091 |
+| physics_provabgs | hsc_shape_e2_i | combined_e1 | +0.893 | +0.824 | -0.070 |
+| physics_provabgs | provabgs_z_mw | combined_e1 | +0.272 | +0.203 | -0.069 |
+| physics_provabgs | legacy_shape_e1 | combined_e1 | +0.918 | +0.849 | -0.069 |
+
+## Verdict
+
+Mean |ΔR²| = 0.0291, LARGER than the flow-matching arm's bound (0.0052). Contamination affects the contrastive arm more than the generative one — report the holdout numbers as the headline and say so.
+
+
+[compare] wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/RESULT_contrastive-nohead-DWNVAL.md
+Plot (PNG):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_contrastive-nohead-DWNVAL_vs_ours.png
+Plot (PDF):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_contrastive-nohead-DWNVAL_vs_ours.pdf
+Merged CSV:  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_contrastive-nohead-DWNVAL_vs_ours__merged.csv
+Convergence: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion__convergence.txt
+Done at Sun Jul 26 15:53:45 EDT 2026

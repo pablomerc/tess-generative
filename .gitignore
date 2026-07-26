@@ -87,3 +87,9 @@ galaxy_images/galaxy_model/checkpoints
 galaxy_images/galaxy_model/cross_predict_experiment/extra_targets_per_h5_row.parquet
 # transient SLURM job-id handoff written by the RAM48 build script
 galaxy_images/galaxy_model/contrastive_baseline/.build48_jid
+
+# Large data artifacts — never commit these (see galaxy_images/galaxy_model/scale_ablation/
+# lens_recall/latents/, which is ~1GB of encoded latents). No .h5/.parquet was ever
+# tracked, so these rules only prevent accidents from a broad `git add -A`.
+*.h5
+*.parquet

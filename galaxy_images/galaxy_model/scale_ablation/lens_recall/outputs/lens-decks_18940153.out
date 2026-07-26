@@ -1,0 +1,33 @@
+[many] 10 checkpoints, 10 to encode (0 cached)
+[many] 103,741 anchors | source=ram48
+[gallery] loading RAM48 store (17.3 GB) ...
+[gallery] loaded in 9s
+[gallery] row-mapping guard passed (64/64 anchors have real pixels)
+[check] scale-1000-75k/hsc_physics: mean per-dim std 0.7275  OK
+[many] 1/10 scale-1000-75k         ckpt-load   3.1s  encode  0.16m (11052 img/s)  -> scale-1000-75k.h5
+[check] scale-3162-75k/hsc_physics: mean per-dim std 0.7937  OK
+[many] 2/10 scale-3162-75k         ckpt-load 602.4s  encode  0.17m (10168 img/s)  -> scale-3162-75k.h5
+[check] scale-10000-75k/hsc_physics: mean per-dim std 0.8334  OK
+[many] 3/10 scale-10000-75k        ckpt-load 328.2s  encode  0.16m (11021 img/s)  -> scale-10000-75k.h5
+[check] scale-31622-75k/hsc_physics: mean per-dim std 0.9099  OK
+[many] 4/10 scale-31622-75k        ckpt-load 421.3s  encode  0.16m (10637 img/s)  -> scale-31622-75k.h5
+[check] scale-1000-bestmse/hsc_physics: mean per-dim std 0.7322  OK
+[many] 5/10 scale-1000-bestmse     ckpt-load  72.1s  encode  0.16m (10904 img/s)  -> scale-1000-bestmse.h5
+[check] scale-3162-bestmse/hsc_physics: mean per-dim std 0.7999  OK
+[many] 6/10 scale-3162-bestmse     ckpt-load 119.1s  encode  0.21m (8375 img/s)  -> scale-3162-bestmse.h5
+[check] scale-10000-bestmse/hsc_physics: mean per-dim std 0.8336  OK
+[many] 7/10 scale-10000-bestmse    ckpt-load 120.3s  encode  0.16m (10528 img/s)  -> scale-10000-bestmse.h5
+[check] scale-31622-bestmse/hsc_physics: mean per-dim std 0.8969  OK
+[many] 8/10 scale-31622-bestmse    ckpt-load  91.7s  encode  0.17m (10128 img/s)  -> scale-31622-bestmse.h5
+[check] base-87k/hsc_physics: mean per-dim std 0.9573  OK
+[many] 9/10 base-87k               ckpt-load   1.9s  encode  0.16m (10837 img/s)  -> base-87k.h5
+[check] fm-control-75k/hsc_physics: mean per-dim std 0.9050  OK
+[many] 10/10 fm-control-75k         ckpt-load 400.7s  encode  0.16m (10520 img/s)  -> fm-control-75k.h5
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens48_KEY.json  (PRIVATE — do not post)
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens48_page1.png
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens48_page2.png
+PAGES:/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens48_page1.png,/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens48_page2.png
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens33_KEY.json  (PRIVATE — do not post)
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens33_page1.png
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens33_page2.png
+PAGES:/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens33_page1.png,/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/decks/deck_lens33_page2.png

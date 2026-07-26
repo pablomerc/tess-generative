@@ -14,6 +14,11 @@
 # Shuffle-conditioning ablation (reviewer SYJm Q2).
 # Defaults: paper base checkpoint, M=8, 250 Euler steps, C0–C3.
 # Override via env: N_SAMPLES=1 NUM_STEPS=25 for a smoke run.
+#
+# WARNING: never pass a comma-valued variable inside --export=ALL,VAR=a,b,c —
+# sbatch splits that list on commas, so M_LIST=0,1,2,3 silently arrives as "0"
+# and only one posterior sample runs. Set it in the CALLING shell instead:
+#   M_LIST="0,1,2,3" OUT_DIR=/path/results_mA sbatch --export=ALL run_engaging.slurm
 
 set -eo pipefail
 

@@ -1,0 +1,6 @@
+Submitted batch job 18875682
+[wandb] WANDB_MODE=online
+PYTHON=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python | COND_STYLE=tokens | INJECTION=xattn
+torch 2.6.0+cu124 cuda True
+[train-cf] run_dir=/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn
+[train-cf] cond_style=tokens injection=xattn

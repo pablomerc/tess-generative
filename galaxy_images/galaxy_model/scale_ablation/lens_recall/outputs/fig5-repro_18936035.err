@@ -1,0 +1,37 @@
+Traceback (most recent call last):
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/encode_gallery.py", line 176, in <module>
+    main()
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/encode_gallery.py", line 144, in main
+    for hsc, leg, r in loader:
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 708, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1480, in _next_data
+    return self._process_data(data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1505, in _process_data
+    data.reraise()
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/_utils.py", line 733, in reraise
+    raise exception
+ValueError: Caught ValueError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/utils/data/_utils/worker.py", line 349, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 52, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 52, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+            ~~~~~~~~~~~~^^^^^
+  File "/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/encode_gallery.py", line 68, in __getitem__
+    hsc = preprocess_raw_image(self.f["images_hsc"][row][:4], "hsc", self.crop_size)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/neighbors.py", line 57, in preprocess_raw_image
+    image = preprocess_image_v2(image, crop_size=crop_size, survey=survey)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/image_preprocessing.py", line 248, in preprocess_image_v2
+    raise ValueError(f"Survey '{survey}' expects {expected_channels} channels, but got input with {image.shape[1]}")
+ValueError: Survey 'hsc' expects 5 channels, but got input with 4
+
+srun: error: node4900: task 0: Exited with exit code 1

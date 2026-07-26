@@ -1,0 +1,23 @@
+[wandb] WANDB_MODE=online | project=galaxy-counterfactual-fm-decoder | name=cf-fm-tokens-xattn-long
+[train-cf] run_dir=/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-long
+[train-cf] cond_style=tokens injection=xattn
+[CFEmbeddingDataset] 103,741 examples | emb_dim=64 | K=5 | cond_style=tokens | store=ram48 | full=True
+[train-cf] train=98,554  val=5,187  (store=ram48, full=True)
+[train-cf] checkpoint monitor=val/mse (fm-control selects on val/mse)
+┏━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name           ┃ Type                 ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ velocity_model │ UNet2DConditionModel │  161 M │ train │     0 │
+└───┴────────────────┴──────────────────────┴────────┴───────┴───────┘
+Trainable params: 161 M                                                         
+Non-trainable params: 0                                                         
+Total params: 161 M                                                             
+Total estimated model params size (MB): 647                                     
+Modules in train mode: 856                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+
+============================================================
+Training started — target 100000 steps | cond_style=tokens | injection=xattn | H100=False
+============================================================
+

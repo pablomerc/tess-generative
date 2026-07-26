@@ -1,0 +1,49 @@
+############ source=ram48 ############
+[gallery] 103,741 anchors | source=ram48
+[gallery] loaded snapshot.ckpt on cuda
+[gallery] loading RAM48 store (17.3 GB) ...
+[gallery] loaded in 8s
+  10,240/103,741  8375 img/s  elapsed 0.0m  eta 0.2m
+  20,480/103,741  9464 img/s  elapsed 0.0m  eta 0.1m
+  30,720/103,741  10053 img/s  elapsed 0.1m  eta 0.1m
+  40,960/103,741  10347 img/s  elapsed 0.1m  eta 0.1m
+  51,200/103,741  10506 img/s  elapsed 0.1m  eta 0.1m
+  61,440/103,741  10699 img/s  elapsed 0.1m  eta 0.1m
+  71,680/103,741  10786 img/s  elapsed 0.1m  eta 0.0m
+  81,920/103,741  10954 img/s  elapsed 0.1m  eta 0.0m
+  92,160/103,741  11064 img/s  elapsed 0.1m  eta 0.0m
+  102,400/103,741  11098 img/s  elapsed 0.2m  eta 0.0m
+  103,741/103,741  11058 img/s  elapsed 0.2m  eta 0.0m
+[gallery] wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/latents/base87k_ram48.h5  physics D=64  instrument D=64  in 0.2m
+
+=== PHYSICS space (query 42692125246129290, row 183713) ===
+  #1   hsc     row 32       d=0.0001  <-- MISMATCH (expected legacy 183713)
+  #2   hsc     row 33       d=0.0001
+  #3   hsc     row 34       d=0.0001  <-- MISMATCH (expected hsc 187190)
+  #4   hsc     row 35       d=0.0001  <-- MISMATCH (expected hsc 15375)
+  #5   hsc     row 36       d=0.0001  <-- MISMATCH (expected hsc 181039)
+  #6   hsc     row 37       d=0.0001  <-- MISMATCH (expected hsc 40202)
+  #7   hsc     row 38       d=0.0001
+  #8   hsc     row 39       d=0.0001  <-- MISMATCH (expected hsc 23615)
+  #9   hsc     row 40       d=0.0001
+  #10  hsc     row 41       d=0.0001
+
+  reproduction: 0/6 recorded ranks match exactly
+
+=== INSTRUMENT space (query 42692125246129290, row 183713) ===
+  #1   hsc     row 32       d=0.0001  <-- MISMATCH (expected legacy 183713)
+  #2   hsc     row 33       d=0.0001
+  #3   hsc     row 34       d=0.0001  <-- MISMATCH (expected hsc 187190)
+  #4   hsc     row 35       d=0.0001  <-- MISMATCH (expected hsc 15375)
+  #5   hsc     row 36       d=0.0001  <-- MISMATCH (expected hsc 181039)
+  #6   hsc     row 37       d=0.0001  <-- MISMATCH (expected hsc 40202)
+  #7   hsc     row 38       d=0.0001
+  #8   hsc     row 39       d=0.0001  <-- MISMATCH (expected hsc 23615)
+  #9   hsc     row 40       d=0.0001
+  #10  hsc     row 41       d=0.0001
+
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/outputs/fig5_base87k_ram48.json
+wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/scale_ablation/lens_recall/outputs/fig5_base87k_ram48.png
+############ source=h5 ############
+[gallery] 103,741 anchors | source=h5
+[gallery] loaded snapshot.ckpt on cuda

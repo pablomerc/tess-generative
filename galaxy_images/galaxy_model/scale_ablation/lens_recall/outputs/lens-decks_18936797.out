@@ -1,0 +1,5 @@
+[many] 10 checkpoints, 10 to encode (0 cached)
+[many] 103,741 anchors | source=ram48
+[gallery] loading RAM48 store (17.3 GB) ...
+[gallery] loaded in 9s
+[many] 1/10 scale-1000-75k         ckpt-load 850.1s  encode  0.16m (10909 img/s)  -> scale-1000-75k.h5

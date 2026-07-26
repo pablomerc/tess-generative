@@ -1,0 +1,18 @@
+SCORING SHEET — query lens48 (HSC row 183713)
+
+For each row, list the rank numbers whose images look like plausible strong
+lenses (arcs, rings, close double/quad images around a bright early-type).
+Write `none` if there are none. Ranks run 1..8 left to right.
+
+  A: 
+  B: 
+  C: 
+  D: 
+  E: 
+  F: 
+  G: 
+  H: 
+  I: 
+  J: 
+  K: 
+  L: 

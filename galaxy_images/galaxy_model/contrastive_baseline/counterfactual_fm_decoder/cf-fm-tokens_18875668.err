@@ -1,0 +1,21 @@
+[rank: 0] Seed set to 42
+Traceback (most recent call last):
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_baseline/counterfactual_fm_decoder/train_cf_fm.py", line 187, in <module>
+    main()
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_baseline/counterfactual_fm_decoder/train_cf_fm.py", line 115, in main
+    full = CFEmbeddingDataset(args.data_h5, cond_style=args.cond_style)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_baseline/counterfactual_fm_decoder/cf_embedding_dataset.py", line 27, in __init__
+    with h5py.File(h5_path, "r") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/h5py/_hl/files.py", line 555, in __init__
+    fid = make_fid(name, mode, userblock_size, fapl, fcpl, swmr=swmr)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/h5py/_hl/files.py", line 232, in make_fid
+    fid = h5f.open(name, flags, fapl=fapl)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5f.pyx", line 106, in h5py.h5f.open
+BlockingIOError: [Errno 11] Unable to synchronously open file (unable to lock file, errno = 11, error message = 'Resource temporarily unavailable')
+srun: error: node4900: task 0: Exited with exit code 1
