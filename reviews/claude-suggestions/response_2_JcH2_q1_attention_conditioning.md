@@ -14,11 +14,17 @@ The reviewer quotes the sentence at `disentanglement_neurips2026.tex:207`:
 | claim | verdict |
 |---|---|
 | "We treat the output of an encoder as a token of dimension 64" | **WRONG — contradicts our own paper.** Each encoder maps one image to **4 tokens of 16 dimensions**, i.e. `(B, 4, 16)`. That is stated in §4 (tex:359) and Table 1 (tex:778-780, `Conv2d(512→16, kernel=1)`, cross-attention dim 16), and it is what the code does (`double_train_fm_neighbors.py:105` projection; `:124-127` reshape to `(B, H'W', D)`; `configs/neighbors_efficient.json:30` `cross_attention_dim: 16`). 64 is the *flattened* width 4×16, which is what the **downstream probes** consume (tex:1011) — not the cross-attention token layout. Saying "a token of dimension 64" to a reviewer who has read the appendix suggests we don't know our own architecture. |
-| "we concatenate 1 physics-latent token with one instrument-latent token" | **WRONG for the same reason.** It is 4 physics tokens + 4 tokens *per neighbour*: `(B, (1+k)·4, 16)` (`:384` flatten, `:386` concat). With k=5 that is **24 tokens of dimension 16**. |
+| "we concatenate 1 physics-latent token with one instrument-latent token" | **WRONG for the same reason** — off by 4× on both sides. It is 4 physics tokens + 4 tokens *per neighbour*: `(B, (1+k)·4, 16)` (`:392` flatten, `:394` concat). With k=5 that is **24 tokens of dimension 16** = 4 + 20. |
+| *combined risk of (a)+(b)* | **This is the sharpest danger.** "1 token of 64" and "4 tokens of 16" have the *same flattened width*, so a reviewer will infer we mentally flattened the token axis — and may then ask whether the reported model is actually the `instrument_flatten_to_one_token` ablation, which really does collapse tokens to one (`:193`, `:356-366`). It exists in the code but is **off** in the baseline config, and applies only to the instrument branch. The draft would accidentally advertise an ablation the paper does not report, and invite a question about which model Table 5 came from. |
 | "The decoder uses crossattention … when modifying the activations of the UNet" | **Right idea, minor wording fix.** "Decoder" is fine — it is the paper's own term ("flow-matching generative decoder", tex:754; also tex:240, tex:512). The only issue is that the sentence reads as if the decoder and the UNet were two modules; they are the same `UNet2DConditionModel`. Worth adding *which way* the attention runs: UNet activations are the queries, the encoder tokens the keys/values. |
-| "automatically accommodates a variable number of spatial neighbors (variable sequence length)" | **True of the architecture, but overstated for the implementation.** Cross-attention is length-agnostic and permutation-equivariant, so the same weights accept any number of tokens — that is the real answer. But in our implementation we pad the neighbour axis to a fixed K per batch and **zero** the embeddings of absent neighbours (`:381-382`), and we do **not** pass an `encoder_attention_mask` to the UNet (verified: no attention-mask argument anywhere in the file). So zero tokens remain in the sequence as keys/values. Don't claim more than we do — a sharp reviewer will ask exactly this. |
+| "automatically accommodates a variable number of spatial neighbors (variable sequence length)" | **Defensible, but say it precisely.** Two facts in our favour: cross-attention is length-agnostic and permutation-equivariant, and `collate_neighbors` pads to the **per-batch maximum**, not to a global constant (`neighbors.py:162` `max_n = max(t.size(0) for t in neighbor_tensors)`), so the sequence length genuinely does vary *across* batches. The caveat: *within* a batch it is fixed, absent neighbours are **zeroed** rather than dropped (`:388-390`), and **no `encoder_attention_mask` is passed** to the velocity net (verified: no attention-mask argument anywhere in the file). Since diffusers' `to_k`/`to_v` are bias-free and the conditioning gets no norm, a padded token has key ≡ 0 → logit 0 → a nonzero softmax weight, so it inflates the denominator and slightly down-weights the real tokens. Padding is therefore not a semantic no-op. Don't claim masking we don't do. |
 
-Mitigating fact worth having ready: padding is almost never exercised here. **100% of HSC anchors and 99.6% of Legacy anchors have ≥5 sky neighbours**, so k=5 essentially always, and the zero-padding path is a rare edge case rather than a routine part of training.
+Also worth knowing (do **not** volunteer these, but be ready): padded zero stamps are still pushed through `encoder_2` (`:353-354`), so they enter BatchNorm batch statistics in train mode; and the paper's only mention of padding is **commented out** (tex:821, `% Max neighbors per sample & Variable (padded)`) — uncommenting that table row is a cheap revision that documents the behaviour.
+
+Mitigating fact worth having ready: padding is almost never exercised here. Fewer than
+**0.05% of HSC and ~0.3% of Legacy anchors** have fewer than five sky neighbours, so at
+batch size 64 essentially every batch runs the full K=5, and the zero-padding path is a
+rare edge case rather than a routine part of training.
 
 ---
 
@@ -106,6 +112,10 @@ implying an omission, and it gives the reviewer something actionable.
 - **Lead with the cross-reference, not with a re-explanation.** The content already
   exists at tex:359 and tex:754; the real defect is the missing forward pointer at
   tex:207. Saying so converts a "you didn't explain this" into a one-line revision.
+- **Avoid the phrase "spatial neighbours"** (in the original draft). "Spatial" is
+  already doing duty for the *token grid* in this paper; using it for sky-adjacent
+  neighbours in the same sentence as "spatial tokens" is exactly the collision that
+  produced the confusion. Say "sky neighbours" or "same-instrument neighbours".
 - The claim that all blocks attend comes from `all_attention: true`
   (`configs/neighbors_efficient.json:41`) and the block-type list at
   `double_train_fm_neighbors.py:250-262`.
