@@ -52,6 +52,33 @@ from galaxy_images.galaxy_model.contrastive_baseline.counterfactual_fm_decoder.c
 DEFAULT_OUTPUT_DIR = "/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs"
 
 
+class SaveAtSteps(pl.Callback):
+    """Save an unconditional snapshot the first time training passes each given step.
+
+    Distinct from the monitored `best` callback: these are *budget* checkpoints, e.g.
+    step 75000 to compare against fm-control at its own 75k training budget rather than
+    at whatever step happened to minimise val/mse.
+    """
+
+    def __init__(self, steps, dirpath):
+        super().__init__()
+        self.steps = sorted({int(s) for s in steps if int(s) > 0})
+        self.dirpath = Path(dirpath)
+        self._saved: set[int] = set()
+
+    def on_train_batch_end(self, trainer, pl_module, *args, **kwargs):
+        gs = int(trainer.global_step)
+        for s in self.steps:
+            # `>=` not `==`: accumulation / resume can step past an exact boundary.
+            if gs >= s and s not in self._saved:
+                self._saved.add(s)
+                path = self.dirpath / f"step-{s}.ckpt"
+                if path.exists():
+                    continue
+                trainer.save_checkpoint(str(path))
+                print(f"[train-cf] milestone checkpoint at step {gs} -> {path}", flush=True)
+
+
 def _parse_args(argv=None):
     ap = argparse.ArgumentParser(description="Train counterfactual embedding FM decoder.")
     ap.add_argument("--data-h5", required=True)
@@ -79,6 +106,10 @@ def _parse_args(argv=None):
                     help="Permit training on an H5 that does not cover every anchor of its "
                          "source store. Such a run's val split does NOT match "
                          "data_factory/paper/fm-control, so it cannot be compared to them.")
+    ap.add_argument("--save-at-steps", default="",
+                    help="Comma-separated steps at which to also save an unconditional "
+                         "snapshot, e.g. 75000 to match fm-control's training budget. "
+                         "Saved as step-<N>.ckpt alongside best/last.")
     ap.add_argument("--attn-mask-pads", action="store_true",
                     help="Mask pad neighbor tokens out of cross-attention. OFF by default for "
                          "parity with the paper model, which only zeroes them.")
@@ -186,6 +217,12 @@ def main(argv=None):
         auto_insert_metric_name=False,
     )
 
+    callbacks = [best_ckpt, periodic_ckpt]
+    milestones = [int(x) for x in args.save_at_steps.split(",") if x.strip()]
+    if milestones:
+        callbacks.append(SaveAtSteps(milestones, run_dir / "checkpoints"))
+        print(f"[train-cf] milestone checkpoints at steps: {milestones}")
+
     devices = args.devices
     strategy = "ddp_find_unused_parameters_true" if devices > 1 else "auto"
     trainer = pl.Trainer(
@@ -198,7 +235,7 @@ def main(argv=None):
         log_every_n_steps=10,
         val_check_interval=args.val_check_interval,
         check_val_every_n_epoch=None,
-        callbacks=[best_ckpt, periodic_ckpt],
+        callbacks=callbacks,
         num_sanity_val_steps=0,
     )
 

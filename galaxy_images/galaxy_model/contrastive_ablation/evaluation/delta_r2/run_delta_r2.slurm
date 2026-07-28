@@ -15,8 +15,11 @@ set -euo pipefail
 : "${MODEL_NAME:?export MODEL_NAME=descriptive-model-name}"
 : "${OUT_DIR:?export OUT_DIR=/path/to/output-directory}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-mkdir -p "${SCRIPT_DIR}/logs"
+# Under sbatch, Slurm copies this file into /var/spool/slurmd/job<id>/, so BASH_SOURCE
+# does NOT point at the repo. Resolve the repo location explicitly; SCRIPT_DIR may be
+# overridden for out-of-tree checkouts.
+SCRIPT_DIR="${SCRIPT_DIR:-/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/evaluation/delta_r2}"
+[[ -f "${SCRIPT_DIR}/run_delta_r2.py" ]] || { echo "run_delta_r2.py not found under SCRIPT_DIR=${SCRIPT_DIR}" >&2; exit 2; }
 PYTHON="${PYTHON:-/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python}"
 
 "${PYTHON}" "${SCRIPT_DIR}/run_delta_r2.py" \

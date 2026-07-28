@@ -1,0 +1,56 @@
+PYTHON=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python
+torch 2.6.0+cu124 cuda True
+[precompute-cf] device=cuda | K=5 | snapshots=[]
+[precompute-cf] loader=ram48 | data_dir=/orcd/pool/007/pablomer/efficient_neighs_48
+[precompute-cf] ckpt=/orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1/best-epoch=53-step=83000.ckpt
+[precompute-cf] encoder out_dim=64 (hparams.embedding_dim=64, pool=conv1x1)
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=True | max_neighbors=5 | random_neighbors=False
+[precompute-cf] 103,741 anchors available; encoding 103,741
+[precompute-cf] 128/103,741  (99.6 anch/s)  eta=17.3 min
+[precompute-cf] 2,688/103,741  (1389.0 anch/s)  eta=1.2 min
+[precompute-cf] 5,248/103,741  (1912.7 anch/s)  eta=0.9 min
+[precompute-cf] 7,808/103,741  (2315.1 anch/s)  eta=0.7 min
+[precompute-cf] 10,368/103,741  (2604.2 anch/s)  eta=0.6 min
+[precompute-cf] 12,928/103,741  (2812.6 anch/s)  eta=0.5 min
+[precompute-cf] 15,488/103,741  (2984.1 anch/s)  eta=0.5 min
+[precompute-cf] 18,048/103,741  (2915.4 anch/s)  eta=0.5 min
+[precompute-cf] 20,608/103,741  (3028.0 anch/s)  eta=0.5 min
+[precompute-cf] 23,168/103,741  (3126.1 anch/s)  eta=0.4 min
+[precompute-cf] 25,728/103,741  (3207.9 anch/s)  eta=0.4 min
+[precompute-cf] 28,288/103,741  (3277.6 anch/s)  eta=0.4 min
+[precompute-cf] 30,848/103,741  (3334.4 anch/s)  eta=0.4 min
+[precompute-cf] 33,408/103,741  (3375.9 anch/s)  eta=0.3 min
+[precompute-cf] 35,968/103,741  (3286.5 anch/s)  eta=0.3 min
+[precompute-cf] 38,528/103,741  (3281.7 anch/s)  eta=0.3 min
+[precompute-cf] 41,088/103,741  (3265.1 anch/s)  eta=0.3 min
+[precompute-cf] 43,648/103,741  (3294.2 anch/s)  eta=0.3 min
+[precompute-cf] 46,208/103,741  (3327.5 anch/s)  eta=0.3 min
+[precompute-cf] 48,768/103,741  (3355.2 anch/s)  eta=0.3 min
+[precompute-cf] 51,328/103,741  (3380.2 anch/s)  eta=0.3 min
+[precompute-cf] 53,888/103,741  (3403.5 anch/s)  eta=0.2 min
+[precompute-cf] 56,448/103,741  (3422.7 anch/s)  eta=0.2 min
+[precompute-cf] 59,008/103,741  (3439.2 anch/s)  eta=0.2 min
+[precompute-cf] 61,568/103,741  (3455.6 anch/s)  eta=0.2 min
+[precompute-cf] 64,128/103,741  (3467.0 anch/s)  eta=0.2 min
+[precompute-cf] 66,688/103,741  (3472.4 anch/s)  eta=0.2 min
+[precompute-cf] 69,248/103,741  (3425.8 anch/s)  eta=0.2 min
+[precompute-cf] 71,808/103,741  (3381.0 anch/s)  eta=0.2 min
+[precompute-cf] 74,368/103,741  (3393.4 anch/s)  eta=0.1 min
+[precompute-cf] 76,928/103,741  (3401.0 anch/s)  eta=0.1 min
+[precompute-cf] 79,488/103,741  (3373.5 anch/s)  eta=0.1 min
+[precompute-cf] 82,048/103,741  (3381.7 anch/s)  eta=0.1 min
+[precompute-cf] 84,608/103,741  (3343.2 anch/s)  eta=0.1 min
+[precompute-cf] 87,168/103,741  (3352.0 anch/s)  eta=0.1 min
+[precompute-cf] 89,728/103,741  (3321.9 anch/s)  eta=0.1 min
+[precompute-cf] 92,288/103,741  (3289.7 anch/s)  eta=0.1 min
+[precompute-cf] 94,848/103,741  (3298.6 anch/s)  eta=0.0 min
+[precompute-cf] 97,408/103,741  (3282.0 anch/s)  eta=0.0 min
+[precompute-cf] 99,968/103,741  (3293.3 anch/s)  eta=0.0 min
+[precompute-cf] 102,528/103,741  (3274.8 anch/s)  eta=0.0 min
+[precompute-cf] wrote 103,741 examples to /orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_conv1x1.h5 in 0.6 min
+[precompute-cf] neighbor slots filled: 518,286/518,705 (99.92%)
+[precompute-cf] target[hsc] mean=+0.0391 std=1.0314 (expected ~0 mean / ~1 std after per-survey normalization)
+[precompute-cf] target[legacy] mean=-0.0013 std=1.0026 (expected ~0 mean / ~1 std after per-survey normalization)
+CF precompute done at Mon Jul 27 17:50:05 EDT 2026
+-rw-rw-r-- 1 pablomer pablomer 2.0G Jul 26 17:00 /orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_all.h5
+-rw-rw-r-- 1 pablomer pablomer 2.0G Jul 27 17:50 /orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_conv1x1.h5

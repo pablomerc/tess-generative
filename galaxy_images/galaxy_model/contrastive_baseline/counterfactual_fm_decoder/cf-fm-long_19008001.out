@@ -1,0 +1,35 @@
+[wandb] WANDB_MODE=online | project=galaxy-counterfactual-fm-decoder | name=cf-fm-tokens-xattn-conv1x1
+[train-cf] run_dir=/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-conv1x1
+[train-cf] cond_style=tokens injection=xattn
+[CFEmbeddingDataset] 103,741 examples | emb_dim=64 | K=5 | cond_style=tokens | store=ram48 | full=True
+[train-cf] train=98,554  val=5,187  (store=ram48, full=True)
+[train-cf] checkpoint monitor=val/mse (fm-control selects on val/mse)
+[train-cf] milestone checkpoints at steps: [75000]
+┏━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name           ┃ Type                 ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ velocity_model │ UNet2DConditionModel │  161 M │ train │     0 │
+└───┴────────────────┴──────────────────────┴────────┴───────┴───────┘
+Trainable params: 161 M                                                         
+Non-trainable params: 0                                                         
+Total params: 161 M                                                             
+Total estimated model params size (MB): 647                                     
+Modules in train mode: 856                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+
+============================================================
+Training started — target 100000 steps | cond_style=tokens | injection=xattn | H100=False
+============================================================
+
+[train-cf] milestone checkpoint at step 75000 -> /orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-conv1x1/checkpoints/step-75000.ckpt
+Epoch 130/-2 ━━━━━━━━━━━━━━━━ 30/30 0:00:10 • 0:00:00 2.97it/s v_num: v1x1      
+                                                               train/loss_step: 
+                                                               0.175            
+                                                               train/loss_epoch:
+                                                               0.194 val/loss:  
+                                                               0.197            
+[train-cf] reached 100000 steps — wrote /orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-conv1x1/DONE
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mcf-fm-tokens-xattn-conv1x1[0m at: [34mhttps://wandb.ai/tess-ml/galaxy-counterfactual-fm-decoder/runs/cf-fm-tokens-xattn-conv1x1[0m
+Long train finished at Tue Jul 28 08:49:12 EDT 2026

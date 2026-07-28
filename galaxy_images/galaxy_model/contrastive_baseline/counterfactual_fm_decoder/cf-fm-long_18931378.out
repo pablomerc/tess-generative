@@ -21,3 +21,13 @@ Total FLOPs: 0
 Training started — target 100000 steps | cond_style=tokens | injection=xattn | H100=False
 ============================================================
 
+Epoch 130/-2 ━━━━━━━━━━━━━━━━ 30/30 0:00:10 • 0:00:00 2.81it/s v_num: long      
+                                                               train/loss_step: 
+                                                               0.177            
+                                                               train/loss_epoch:
+                                                               0.195 val/loss:  
+                                                               0.196            
+[train-cf] reached 100000 steps — wrote /orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-long/DONE
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mcf-fm-tokens-xattn-long[0m at: [34mhttps://wandb.ai/tess-ml/galaxy-counterfactual-fm-decoder/runs/cf-fm-tokens-xattn-long[0m
+Long train finished at Mon Jul 27 06:12:45 EDT 2026

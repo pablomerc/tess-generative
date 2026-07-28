@@ -60,7 +60,10 @@ def file_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 
 def dataframe_sha256(df: pd.DataFrame, columns: list[str]) -> str:
-    payload = df[columns].fillna("<NA>").astype(str).to_csv(index=False).encode()
+    # Cast BEFORE filling: on nullable dtypes (Int64/boolean) `.fillna("<NA>")`
+    # raises TypeError because the sentinel is not a valid value for the dtype.
+    # `.astype("string")` maps NaN and pd.NA alike to pd.NA, so one fillna covers both.
+    payload = df[columns].astype("string").fillna("<NA>").to_csv(index=False).encode()
     return hashlib.sha256(payload).hexdigest()
 
 

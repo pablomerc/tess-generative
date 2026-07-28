@@ -1,0 +1,93 @@
+[eval] tokens ckpt=/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-long/checkpoints/best-epoch=123-step=95000.ckpt
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=True | max_neighbors=5 | random_neighbors=False
+[data] anchor totals — total: 103,741 | lens-excluded: 0 | downstream-holdout-excluded: 0 | union excluded: 0
+[data] after exclusions: kept=103,741 | val_ratio=0.05 -> train=98,554, val=5,187
+[eval] wrote manifest: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_baseline/counterfactual_fm_decoder/results/recon_eval_manifest.json
+[eval] loading fm-control: /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/best/fm-control-ram48-h200-75k/best-epoch=270-step=104000.ckpt
+[eval] loaded fm-control in 427s
+[eval] loading fm-paper: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/checkpoints/base/snapshot.ckpt
+[eval] loaded fm-paper in 3s
+[eval] loading CF cf-fm-tokens: /orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-tokens-xattn-long/checkpoints/best-epoch=123-step=95000.ckpt
+[CFEmbeddingDataset] 103,741 examples | emb_dim=64 | K=5 | cond_style=tokens | store=ram48 | full=True
+[eval] loaded CF cf-fm-tokens in 805s
+[eval] interleaving 3 models over n=512: fm-control, fm-paper, cf-fm-tokens
+[eval] cf-fm-tokens: target vs loader x_1 max|Δ|=0.000e+00 (tol 0.01)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 6 | 0.038307 | 0.007457 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 10 | 0.214322 | 0.035357 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 6 | 0.047930 | 0.007587 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 10 | 0.228318 | 0.034751 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 6 | 0.050442 | 0.006293 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 10 | 0.343907 | 0.108833 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] ⏳ partial: 16/512 in 0.7 min (0.38 img/s)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 30 | 0.043552 | 0.007184 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 34 | 0.185974 | 0.015162 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 30 | 0.063752 | 0.012307 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 34 | 0.205743 | 0.015614 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 30 | 0.072355 | 0.013363 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 34 | 0.239572 | 0.034982 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] ⏳ partial: 64/512 in 2.4 min (0.44 img/s)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 30 | 0.043552 | 0.007184 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 34 | 0.185974 | 0.015162 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 30 | 0.063752 | 0.012307 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 34 | 0.205743 | 0.015614 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 30 | 0.072355 | 0.013363 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 34 | 0.239572 | 0.034982 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] ⏳ partial: 64/512 in 2.4 min (0.44 img/s)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 64 | 0.049250 | 0.008825 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 64 | 0.171579 | 0.010445 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 64 | 0.064177 | 0.009115 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 64 | 0.196438 | 0.010921 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 64 | 0.078234 | 0.013483 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 64 | 0.213296 | 0.019996 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] ⏳ partial: 128/512 in 4.6 min (0.46 img/s)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 123 | 0.044255 | 0.004888 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 133 | 0.165761 | 0.006785 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 123 | 0.059879 | 0.005564 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 133 | 0.186909 | 0.007131 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 123 | 0.069271 | 0.007821 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 133 | 0.199450 | 0.010895 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] ⏳ partial: 256/512 in 9.0 min (0.47 img/s)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 256 | 0.047447 | 0.003145 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 256 | 0.160971 | 0.004740 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 256 | 0.061028 | 0.003499 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 256 | 0.182205 | 0.005023 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 256 | 0.067914 | 0.004528 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 256 | 0.193596 | 0.007075 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] ⏳ partial: 512/512 in 17.8 min (0.48 img/s)
+
+| model | objective | steps | survey | n | MSE mean | SEM | note |
+|---|---|---|---|---:|---:|---:|---|
+| fm-control | flow_matching | 250 | hsc | 256 | 0.047447 | 0.003145 | ram48 diffusion-ablation control |
+| fm-control | flow_matching | 250 | legacy | 256 | 0.160971 | 0.004740 | ram48 diffusion-ablation control |
+| fm-paper | flow_matching | 250 | hsc | 256 | 0.061028 | 0.003499 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| fm-paper | flow_matching | 250 | legacy | 256 | 0.182205 | 0.005023 | paper base; same seed-42 val split (configs/neighbors_efficient.json) |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | hsc | 256 | 0.067914 | 0.004528 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+| cf-fm-tokens | cf_frozen_embedding_fm | 250 | legacy | 256 | 0.193596 | 0.007075 | cond_style=tokens; h5=cf_embeddings_all.h5 |
+
+[eval] 🏁 FINAL: 512/512 in 17.8 min (0.48 img/s)
+[eval] wrote /orcd/pool/007/pablomer/outputs/counterfactual_fm/results/recon_mse.csv
+Eval done at Mon Jul 27 18:27:54 EDT 2026 -> /orcd/pool/007/pablomer/outputs/counterfactual_fm/results/recon_mse.csv

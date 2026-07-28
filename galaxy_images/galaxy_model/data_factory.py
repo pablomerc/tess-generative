@@ -288,6 +288,7 @@ def build_neighbors_dataloaders(
             max_neighbors=config.data.max_neighbors,
             crop_size=config.model.image_size,
             random_neighbors=config.data.random_neighbors,
+            load_into_ram=config.data.load_into_ram,
         )
         collate_fn = _collate_for_neighbors
     else:

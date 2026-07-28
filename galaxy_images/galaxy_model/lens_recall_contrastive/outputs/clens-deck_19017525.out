@@ -1,0 +1,23 @@
+[run] node=node4105 ram48=/orcd/data/mki_aryeh/001/pablomer/efficient_neighs_48
+[arms] 3 arms, 3 to encode (0 already cached)
+[arms] 103,741 anchors | source=ram48
+[gallery] loading RAM48 store (17.3 GB) ...
+[gallery] loaded in 378s
+[gallery] row-mapping guard passed (64/64 anchors have real pixels)
+[check] contrastive-spatial-conv1x1/hsc_physics: mean per-dim std 1.5182  OK
+[check] contrastive-spatial-conv1x1/hsc_instrument: mean per-dim std 1.2459  OK
+[arms] 1/3 contrastive-spatial-conv1x1            contrastive      ckpt-load  27.8s  encode  0.17m (10081 img/s)  -> contrastive-spatial-conv1x1.h5
+[ContrastiveNegativeAblationModule] galaxy_negatives=mixed instrument_negatives=mixed use_projection_head=True
+[check] contrastive-spatial-conv1x1-DWNVAL/hsc_physics: mean per-dim std 1.4530  OK
+[check] contrastive-spatial-conv1x1-DWNVAL/hsc_instrument: mean per-dim std 1.3351  OK
+[arms] 2/3 contrastive-spatial-conv1x1-DWNVAL     contrastive      ckpt-load  57.5s  encode  0.14m (12343 img/s)  -> contrastive-spatial-conv1x1-DWNVAL.h5
+[check] base-5NB-DWNVAL/hsc_physics: mean per-dim std 0.9621  OK
+[check] base-5NB-DWNVAL/hsc_instrument: mean per-dim std 0.4389  OK
+[arms] 3/3 base-5NB-DWNVAL                        dual-encoder-fm  ckpt-load 411.8s  encode  0.14m (12142 img/s)  -> base-5NB-DWNVAL.h5
+[deck] contrastive-spatial-conv1x1            physics    top-8 from latents/
+[deck] contrastive-spatial-conv1x1-DWNVAL     physics    top-8 from latents/
+[deck] base-5NB-DWNVAL                        physics    top-8 from latents/
+[deck] base-87k                               physics    top-8 from latents/
+[deck] wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/lens_recall_contrastive/decks/deck_lens48_contrastive_KEY.json  (PRIVATE -- do not post)
+[deck] wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/lens_recall_contrastive/decks/deck_lens48_contrastive.png
+PAGES:/home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/lens_recall_contrastive/decks/deck_lens48_contrastive.png

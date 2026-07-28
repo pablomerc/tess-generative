@@ -215,13 +215,37 @@ def make_matched_controls(
     }
 
 
+def make_random_draw(manifest: pd.DataFrame, n: int, seed: int) -> tuple[pd.Series, dict]:
+    """Uniform random sample of n paired objects from the WHOLE manifest.
+
+    Deliberately unmatched and not top-N-excluded: this is the plain "n random
+    galaxies" baseline, i.e. an unbiased same-size sample of the population. It
+    answers a different question from make_matched_controls, which holds the other
+    two quality axes fixed. Report both; the matched control is the causal contrast,
+    this one is the "is n=200 of anything special?" sanity check.
+
+    Axis-independent by construction, so the same draw is reused for every axis.
+    """
+    n = min(int(n), len(manifest))
+    rng = np.random.default_rng(seed)
+    chosen = rng.choice(manifest.index.to_numpy(), size=n, replace=False)
+    mask = pd.Series(False, index=manifest.index)
+    mask.loc[chosen] = True
+    return mask, {"requested": int(n), "selected": int(mask.sum()), "matched": False,
+                  "drawn_from": "all objects", "without_replacement": True}
+
+
 def summarize_one(group: pd.DataFrame, axis: str, stratum: str) -> dict:
     result = metrics(group.y_true.to_numpy(), group.y_pred.to_numpy())
     result.update(axis=axis, stratum=stratum)
     return result
 
 
-def summaries(data: pd.DataFrame, control_ids: dict[str, set[str]]) -> pd.DataFrame:
+def summaries(
+    data: pd.DataFrame,
+    control_ids: dict[str, set[str]],
+    random_ids: set[str] | None = None,
+) -> pd.DataFrame:
     rows = []
     keys = ["model", "view", "target"]
     for key, group in data.groupby(keys, sort=True):
@@ -232,6 +256,8 @@ def summaries(data: pd.DataFrame, control_ids: dict[str, set[str]]) -> pd.DataFr
                 "top_n": group[f"{axis}_top_n"],
                 "matched_control": group["pair_id"].isin(control_ids[axis]),
             }
+            if random_ids:
+                selections["random_n"] = group["pair_id"].isin(random_ids)
             bins = sorted(group[f"{axis}_quantile_bin"].dropna().unique())
             selections.update(
                 {
@@ -278,6 +304,7 @@ def paired_bootstrap(
     control_ids: dict[str, set[str]],
     replicates: int,
     seed: int,
+    random_ids: set[str] | None = None,
 ) -> pd.DataFrame:
     rows = []
     for (view, target), group in data.groupby(["view", "target"]):
@@ -301,6 +328,8 @@ def paired_bootstrap(
                     "top_n": pair[f"{axis}_top_n"].to_numpy(bool),
                     "matched_control": pair.pair_id.isin(control_ids[axis]).to_numpy(),
                 }
+                if random_ids:
+                    strata["random_n"] = pair.pair_id.isin(random_ids).to_numpy()
                 for q in sorted(pair[f"{axis}_quantile_bin"].dropna().unique()):
                     strata[f"quantile_{int(q)}"] = (
                         pair[f"{axis}_quantile_bin"] == q
@@ -349,6 +378,7 @@ def survey_interaction_bootstrap(
     control_ids: dict[str, set[str]],
     replicates: int,
     seed: int,
+    random_ids: set[str] | None = None,
 ) -> pd.DataFrame:
     """Bootstrap the model-by-survey difference of differences.
 
@@ -411,6 +441,8 @@ def survey_interaction_bootstrap(
                 "top_n": merged[f"{axis}_top_n"].to_numpy(bool),
                 "matched_control": merged.pair_id.isin(control_ids[axis]).to_numpy(),
             }
+            if random_ids:
+                strata["random_n"] = merged.pair_id.isin(random_ids).to_numpy()
             for q in sorted(merged[f"{axis}_quantile_bin"].dropna().unique()):
                 strata[f"quantile_{int(q)}"] = (
                     merged[f"{axis}_quantile_bin"] == q
@@ -480,14 +512,24 @@ def main() -> None:
         )
         control_meta[axis] = meta
 
+    # Plain uniform "n random galaxies" baseline, same size as top-N, drawn once and
+    # shared across axes. Complements (does not replace) the matched controls.
+    random_n = int(manifest[[f"{axis}_top_n" for axis in AXES]].sum().max())
+    random_mask, random_meta = make_random_draw(
+        manifest, random_n, args.seed + len(AXES)
+    )
+    random_ids = set(manifest.loc[random_mask, "hsc_object_id"]) | set(
+        manifest.loc[random_mask, "legacy_object_id"]
+    )
+
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    summary = summaries(data, controls)
+    summary = summaries(data, controls, random_ids)
     losses = paired_losses(data)
     bootstrap = paired_bootstrap(
-        data, controls, args.bootstrap_replicates, args.seed
+        data, controls, args.bootstrap_replicates, args.seed, random_ids
     )
     interactions = survey_interaction_bootstrap(
-        data, controls, args.bootstrap_replicates, args.seed
+        data, controls, args.bootstrap_replicates, args.seed, random_ids
     )
     summary.to_csv(args.out_dir / "stratified_metrics.csv", index=False)
     losses.to_csv(args.out_dir / "paired_object_losses.csv", index=False)
@@ -509,6 +551,12 @@ def main() -> None:
                 "[metric(model_b,HSC)-metric(model_b,Legacy)]"
             ),
             "matched_controls": control_meta,
+            "random_draw": random_meta,
+            "strata": (
+                "top_n = frozen quality top-N; matched_control = 1:1 outside top-N, "
+                "matched on the other two axes' quantile bins; random_n = uniform "
+                "same-size draw from all objects (unmatched); quantile_* = dose-response"
+            ),
             "selection_uses_predictions": False,
         },
     )

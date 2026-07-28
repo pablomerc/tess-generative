@@ -41,6 +41,11 @@ class DataConfig:
     # and the data-scale comparison would be confounded. Defaults to the full
     # train split size when train_subset_json is set.
     train_subset_tile_to: Optional[int] = None
+    # ram48 mode only. True slurps the whole ~17 GB store into RAM, which is right for
+    # training (every epoch touches everything) but wasteful for a short eval that reads
+    # a few hundred galaxies -- and expensive when the store lives on a contended NFS
+    # volume. False memory-maps instead, so only the rows actually indexed are fetched.
+    load_into_ram: bool = True
 
 
 @dataclass

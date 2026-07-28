@@ -31,10 +31,17 @@ set -eo pipefail
 # ---- EDIT THESE FOR YOUR CLUSTER ----
 REPO=/orcd/pool/007/pablomer/tess-generative
 TORCHENV_PY=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python
-DATA_DIR=/orcd/pool/007/pablomer/efficient_neighs_48
-LOADER=ram48
-CKPT=/orcd/pool/007/pablomer/outputs/contrastive/best-epoch=599-step=240000.ckpt
-OUT_H5=/orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_all.h5
+: "${DATA_DIR:=/orcd/pool/007/pablomer/efficient_neighs_48}"
+: "${LOADER:=ram48}"
+# Frozen contrastive tower. Default = the 240k-step avg-head run. To build the
+# head-matched corpus (conv1x1, the arm that mirrors Ours' Conv2d(512->16,1x1)):
+#   CKPT=/orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1/best-epoch=53-step=83000.ckpt \
+#   OUT_H5=/orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_conv1x1.h5 \
+#   sbatch precompute_cf_embeddings.slurm
+# OUT_H5 *must* differ per encoder: both heads emit 64-D, so a decoder trained on one
+# corpus will happily consume the other and produce a silently meaningless number.
+: "${CKPT:=/orcd/pool/007/pablomer/outputs/contrastive/best-epoch=599-step=240000.ckpt}"
+: "${OUT_H5:=/orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_all.h5}"
 BATCH=128
 MAX_NEIGHBORS=5
 # Milestone snapshots were insurance against the 29 h efficient-store pass. The ram48

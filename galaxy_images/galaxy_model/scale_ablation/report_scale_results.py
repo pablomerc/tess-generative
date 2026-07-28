@@ -49,7 +49,10 @@ ENGAGING = HERE.parent / "downstream_evaluation" / "engaging"
 PREDICTIONS = ENGAGING / "outputs" / "predictions"
 PAPER_SIMPLIFIED = ENGAGING / "outputs" / "plot_paper" / "data" / "merged_simplified.csv"
 
-ARMS = {"scale-1000": 1000, "scale-3162": 3162, "scale-10000": 10000, "scale-31622": 31622}
+# Insertion order matters: it fixes the column order of the tables and the x-order of the
+# curves. scale-100 was added after the original four-rung ladder had already been run.
+ARMS = {"scale-100": 100, "scale-1000": 1000, "scale-3162": 3162,
+        "scale-10000": 10000, "scale-31622": 31622}
 
 # --- paper-table row definitions -----------------------------------------------------
 PHYSICS_ROWS = [
@@ -131,11 +134,12 @@ def cmd_mse(post_note: str = "") -> None:
     wide = df.pivot_table(index="model_label", columns="anchor_survey",
                           values=["mse_mean", "mse_sem"], aggfunc="first")
 
-    order = ["scale-1000", "scale-3162", "scale-10000", "scale-31622",
+    order = ["scale-100", "scale-1000", "scale-3162", "scale-10000", "scale-31622",
              "fm-control-75k", "base-87k", "constlr-35k"]
     order = [m for m in order if m in wide.index]
 
     label = {
+        "scale-100": "N=100",
         "scale-1000": "N=1,000", "scale-3162": "N=3,162",
         "scale-10000": "N=10,000", "scale-31622": "N=31,622",
         "fm-control-75k": "full data, 75k (fm-control) *",
@@ -161,7 +165,7 @@ def cmd_mse(post_note: str = "") -> None:
     lines += [
         "",
         "\\* trained **without** the downstream holdout → saw ~95% of these eval galaxies "
-        "during training (unlabeled); their MSE is optimistic. The four scale arms never saw "
+        "during training (unlabeled); their MSE is optimistic. The scale arms never saw "
         "any eval galaxy — enforced at load time. Conservative direction for the scaling claim.",
     ]
     if post_note:

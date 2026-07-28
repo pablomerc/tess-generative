@@ -28,7 +28,10 @@ BASE_CONFIG = GM / "diffusion_ablation/configs/neighbors_fm_control.json"
 HOLDOUT = GM / "downstream_evaluation/engaging/outputs/index/holdout_legacy_ids.txt"
 CKPT_ROOT = Path("/orcd/pool/007/pablomer/checkpoints_new/scale_ablation")
 
-LADDER = [1000, 3162, 10000, 31622]
+# 100 was added 2026-07-27 to extend the curve a decade below the original floor. The seeded
+# interleaved permutation in make_subsets.py is prefix-stable, so adding a rung leaves every
+# existing subset/config byte-identical (verified by md5) -- the four completed arms are unaffected.
+LADDER = [100, 1000, 3162, 10000, 31622]
 
 
 def main() -> None:

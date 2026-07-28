@@ -25,13 +25,20 @@ set -eo pipefail
 
 REPO=/orcd/pool/007/pablomer/tess-generative
 TORCHENV_PY=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python
-DATA_H5=/orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_all.h5
+# DATA_H5 and RUN_DIR must be changed TOGETHER when switching frozen encoders — the
+# H5 carries the embeddings a given decoder was trained on, and both heads emit 64-D so
+# a mismatch cannot be caught by a shape check. TAG keeps run dir / W&B name in step.
+: "${DATA_H5:=/orcd/pool/007/pablomer/outputs/counterfactual_fm/cf_embeddings_all.h5}"
 : "${COND_STYLE:=tokens}"
 : "${INJECTION:=xattn}"
-: "${RUN_DIR:=/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-${COND_STYLE}-${INJECTION}-long}"
+: "${TAG:=long}"
+: "${RUN_DIR:=/orcd/pool/007/pablomer/outputs/counterfactual_fm/runs/cf-fm-${COND_STYLE}-${INJECTION}-${TAG}}"
 : "${MAX_STEPS:=100000}"
 : "${BATCH:=128}"
-: "${WANDB_NAME:=cf-fm-${COND_STYLE}-${INJECTION}-long}"
+# Extra budget snapshots, e.g. 75000 to compare at fm-control's own 75k training budget
+# rather than at whichever step happened to minimise val/mse.
+: "${SAVE_AT_STEPS:=}"
+: "${WANDB_NAME:=cf-fm-${COND_STYLE}-${INJECTION}-${TAG}}"
 export WANDB_API_KEY="${WANDB_API_KEY:-}"
 WEBHOOK="${DISCORD_WEBHOOK:-https://discord.com/api/webhooks/1500242707522519183/NqqAxuo5n0Ex4X81vMcq7gDOjrP3oAURAVZtgrZT5CramGNfBGPxuEvC2NnxwYBkfs9j}"
 
@@ -82,6 +89,7 @@ srun "$TORCHENV_PY" -u galaxy_images/galaxy_model/contrastive_baseline/counterfa
     --batch-size "$BATCH" \
     --val-ratio 0.05 \
     --monitor val/mse \
+    --save-at-steps "$SAVE_AT_STEPS" \
     --devices 1 \
     $RESUME_ARG
 

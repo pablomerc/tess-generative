@@ -1,0 +1,239 @@
+=== config ===
+  ckpt    : /orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1/best-epoch=53-step=83000.ckpt
+  tag     : spatial-conv1x1
+  data    : /orcd/pool/007/pablomer/efficient_neighs_48
+  out     : /orcd/pool/007/pablomer/outputs/contrastive_anomalies
+  torch   : 2.6.0+cu124 cuda True
+=== [1/4] encode ===
+[encode] checkpoint : /orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1/best-epoch=53-step=83000.ckpt
+[encode] device     : cuda
+[encode] pool=conv1x1  physics_dim=64  instrument_dim=64
+[anchor_data] lens ground truth: 74 / 74 lenses present among 103,741 anchors
+[encode] anchors: 103,741  (lenses: 74)
+[anchor_data] hsc: 21,111/103,741 anchors read
+[anchor_data] hsc: 40,248/103,741 anchors read
+[anchor_data] hsc: 60,511/103,741 anchors read
+[anchor_data] hsc: 81,338/103,741 anchors read
+[anchor_data] hsc: 101,762/103,741 anchors read
+[anchor_data] hsc: 1.91 GB resident
+[encode] hsc: 51,200/103,741  (34,979 img/s)
+[encode] hsc: 102,400/103,741  (37,448 img/s)
+[encode] hsc: done in 2.8s
+[anchor_data] legacy: 21,111/103,741 anchors read
+[anchor_data] legacy: 40,248/103,741 anchors read
+[anchor_data] legacy: 60,511/103,741 anchors read
+[anchor_data] legacy: 81,338/103,741 anchors read
+[anchor_data] legacy: 101,762/103,741 anchors read
+[anchor_data] legacy: 1.91 GB resident
+[encode] legacy: 51,200/103,741  (40,267 img/s)
+[encode] legacy: 102,400/103,741  (40,974 img/s)
+[encode] legacy: done in 2.5s
+[encode] physics_hsc          (103741, 64)  mean=+0.129 std=1.726
+[encode] instrument_hsc       (103741, 64)  mean=+0.150 std=1.474
+[encode] physics_legacy       (103741, 64)  mean=+0.128 std=1.705
+[encode] instrument_legacy    (103741, 64)  mean=+0.179 std=1.091
+[encode] physics_mean         (103741, 64)  mean=+0.129 std=1.711
+[encode] saved: /orcd/pool/007/pablomer/outputs/contrastive_anomalies/latents_spatial-conv1x1.h5
+=== [2/4] fit + score ===
+[fit] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/latents_spatial-conv1x1.h5
+[fit] N=103,741  train=82,992  test=20,749  lenses=74
+[fit] standardize=True  knn_self_excluded=True  n_jobs=8
+
+=== physics_hsc  dim=64 ===
+  [knn     ]    0.6s  finite=103,741/103,741
+  [iforest ]    2.5s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=2.9244  best=2.9244
+      NSF epoch 20/50  loss=-4.5689  best=-4.5689
+      NSF epoch 30/50  loss=-8.7012  best=-8.7012
+      NSF epoch 40/50  loss=-11.4591  best=-11.4591
+      NSF epoch 50/50  loss=-13.4794  best=-13.4794
+  [flow    ]  121.6s  finite=103,741/103,741
+
+=== physics_legacy  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    0.9s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=2.8293  best=2.8293
+      NSF epoch 20/50  loss=-4.5896  best=-4.5896
+      NSF epoch 30/50  loss=-8.6443  best=-8.6443
+      NSF epoch 40/50  loss=-11.4034  best=-11.4034
+      NSF epoch 50/50  loss=-13.4303  best=-13.4303
+  [flow    ]  120.2s  finite=103,741/103,741
+
+=== physics_mean  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    1.1s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=1.7065  best=1.7065
+      NSF epoch 20/50  loss=-5.7246  best=-5.7246
+      NSF epoch 30/50  loss=-10.1044  best=-10.1044
+      NSF epoch 40/50  loss=-13.0260  best=-13.0260
+      NSF epoch 50/50  loss=-15.2372  best=-15.2372
+  [flow    ]  122.5s  finite=103,741/103,741
+
+=== instrument_hsc  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    0.9s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=-29.6197  best=-29.6197
+      NSF epoch 20/50  loss=-33.0479  best=-33.0479
+      NSF epoch 30/50  loss=-34.4863  best=-34.5259
+      NSF epoch 40/50  loss=-35.4580  best=-35.4580
+      NSF epoch 50/50  loss=-36.2118  best=-36.2118
+  [flow    ]  124.4s  finite=103,741/103,741
+
+=== instrument_legacy  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    0.8s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=2.6367  best=2.6367
+      NSF epoch 20/50  loss=1.1023  best=1.1023
+      NSF epoch 30/50  loss=0.3607  best=0.3607
+      NSF epoch 40/50  loss=-0.0759  best=-0.0852
+      NSF epoch 50/50  loss=-0.4637  best=-0.4637
+  [flow    ]  124.4s  finite=103,741/103,741
+
+[fit] saved: /orcd/pool/007/pablomer/outputs/contrastive_anomalies/scores_spatial-conv1x1.h5
+[fit] keys: ['instrument_hsc/flow', 'instrument_hsc/iforest', 'instrument_hsc/knn', 'instrument_hsc/mahal', 'instrument_legacy/flow', 'instrument_legacy/iforest', 'instrument_legacy/knn', 'instrument_legacy/mahal', 'physics_hsc/flow', 'physics_hsc/iforest', 'physics_hsc/knn', 'physics_hsc/mahal', 'physics_legacy/flow', 'physics_legacy/iforest', 'physics_legacy/knn', 'physics_legacy/mahal', 'physics_mean/flow', 'physics_mean/iforest', 'physics_mean/knn', 'physics_mean/mahal']
+=== [3/4] evaluate ===
+[eval] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/scores_spatial-conv1x1.h5  (20 score arrays, 74 lenses)
+[eval] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/lens_metrics_spatial-conv1x1.csv
+[eval] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/space_agreement_spatial-conv1x1.csv
+[eval] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/summary_spatial-conv1x1.md
+
+# Contrastive anomaly detection — `spatial-conv1x1`
+
+- checkpoint: `/orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1/best-epoch=53-step=83000.ckpt`
+- encoder pool: `conv1x1`
+- anchors: **103,741**, strong lenses: **74**
+- fit on 80% train split (seed 42), scored on all anchors
+- standardized: `True`, kNN self-excluded: `True`
+
+## A. Strong-lens retrieval
+
+Chance AUC = 0.500, chance AP = 0.00071, chance recall@1000 = 0.010.
+
+| representation | method | roc_auc | avg_precision | recall@100 | recall@1000 | recall@5000 | lift@1000 | lens_pct_rank_median |
+|---|---|---|---|---|---|---|---|---|
+| instrument_hsc | flow | 0.687 | 0.0015 | 0.000 | 0.027 | 0.108 | 2.8x | 23.3% |
+| instrument_hsc | iforest | 0.470 | 0.0008 | 0.000 | 0.000 | 0.054 | 0.0x | 57.6% |
+| instrument_hsc | knn | 0.712 | 0.0041 | 0.000 | 0.122 | 0.270 | 12.6x | 15.1% |
+| instrument_hsc | mahal | 0.622 | 0.0012 | 0.000 | 0.014 | 0.054 | 1.4x | 27.1% |
+| instrument_legacy | flow | 0.587 | 0.0009 | 0.000 | 0.000 | 0.041 | 0.0x | 37.1% |
+| instrument_legacy | iforest | 0.492 | 0.0008 | 0.000 | 0.014 | 0.068 | 1.4x | 47.7% |
+| instrument_legacy | knn | 0.574 | 0.0009 | 0.000 | 0.014 | 0.027 | 1.4x | 39.4% |
+| instrument_legacy | mahal | 0.494 | 0.0007 | 0.000 | 0.014 | 0.041 | 1.4x | 52.7% |
+| physics_hsc | flow | 0.665 | 0.0013 | 0.000 | 0.000 | 0.081 | 0.0x | 24.5% |
+| physics_hsc | iforest | 0.491 | 0.0008 | 0.000 | 0.000 | 0.095 | 0.0x | 55.0% |
+| physics_hsc | knn | 0.634 | 0.0012 | 0.000 | 0.000 | 0.095 | 0.0x | 27.4% |
+| physics_hsc | mahal | 0.534 | 0.0008 | 0.000 | 0.000 | 0.068 | 0.0x | 44.9% |
+| physics_legacy | flow | 0.652 | 0.0012 | 0.000 | 0.014 | 0.054 | 1.4x | 29.3% |
+| physics_legacy | iforest | 0.445 | 0.0007 | 0.000 | 0.000 | 0.027 | 0.0x | 56.7% |
+| physics_legacy | knn | 0.614 | 0.0011 | 0.000 | 0.014 | 0.068 | 1.4x | 33.3% |
+| physics_legacy | mahal | 0.525 | 0.0008 | 0.000 | 0.000 | 0.041 | 0.0x | 46.4% |
+| physics_mean | flow | 0.665 | 0.0013 | 0.000 | 0.014 | 0.081 | 1.4x | 27.4% |
+| physics_mean | iforest | 0.467 | 0.0007 | 0.000 | 0.000 | 0.027 | 0.0x | 55.2% |
+| physics_mean | knn | 0.624 | 0.0011 | 0.000 | 0.000 | 0.081 | 0.0x | 30.8% |
+| physics_mean | mahal | 0.526 | 0.0008 | 0.000 | 0.000 | 0.054 | 0.0x | 45.8% |
+
+Best AUC: **instrument_hsc / knn** = 0.712 (AP 0.0041).
+
+## B. Do the two spaces find the same objects?
+
+Spearman rho over all anchors and Jaccard overlap of the top-1000 sets.
+Physics-vs-instrument pairs at the same method are the ones to read.
+
+| a | b | spearman | top1000_overlap | top1000_jaccard |
+|---|---|---|---|---|
+| instrument_hsc/flow | physics_hsc/flow | 0.592 | 286 | 0.167 |
+| instrument_hsc/flow | physics_legacy/flow | 0.557 | 215 | 0.120 |
+| instrument_hsc/flow | physics_mean/flow | 0.569 | 256 | 0.147 |
+| instrument_hsc/iforest | physics_hsc/iforest | -0.020 | 12 | 0.006 |
+| instrument_hsc/iforest | physics_legacy/iforest | -0.010 | 9 | 0.005 |
+| instrument_hsc/iforest | physics_mean/iforest | -0.011 | 10 | 0.005 |
+| instrument_hsc/knn | physics_hsc/knn | 0.327 | 115 | 0.061 |
+| instrument_hsc/knn | physics_legacy/knn | 0.282 | 77 | 0.040 |
+| instrument_hsc/knn | physics_mean/knn | 0.303 | 88 | 0.046 |
+| instrument_hsc/mahal | physics_hsc/mahal | 0.380 | 212 | 0.119 |
+| instrument_hsc/mahal | physics_legacy/mahal | 0.371 | 196 | 0.109 |
+| instrument_hsc/mahal | physics_mean/mahal | 0.369 | 198 | 0.110 |
+| instrument_legacy/flow | physics_hsc/flow | 0.317 | 133 | 0.071 |
+| instrument_legacy/flow | physics_legacy/flow | 0.314 | 128 | 0.068 |
+| instrument_legacy/flow | physics_mean/flow | 0.310 | 125 | 0.067 |
+| instrument_legacy/iforest | physics_hsc/iforest | -0.041 | 4 | 0.002 |
+| instrument_legacy/iforest | physics_legacy/iforest | -0.058 | 5 | 0.003 |
+| instrument_legacy/iforest | physics_mean/iforest | -0.054 | 4 | 0.002 |
+| instrument_legacy/knn | physics_hsc/knn | 0.163 | 51 | 0.026 |
+| instrument_legacy/knn | physics_legacy/knn | 0.151 | 35 | 0.018 |
+| instrument_legacy/knn | physics_mean/knn | 0.157 | 43 | 0.022 |
+| instrument_legacy/mahal | physics_hsc/mahal | 0.176 | 35 | 0.018 |
+| instrument_legacy/mahal | physics_legacy/mahal | 0.148 | 38 | 0.019 |
+| instrument_legacy/mahal | physics_mean/mahal | 0.158 | 37 | 0.019 |
+
+_Full pairwise matrix in `space_agreement_spatial-conv1x1.csv`._
+
+=== [4/4] figures ===
+[plot] tag=spatial-conv1x1  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_hsc_flow_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_legacy_flow_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_hsc_flow_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_legacy_flow_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_mean_flow_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/joint_top12_flow_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_hsc_iforest_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_legacy_iforest_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_hsc_iforest_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_legacy_iforest_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_mean_iforest_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/joint_top12_iforest_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_hsc_knn_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_legacy_knn_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_hsc_knn_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_legacy_knn_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_mean_knn_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/joint_top12_knn_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_hsc_mahal_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_instrument_legacy_mahal_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_hsc_mahal_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_legacy_mahal_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/top12_physics_mean_mahal_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/joint_top12_mahal_spatial-conv1x1.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1/roc_lens_spatial-conv1x1.png
+=== done Mon Jul 27 23:27:23 EDT 2026 ===
+/orcd/pool/007/pablomer/outputs/contrastive_anomalies:
+total 129M
+drwxrwxr-x 2 pablomer pablomer   27 Jul 27 23:27 figures_spatial-conv1x1
+-rw------- 1 pablomer pablomer 128M Jul 27 23:16 latents_spatial-conv1x1.h5
+-rw-rw-r-- 1 pablomer pablomer 4.5K Jul 27 23:27 lens_metrics_spatial-conv1x1.csv
+-rw------- 1 pablomer pablomer 7.8M Jul 27 23:27 scores_spatial-conv1x1.h5
+-rw-rw-r-- 1 pablomer pablomer  16K Jul 27 23:27 space_agreement_spatial-conv1x1.csv
+-rw-rw-r-- 1 pablomer pablomer 4.3K Jul 27 23:27 summary_spatial-conv1x1.md
+
+/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1:
+total 629K
+-rw-rw-r-- 1 pablomer pablomer 297K Jul 27 23:27 joint_top12_flow_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 258K Jul 27 23:27 joint_top12_iforest_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 296K Jul 27 23:27 joint_top12_knn_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 296K Jul 27 23:27 joint_top12_mahal_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 181K Jul 27 23:27 roc_lens_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 150K Jul 27 23:27 top12_instrument_hsc_flow_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 120K Jul 27 23:27 top12_instrument_hsc_iforest_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 148K Jul 27 23:27 top12_instrument_hsc_knn_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 150K Jul 27 23:27 top12_instrument_hsc_mahal_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 137K Jul 27 23:27 top12_instrument_legacy_flow_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 136K Jul 27 23:27 top12_instrument_legacy_iforest_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 135K Jul 27 23:27 top12_instrument_legacy_knn_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 137K Jul 27 23:27 top12_instrument_legacy_mahal_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 121K Jul 27 23:27 top12_physics_hsc_flow_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 115K Jul 27 23:27 top12_physics_hsc_iforest_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 124K Jul 27 23:27 top12_physics_hsc_knn_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 118K Jul 27 23:27 top12_physics_hsc_mahal_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 128K Jul 27 23:27 top12_physics_legacy_flow_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 114K Jul 27 23:27 top12_physics_legacy_iforest_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 131K Jul 27 23:27 top12_physics_legacy_knn_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 119K Jul 27 23:27 top12_physics_legacy_mahal_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 121K Jul 27 23:27 top12_physics_mean_flow_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 117K Jul 27 23:27 top12_physics_mean_iforest_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 127K Jul 27 23:27 top12_physics_mean_knn_spatial-conv1x1.png
+-rw-rw-r-- 1 pablomer pablomer 120K Jul 27 23:27 top12_physics_mean_mahal_spatial-conv1x1.png

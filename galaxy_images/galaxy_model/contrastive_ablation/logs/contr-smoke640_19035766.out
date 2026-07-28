@@ -1,0 +1,11 @@
+=== [1/3] loader benchmark at batch 640 ===========================
+==============================================================================
+CONTRASTIVE DWNVAL PREFLIGHT
+==============================================================================
+[1/5] store   rows=468,197 (expect 468,197) anchors=103,741 (expect 103,741)
+[downstream-holdout] holdout list: 5,361 unique legacy IDs | matched anchors: 5,466 / 103,741
+[2/5] holdout ids_in_file=5,361  matched_anchors=5,466  (102.0% of ids)
+        sample matched anchor positions: [108, 306, 361, 363, 598] ... [102940, 103210, 103474]
+[3/5] parity  excluded HSC-anchor=2,736 Legacy-anchor=2,730 (HSC fraction 0.501, expect ~0.500)
+[4/5] epochs  kept=98,275 train=93,362 val=4,913 steps/epoch=145  (non-holdout ref: train=98,554, steps/epoch=1,539; shift -90.6%)
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=False | max_neighbors=5 | random_neighbors=False

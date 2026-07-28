@@ -1,0 +1,5 @@
+wrote /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/evaluation/adversarial_testset/outputs/adversarial_eval/stratified_metrics.csv (1458 rows)
+wrote /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/evaluation/adversarial_testset/outputs/adversarial_eval/paired_object_losses.csv (135612 rows)
+wrote /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/evaluation/adversarial_testset/outputs/adversarial_eval/paired_bootstrap.csv (2187 rows)
+wrote /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_ablation/evaluation/adversarial_testset/outputs/adversarial_eval/survey_interaction_bootstrap.csv (729 rows)
+Done at Mon Jul 27 20:39:36 EDT 2026
