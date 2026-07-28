@@ -235,8 +235,28 @@ paired std 0.020, so |Δ| below ~0.04 is not resolvable in a single split) — a
 
 ## Measured numbers
 
-**Batch 640 has not been timed on a GPU yet** — `smoke_bigbatch.slurm` exists to produce
-that number and is step 1 for a reason. What is known:
+### Batch 640 on one H200 (`pg_mki_aryeh`, job 19105116, 2026-07-28) — the live run
+
+| | measured |
+|---|---|
+| step rate | **10.42 steps/s** (steps 500 → 1,000 in 48s, from consecutive `latest-step` mtimes) |
+| throughput | 6,667 anchors/s ≈ 46,700 images/s through the two encoders |
+| loader | 33.6 batch/s at batch 640, 16 workers, in-RAM store — **~3x more than training consumes**, so the GPU is the limiter. Read it as a floor: with 16 persistent workers and prefetch, a 20-batch timing is partly served from the pre-filled queue |
+| 100k steps | **~2.6h** of pure stepping; ~3-3.5h with the 100 validations (8 val batches + a UMAP panel each) |
+| snapshots | step 10,000 ≈ 16 min in, step 35,000 ≈ 1h in |
+
+That is ~13x the per-anchor throughput of the MI210 reference below, and it makes the
+whole arm a single-evening run rather than a multi-link one. Practical consequence: the
+follow-up arms this directory lists as "optional because expensive" (BS=128 negative-count
+controls on B/C, a sqrt-scaled `LR=3.16e-4` tuned-large-batch arm) cost ~3h each here.
+
+Peak GPU memory prints at the end of `fit` (`[gpu] peak allocated ...`); on a 143 GiB H200
+it was never in question, but the number is what tells you whether batch 1,280 is possible.
+
+### Prior expectations, kept for the AMD route
+
+`smoke_bigbatch.slurm` exists to produce the equivalent number on an MI210, where memory
+(64 GiB) and step rate are genuinely open questions. What was known before the H200 run:
 
 - Arm A, the reference: **100k steps at batch 64 in ~3h10m on one MI210** with
   `LOADER=ram48` (from the checkpoint mtimes in
@@ -249,8 +269,8 @@ that number and is step 1 for a reason. What is known:
   already demonstrated) the most likely limiter. Verify with the smoke instead of
   trusting this paragraph.
 - The step-10,000 snapshot — the equal-image-budget checkpoint — lands after roughly the
-  same wall clock as arm A's *entire* run (~3h), so there is an evaluable checkpoint early
-  even if the full 100k never finishes.
+  same wall clock as arm A's *entire* run (~3h on MI210; it was 16 min on the H200), so
+  there is an evaluable checkpoint early even if the full 100k never finishes.
 - GPU memory is not expected to be the constraint: ~5,120 images of 4x48x48 per step
   through resnet18 at bf16 is a few GiB of activations, against 64 GiB on an MI210. The
   smoke prints `[gpu] peak allocated` so this stops being an estimate.
