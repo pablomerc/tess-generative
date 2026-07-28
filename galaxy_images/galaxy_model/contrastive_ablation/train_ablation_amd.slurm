@@ -34,7 +34,19 @@
 #   # D. no SimCLR head — InfoNCE on the representation the probes read
 #   sbatch --export=ALL,RUN_TAG=nohead,PROJECTION_HEAD=0,HOLDOUT=0 train_ablation_amd.slurm
 #
+#   # E. 10x batch = 10x negatives (see RUN_BIGBATCH.md for the full recipe)
+#   sbatch --partition=mi2104x --time=24:00:00 --cpus-per-task=16 --mem=96G \
+#          --export=ALL,RUN_TAG=spatial-conv1x1-BS640-DWNVAL,BATCH_SIZE=640,\
+# LOADER=ram48,DATA_DIR=/work1/jeroenaudenaert/pablomer/data/efficient_neighs_48,\
+# SNAPSHOT_STEPS=10000:35000,NUM_UMAP_BATCHES=1,CHAIN_TIME=24:00:00,CHAIN_MEM=96G,CHAIN_CPUS=16 \
+#          train_ablation_amd.slurm
+#
 #   sbatch --partition=mi2104x --time=24:00:00 ...        # if mi2101x is congested
+#
+# Whenever you override sbatch resource flags (--time/--mem/--cpus-per-task), pass the
+# matching CHAIN_TIME/CHAIN_MEM/CHAIN_CPUS too: sbatch flags are NOT inherited by the
+# chained successor, only env vars are, so without them a resumed link silently drops
+# back to this file's #SBATCH defaults (12h, no --mem, 8 cpus).
 #
 # Optional env: DISCORD_WEBHOOK (progress pings), WANDB_API_KEY (online logging).
 
@@ -53,8 +65,18 @@ GALAXY_NEGATIVES="${GALAXY_NEGATIVES:-mixed}"
 INSTRUMENT_NEGATIVES="${INSTRUMENT_NEGATIVES:-mixed}"
 PROJECTION_HEAD="${PROJECTION_HEAD:-1}"
 # Raise to 128 for the negative-COUNT control: restricting negatives to one survey also
-# halves how many there are, and InfoNCE quality depends on the count.
+# halves how many there are, and InfoNCE quality depends on the count. 640 = the 10x
+# negative-count arm (E); see RUN_BIGBATCH.md.
 BATCH_SIZE="${BATCH_SIZE:-64}"
+# Published LR. Keep it fixed when varying BATCH_SIZE so the arm stays one-variable.
+LR="${LR:-1e-4}"
+# Comma-separated steps to checkpoint permanently (the rolling latest-step ckpt is
+# overwritten). Used by arm E for the image-budget-matched comparison points.
+# NOTE: separate multiple steps with COLONS (10000:35000) — sbatch --export splits on commas.
+SNAPSHOT_STEPS="${SNAPSHOT_STEPS:-}"
+# UMAP panel size is batch_size*2*N points, so drop this at large batch: 8 at batch 64
+# == 1 at batch 640. Logging only — it never touches the weights.
+NUM_UMAP_BATCHES="${NUM_UMAP_BATCHES:-8}"
 # HOLDOUT=1 (default) excludes the downstream-eval galaxies; 0 trains on all anchors,
 # which is what the mechanism arms (B-D) want so they compare to the published run.
 HOLDOUT="${HOLDOUT:-1}"
@@ -96,9 +118,23 @@ if [[ "${ATTEMPT}" -gt "${MAX_ATTEMPTS}" ]]; then
 fi
 
 # --- Queue the successor now, so a wall-limit kill still continues the run ---
+# sbatch resource flags are NOT inherited (only the environment is), so a long run has to
+# hand its own --time/--mem/--cpus-per-task forward or the next link quietly shrinks to
+# this file's #SBATCH defaults. CHAIN_MEM defaults to whatever this job was granted, which
+# matters for LOADER=ram48 (17GB store in RAM per link).
+CHAIN_PARTITION="${CHAIN_PARTITION:-${SLURM_JOB_PARTITION:-mi2101x}}"
+CHAIN_MEM="${CHAIN_MEM:-${SLURM_MEM_PER_NODE:+${SLURM_MEM_PER_NODE}M}}"
+CHAIN_CPUS="${CHAIN_CPUS:-${SLURM_CPUS_PER_TASK:-}}"
+CHAIN_TIME="${CHAIN_TIME:-}"
+echo "[chain] successor resources: partition=${CHAIN_PARTITION} time=${CHAIN_TIME:-<script default>}" \
+     "mem=${CHAIN_MEM:-<script default>} cpus=${CHAIN_CPUS:-<script default>}"
+
 sbatch --dependency=afterany:${SLURM_JOB_ID} \
-       --partition="${SLURM_JOB_PARTITION:-mi2101x}" \
-       --export=ALL,RUN_TAG=${RUN_TAG},ENCODER_POOL=${ENCODER_POOL},RANDOM_NEIGHBORS=${RANDOM_NEIGHBORS},MAX_STEPS=${MAX_STEPS},MAX_ATTEMPTS=${MAX_ATTEMPTS},LOADER=${LOADER},DATA_DIR=${DATA_DIR},HOLDOUT_TXT=${HOLDOUT_TXT},HOLDOUT=${HOLDOUT},GALAXY_NEGATIVES=${GALAXY_NEGATIVES},INSTRUMENT_NEGATIVES=${INSTRUMENT_NEGATIVES},PROJECTION_HEAD=${PROJECTION_HEAD},BATCH_SIZE=${BATCH_SIZE},CKPT_DIR=${CKPT_DIR},REPO_ROOT=${REPO_ROOT} \
+       --partition="${CHAIN_PARTITION}" \
+       ${CHAIN_TIME:+--time="${CHAIN_TIME}"} \
+       ${CHAIN_MEM:+--mem="${CHAIN_MEM}"} \
+       ${CHAIN_CPUS:+--cpus-per-task="${CHAIN_CPUS}"} \
+       --export=ALL,RUN_TAG=${RUN_TAG},ENCODER_POOL=${ENCODER_POOL},RANDOM_NEIGHBORS=${RANDOM_NEIGHBORS},MAX_STEPS=${MAX_STEPS},MAX_ATTEMPTS=${MAX_ATTEMPTS},LOADER=${LOADER},DATA_DIR=${DATA_DIR},HOLDOUT_TXT=${HOLDOUT_TXT},HOLDOUT=${HOLDOUT},GALAXY_NEGATIVES=${GALAXY_NEGATIVES},INSTRUMENT_NEGATIVES=${INSTRUMENT_NEGATIVES},PROJECTION_HEAD=${PROJECTION_HEAD},BATCH_SIZE=${BATCH_SIZE},LR=${LR},SNAPSHOT_STEPS=${SNAPSHOT_STEPS},NUM_UMAP_BATCHES=${NUM_UMAP_BATCHES},CKPT_DIR=${CKPT_DIR},REPO_ROOT=${REPO_ROOT},CHAIN_PARTITION=${CHAIN_PARTITION},CHAIN_TIME=${CHAIN_TIME},CHAIN_MEM=${CHAIN_MEM},CHAIN_CPUS=${CHAIN_CPUS} \
        "${CA_DIR}/train_ablation_amd.slurm" || echo "[chain] WARNING: could not queue successor"
 
 source ~/.bashrc
@@ -136,6 +172,7 @@ if [[ "${ATTEMPT}" -eq 1 ]]; then
         --loader "${LOADER}" \
         --data-dir "${DATA_DIR}" \
         --holdout-ids-txt "${HOLDOUT_TXT}" \
+        --batch-size "${BATCH_SIZE}" \
         --smoke \
         --benchmark "${BENCH_BATCHES:-30}" \
         --bench-workers "${SLURM_CPUS_PER_TASK:-8}" \
@@ -143,7 +180,7 @@ if [[ "${ATTEMPT}" -eq 1 ]]; then
     # The benchmark only WARNS about a slow loader (it does not fail the job) — read the
     # projected wall clock in the log. If it exceeds the allocation you can afford, cancel,
     # build the ram48 store, and resubmit with LOADER=ram48.
-    _ping "contr-${RUN_TAG} 🚀 training started on AMD · pool=${ENCODER_POOL} loader=${LOADER} · target ${MAX_STEPS} steps · job ${SLURM_JOB_ID:-?}"
+    _ping "contr-${RUN_TAG} 🚀 training started on AMD · pool=${ENCODER_POOL} loader=${LOADER} batch=${BATCH_SIZE} lr=${LR} · target ${MAX_STEPS} steps · job ${SLURM_JOB_ID:-?}"
 fi
 
 # Holdout is a flag pair, not a value: pass the id list, or explicitly acknowledge none.
@@ -166,15 +203,18 @@ srun python -u "${CA_DIR}/train_contrastive_ablation.py" \
     --ckpt-dir              "${CKPT_DIR}" \
     --run-name              "contrastive-${RUN_TAG}" \
     --batch-size            "${BATCH_SIZE}" \
+    --lr                    "${LR}" \
+    --snapshot-steps        "${SNAPSHOT_STEPS}" \
+    --num-umap-batches      "${NUM_UMAP_BATCHES}" \
     --num-workers           "${SLURM_CPUS_PER_TASK:-8}"
 
 if [[ -f "${CKPT_DIR}/DONE" ]]; then
     echo "[done] training complete. Checkpoints in ${CKPT_DIR}:"
     ls -la "${CKPT_DIR}"
-    _ping "contr-${RUN_TAG} ✅ training finished (${MAX_STEPS} steps) on AMD. Copy best-*.ckpt to Engaging and run contrastive_ablation/eval_dwnval_engaging.slurm."
+    _ping "contr-${RUN_TAG} ✅ training finished (${MAX_STEPS} steps, batch ${BATCH_SIZE}) on AMD. Copy best-*.ckpt${SNAPSHOT_STEPS:+ and snapshot-step=*.ckpt} to Engaging and run contrastive_ablation/eval_ablation_engaging.slurm."
     echo
     echo "NEXT STEP (on Engaging, not here):"
-    echo "  1. rsync the best checkpoint to /orcd/pool/007/pablomer/checkpoints_new/contrastive-${RUN_TAG}/"
+    echo "  1. rsync the best checkpoint${SNAPSHOT_STEPS:+ AND every snapshot-step=*.ckpt} to /orcd/pool/007/pablomer/checkpoints_new/contrastive-${RUN_TAG}/"
     echo "  2. sbatch --export=ALL,RUN_TAG=${RUN_TAG} \\"
     echo "       galaxy_images/galaxy_model/contrastive_ablation/eval_ablation_engaging.slurm"
 fi

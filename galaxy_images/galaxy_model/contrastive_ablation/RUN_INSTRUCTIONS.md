@@ -215,6 +215,8 @@ baseline's R² pattern.
 | `dual_encoder_contrastive_variants.py` | the loss variants (delegates to the baseline when unrestricted) |
 | `test_negative_variants.py` | fast CPU tests; asserts default == published baseline |
 | `train_ablation_amd.slurm` | AMD launcher (self-chaining, runs preflight, MI210 workaround) |
+| `RUN_BIGBATCH.md` | arm I (batch 640 = 10x negatives): why, exact command, the three checkpoints it yields |
+| `smoke_bigbatch.slurm` | 30-step GPU smoke at batch 640 — GPU memory + real step rate + snapshot check |
 | `holdout_legacy_ids.txt` | the 5,361 legacy ids to exclude (tracked so both clusters share one list) |
 | `eval_ablation_engaging.slurm` | Engaging-only downstream eval (do not run on AMD) |
 | `compare_dwnval.py` | ΔR² report vs the non-holdout arm → `DWNVAL_RESULT.md` |
@@ -238,6 +240,17 @@ sbatch --export=ALL,RUN_TAG=galneg-samesurvey-DWNVAL,GALAXY_NEGATIVES=same_surve
 # D -- no SimCLR head: InfoNCE directly on the representation the probes read
 sbatch --export=ALL,RUN_TAG=nohead-DWNVAL,PROJECTION_HEAD=0 \
   galaxy_images/galaxy_model/contrastive_ablation/train_ablation_amd.slurm
+```
+
+### Arm I -- batch 640 (10x negatives)
+
+Not a one-line override like B/C/D: it needs the `ram48` loader to match arm A, a `--mem`
+line, more CPUs, and `CHAIN_*` so the self-chained links keep those resources. Its own
+recipe, with the reasoning and the three checkpoints it produces, is in
+**`RUN_BIGBATCH.md`** -- start there, and run `smoke_bigbatch.slurm` first.
+
+```bash
+sbatch galaxy_images/galaxy_model/contrastive_ablation/smoke_bigbatch.slurm   # ~10 min, then see RUN_BIGBATCH.md
 ```
 
 Sanity line to expect in each log (it records the axes actually in force):

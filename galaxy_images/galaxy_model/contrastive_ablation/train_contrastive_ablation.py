@@ -1,13 +1,17 @@
 """
 Trainer for every post-review contrastive ablation arm.
 
-Three independent axes, all defaulting to the published `contrastive-spatial-conv1x1`
+Four independent axes, all defaulting to the published `contrastive-spatial-conv1x1`
 configuration so that any single flag isolates one variable:
 
   --holdout-ids-txt PATH     exclude the n=5,469 downstream-eval galaxies (DWNVAL)
   --galaxy-negatives MODE     mixed | same_survey | cross_survey
   --instrument-negatives MODE mixed | same_survey
   --projection-head 0|1       SimCLR head (default 1) vs InfoNCE on the representation
+  --batch-size N              the negative COUNT axis: InfoNCE sees B-1 galaxy negatives
+                              and ~5(B-1) instrument negatives per anchor, so batch size
+                              *is* a hyperparameter of the objective, not just of the
+                              optimizer. See "The batch-size axis" below.
 
 With all defaults and no holdout this reproduces the published arm; the loss path is
 literally delegated to the unmodified baseline class in that case (see
@@ -53,6 +57,36 @@ effective updates over 100k steps (68.6 vs 65.0 epochs), so the effect is far
 below the contamination signal being measured. Not worth tiling around — but if a
 reviewer asks, this is the one thing that is not held exactly fixed.
 
+The batch-size axis — why it exists
+-----------------------------------
+The published contrastive arms ran at batch 64, i.e. **63 galaxy negatives** and ~315
+instrument-neighbour negatives per anchor. That is small for InfoNCE, and it is also
+4x smaller than the batch "Ours" trained at (64 x 4 GPUs = 256 global,
+`ANALYSIS.md` §1), so "your contrastive baseline was starved of negatives / of batch"
+is a live objection to every contrastive-loses cell we report.
+
+`--batch-size 640` (10x) answers it: 639 galaxy negatives, ~3,195 instrument
+negatives, 2.5x Ours' global batch. Everything else — LR, temperature, schedule,
+seed, split, holdout — stays fixed, so the arm is still one-variable.
+
+Two conventions exist for "same run, bigger batch", and this script gives both from
+one training run instead of forcing a choice:
+
+  * **equal optimizer steps** (`--max-steps 100000`, the default): the same 100k
+    updates at the same LR, each over 10x more data. Strictly more compute than the
+    reference arm, so a null result cannot be blamed on undertraining.
+  * **equal image budget**: use `--snapshot-steps` to keep permanent checkpoints at
+    the steps where the image count matches an existing run. At batch 640,
+    step 10,000 = 6.4M images = exactly what the published arms saw, and
+    step 35,000 = 22.4M images = what Ours saw (`ANALYSIS.md` §1, item 10). The
+    rolling `latest-step=*` checkpoints are overwritten (`save_top_k=1`), so these
+    have to be requested up front — they cannot be recovered afterwards.
+
+`--lr` exists for the same reason: it defaults to the published 1e-4 and should stay
+there for the one-variable arm. If a reviewer asks for a *tuned* large-batch baseline
+rather than a controlled one, sqrt-scaling (1e-4 x sqrt(10) = 3.16e-4) is the second
+run to make — as a separate arm, not by changing this one.
+
 Cluster portability
 -------------------
 No cluster-specific paths. Pass `--data-dir` and `--holdout-ids-txt` explicitly.
@@ -69,6 +103,7 @@ so the run survives a wall-limit kill under a self-chaining SLURM launcher.
 """
 
 import argparse
+import math
 import os
 import sys
 from pathlib import Path
@@ -128,6 +163,35 @@ class VerboseModelCheckpoint(ModelCheckpoint):
             print(f"[checkpoint] saved: {filepath}", flush=True)
 
 
+class StepSnapshotCallback(pl.Callback):
+    """Keep a permanent checkpoint at exact global steps.
+
+    The rolling `latest-step=*` checkpoint has `save_top_k=1`, so it is deleted as
+    soon as the next one is written; an intermediate step is therefore NOT recoverable
+    after the fact. Any step count that has to be evaluated later (image-budget-matched
+    points for the batch-size arm) must be requested before the run starts.
+
+    Idempotent on resume: an existing file for a step is never rewritten, so a
+    wall-limit kill that replays part of an epoch cannot corrupt an earlier snapshot.
+    """
+
+    def __init__(self, steps, dirpath):
+        self.steps = sorted({int(s) for s in steps})
+        self.dirpath = Path(dirpath)
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if not trainer.is_global_zero:
+            return
+        step = int(trainer.global_step)          # already incremented by the optimizer step
+        if step not in self.steps:
+            return
+        path = self.dirpath / f"snapshot-step={step}.ckpt"
+        if path.exists():
+            return
+        trainer.save_checkpoint(str(path))
+        print(f"[snapshot] step {step:,}: kept permanently at {path}", flush=True)
+
+
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -167,12 +231,27 @@ def parse_args():
     p.add_argument("--ckpt-dir", required=True, help="Run checkpoint directory (on pool/work, not scratch).")
     p.add_argument("--run-name", required=True, help="WandB run name / tag.")
     p.add_argument("--wandb-project", default="galaxy-contrastive-engaging")
-    p.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    p.add_argument("--batch-size", type=int, default=BATCH_SIZE,
+                   help="Also the negative-count axis: B-1 galaxy negatives and ~5(B-1) "
+                        "instrument negatives per anchor. 64 = published arms.")
+    p.add_argument("--lr", type=float, default=LR,
+                   help="Keep the published 1e-4 for a one-variable batch-size arm. Scale it "
+                        "only as a deliberately separate 'tuned large batch' run.")
+    p.add_argument("--snapshot-steps", default="",
+                   help="Global steps to checkpoint permanently, separated by commas, "
+                        "colons or spaces, e.g. '10000:35000'. Use for image-budget-matched "
+                        "comparison points: the rolling latest-step checkpoint is "
+                        "overwritten, so they cannot be recovered later. (Colons are "
+                        "accepted because SLURM's --export splits on commas.)")
     p.add_argument("--num-workers", type=int, default=8)
     p.add_argument("--max-neighbors", type=int, default=MAX_NEIGHBORS)
     p.add_argument("--val-fraction", type=float, default=VAL_FRACTION)
     p.add_argument("--val-check-interval", type=int, default=1000)
     p.add_argument("--enable-umap", type=int, choices=[0, 1], default=1)
+    p.add_argument("--num-umap-batches", type=int, default=8,
+                   help="Validation batches collected for the UMAP panel. This is a POINT "
+                        "COUNT of batch_size*2*N, so at large batch sizes lower it to keep "
+                        "the panel comparable (and cheap): 8 at batch 64 == 1 at batch 640.")
     # Smoke-test knobs.
     p.add_argument("--limit-val-batches", type=int, default=None)
     p.add_argument("--limit-train-batches", type=int, default=None)
@@ -218,6 +297,12 @@ def main():
           f"instrument_negatives={args.instrument_negatives} "
           f"projection_head={bool(args.projection_head)} "
           f"holdout={'yes' if args.holdout_ids_txt else 'NO'}", flush=True)
+    # Chance level is batch-size dependent (ln B per branch), so train/val loss is NOT
+    # comparable across batch sizes — print the reference so nobody reads a bigger loss
+    # at a bigger batch as a worse model.
+    print(f"[cfg] lr={args.lr:g}  negatives/anchor: galaxy={args.batch_size - 1} "
+          f"instrument~{5 * (args.batch_size - 1):,}  |  InfoNCE chance loss "
+          f"= 2*ln({args.batch_size}) = {2 * math.log(args.batch_size):.2f}", flush=True)
 
     # ---- data ----------------------------------------------------------------
     dataset = build_dataset(args)
@@ -283,6 +368,13 @@ def main():
     steps_per_epoch = train_size // args.batch_size
     print(f"[data] kept={kept_size:,}  train={train_size:,}  val={val_size:,}  "
           f"steps/epoch={steps_per_epoch:,}", flush=True)
+    # The T_max=-1 cosine quirk (CLAUDE.md) alternates lr/0 per EPOCH, so a batch-size
+    # change moves the alternation period. The dead FRACTION stays ~50% either way, which
+    # is why the pair is still comparable — but print the numbers rather than assert it.
+    print(f"[data] images/epoch={train_size:,}  epochs at max_steps="
+          f"{args.max_steps / max(1, steps_per_epoch):.1f}  "
+          f"images seen={args.max_steps * args.batch_size / 1e6:.1f}M "
+          f"(published arms: 6.4M, Ours: 22.3M)", flush=True)
 
     persistent = args.num_workers > 0
     train_loader = DataLoader(
@@ -314,10 +406,10 @@ def main():
         temperature_instrument=TEMPERATURE,
         lambda_galaxy=1.0,
         lambda_instrument=1.0,
-        lr=LR,
+        lr=args.lr,
         weight_decay=WEIGHT_DECAY,
         enable_umap_logging=bool(args.enable_umap),
-        num_umap_batches=8,
+        num_umap_batches=args.num_umap_batches,
         umap_n_neighbors=15,
         umap_min_dist=0.1,
         use_random_instrument_positives=False,
@@ -342,10 +434,12 @@ def main():
                 "n_anchors_excluded": len(excluded),
                 "n_anchors_kept": kept_size,
                 "batch_size": args.batch_size,
+                "galaxy_negatives_per_anchor": args.batch_size - 1,
+                "images_seen": args.max_steps * args.batch_size,
                 "max_neighbors": args.max_neighbors,
                 "embedding_dim": EMBEDDING_DIM,
                 "projection_dim": PROJECTION_DIM,
-                "lr": LR,
+                "lr": args.lr,
                 "max_steps": args.max_steps,
                 "data_dir": args.data_dir,
                 "loader": args.loader,
@@ -362,6 +456,24 @@ def main():
         filename="latest-step={step}", save_last=True, auto_insert_metric_name=False,
     )
 
+    callbacks = [best_ckpt, periodic_ckpt]
+    snapshot_steps = sorted({
+        int(s) for s in args.snapshot_steps.replace(",", " ").replace(":", " ")
+                                          .replace(";", " ").split()
+    })
+    if snapshot_steps:
+        stale = [s for s in snapshot_steps if s > args.max_steps]
+        if stale:
+            raise SystemExit(
+                f"[FATAL] --snapshot-steps {stale} exceed --max-steps {args.max_steps}; "
+                f"they would never be written."
+            )
+        print(f"[snapshot] permanent checkpoints requested at steps "
+              f"{', '.join(f'{s:,}' for s in snapshot_steps)} "
+              f"(= {', '.join(f'{s * args.batch_size / 1e6:.1f}M' for s in snapshot_steps)} "
+              f"images)", flush=True)
+        callbacks.append(StepSnapshotCallback(snapshot_steps, ckpt_dir))
+
     trainer = pl.Trainer(
         max_steps=args.max_steps,
         logger=logger,
@@ -371,7 +483,7 @@ def main():
         log_every_n_steps=10,
         val_check_interval=args.val_check_interval,
         check_val_every_n_epoch=None,
-        callbacks=[best_ckpt, periodic_ckpt],
+        callbacks=callbacks,
         num_sanity_val_steps=0,
         default_root_dir=str(ckpt_dir),
         limit_val_batches=args.limit_val_batches if args.limit_val_batches is not None else 1.0,
@@ -385,10 +497,22 @@ def main():
 
     trainer.fit(model, train_loader, val_loader, ckpt_path=resume_path)
 
+    # Batch size drives activation memory (2B images through the galaxy encoder, 6B
+    # through the instrument one), so report the peak — it is the number that decides
+    # whether the next batch-size step up is possible.
+    if torch.cuda.is_available():
+        print(f"[gpu] peak allocated {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB | "
+              f"peak reserved {torch.cuda.max_memory_reserved() / 2**30:.1f} GiB "
+              f"at batch_size={args.batch_size}", flush=True)
+
     # Mark completion so the self-chaining SLURM launcher stops resubmitting.
     if trainer.global_step >= args.max_steps:
         (ckpt_dir / "DONE").write_text(
             f"global_step={trainer.global_step}\n"
+            f"batch_size={args.batch_size}\n"
+            f"lr={args.lr:g}\n"
+            f"images_seen={trainer.global_step * args.batch_size}\n"
+            f"snapshot_steps={','.join(str(s) for s in snapshot_steps) or '(none)'}\n"
             f"n_anchors_excluded={len(excluded)}\n"
             f"n_anchors_kept={kept_size}\n"
             f"holdout_ids_txt={args.holdout_ids_txt or '(none)'}\n"

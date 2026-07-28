@@ -32,8 +32,9 @@
 # ContrastiveNegativeAblationModule class). To evaluate a checkpoint from the ORIGINAL
 # contrastive_baseline trainer instead, override MODULE/MODEL_CLASS.
 #
-# Optional env: CKPT (explicit checkpoint path), CKPT_DIR, SEEDS (default "0"),
-#               DISCORD_WEBHOOK.
+# Optional env: CKPT (explicit checkpoint path), SNAP_STEP (evaluate
+#               snapshot-step=<N>.ckpt from CKPT_DIR), CKPT_DIR, SEEDS (default "0"),
+#               REF_VAR (comparison arm), DISCORD_WEBHOOK.
 
 set -eo pipefail
 
@@ -63,6 +64,16 @@ _ping() {
 }
 _on_exit() { rc=$?; [[ $rc -ne 0 ]] && _ping "${VAR} eval ❌ failed (rc=$rc) job ${SLURM_JOB_ID:-?}"; return 0; }
 trap _on_exit EXIT
+
+# Evaluate one of the permanent step snapshots (arm I's image-budget-matched points):
+#   --export=ALL,...,SNAP_STEP=10000
+# Prefer this over passing CKPT directly for a snapshot — the filename contains an '=',
+# and sbatch --export values are parsed as name=value pairs split on commas, so a path
+# like snapshot-step=10000.ckpt is easy to mangle in a submit line.
+if [[ -z "${CKPT:-}" && -n "${SNAP_STEP:-}" ]]; then
+    CKPT="${CKPT_DIR}/snapshot-step=${SNAP_STEP}.ckpt"
+    echo "[eval] SNAP_STEP=${SNAP_STEP} -> ${CKPT}"
+fi
 
 # Prefer the best-val checkpoint; fall back to the rolling last.ckpt.
 if [[ -z "${CKPT:-}" ]]; then

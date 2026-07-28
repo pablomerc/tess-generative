@@ -154,13 +154,29 @@ Default (`--n-folds 0`) is byte-unchanged, so published numbers are unaffected. 
 n_test ≈ 550 per fold, several of the gaps we are quoting (0.740 vs 0.801) need this
 before they go in a rebuttal table.
 
+## 7. Batch size / negative count — **READY** (exp I)
+
+The published arms trained at batch **64**: 63 galaxy negatives and ~315 instrument
+negatives per anchor, against Ours' global batch of 256 (64 x 4 GPUs, `ANALYSIS.md` §1).
+Two objections follow from that, and one run at batch **640** answers both — "InfoNCE was
+starved of negatives" and "the baseline had a 4x smaller batch than your own model". At
+640 it gets 639 / ~3,195 negatives and 2.5x Ours' batch. LR, temperature, schedule, seed,
+split and holdout stay fixed, so it is still a one-variable arm; the full recipe and the
+reasoning about which comparison convention to use are in `RUN_BIGBATCH.md`.
+
+Expectation: if the instrument advantage is largely a *survey classifier* (§3), 10x more
+(still ~50/50 cross-survey) negatives should leave it roughly where it is, while physics
+R² — which needs genuine instance discrimination — is where extra negatives usually help.
+A flat result is the useful outcome: it makes every contrastive-loses cell robust to the
+batch-size objection, which currently applies to all of them.
+
 ---
 
 ## Run queue
 
 ### On AMD (training — 1 GPU each, ~100k steps)
 
-All four use one launcher; defaults reproduce the published arm so each override
+All five use one launcher; defaults reproduce the published arm so each override
 isolates one variable. Read `RUN_INSTRUCTIONS.md` first — **run the preflight**, and
 check its throughput benchmark before committing an allocation.
 
@@ -170,17 +186,22 @@ check its throughput benchmark before committing an allocation.
 | C | `instrneg-samesurvey-DWNVAL` | `sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-DWNVAL,INSTRUMENT_NEGATIVES=same_survey …/train_ablation_amd.slurm` | is the instrument win a survey classifier? (§3) — **highest value** |
 | B | `galneg-samesurvey-DWNVAL` | `sbatch --export=ALL,RUN_TAG=galneg-samesurvey-DWNVAL,GALAXY_NEGATIVES=same_survey …/train_ablation_amd.slurm` | harder galaxy task → better physics? (§2) |
 | D | `nohead-DWNVAL` | `sbatch --export=ALL,RUN_TAG=nohead-DWNVAL,PROJECTION_HEAD=0 …/train_ablation_amd.slurm` | is the SimCLR head doing the work? (§4) |
+| I | `spatial-conv1x1-BS640-DWNVAL` | see `RUN_BIGBATCH.md` (full command; needs `LOADER=ram48`, `--mem`, `CHAIN_*`) | 10x negatives — answers both "starved of negatives" and "smaller batch than Ours" (§7) |
 
-Optional follow-ups, only if B or C move the numbers:
-`--export=…,BATCH_SIZE=128` on that arm (negative-count control, §3), and a
-compute-matched arm at `MAX_STEPS=350000` (Ours saw ~22M images, contrastive ~6.4M).
+Arm I **subsumes the two optional follow-ups** this section used to list, via its
+permanent step snapshots: at batch 640, step 10,000 = 6.4M images (exactly arm A's
+budget) and step 35,000 = 22.4M images (Ours' budget — i.e. the
+`MAX_STEPS=350000`-at-batch-64 compute-matched arm, without the 35x wall clock). Still
+open as a separate run if B or C move the numbers: `--export=…,BATCH_SIZE=128` **on that
+restricted arm**, which asks a different question — restoring the negative count the
+restriction removed.
 
-**All four arms hold out the downstream-eval galaxies** (`HOLDOUT=1`, the default), so
+**All five arms hold out the downstream-eval galaxies** (`HOLDOUT=1`, the default), so
 the whole set is internally consistent and no arm can be dismissed on contamination
-grounds. That makes **A the reference arm for B/C/D** — each mechanism arm differs from
-A in exactly one axis. The published `contrastive-spatial-conv1x1` stays in the picture
-as the A-vs-published pair that measures contamination itself. So when evaluating B/C/D,
-set the comparison reference accordingly:
+grounds. That makes **A the reference arm for B/C/D/I** — each one differs from A in
+exactly one axis. The published `contrastive-spatial-conv1x1` stays in the picture as the
+A-vs-published pair that measures contamination itself. So when evaluating B/C/D/I, set
+the comparison reference accordingly:
 
 ```bash
 sbatch --export=ALL,RUN_TAG=instrneg-samesurvey-DWNVAL,REF_VAR=contrastive-spatial-conv1x1-DWNVAL \

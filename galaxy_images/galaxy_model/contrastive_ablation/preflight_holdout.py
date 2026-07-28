@@ -47,7 +47,8 @@ EXPECTED_ANCHORS = 103_741
 EXPECTED_ROWS = 468_197
 # Non-holdout reference run (contrastive-spatial-conv1x1), for the epoch-shift report.
 REF_TRAIN_SIZE = 98_554
-REF_STEPS_PER_EPOCH = 98_554 // 64
+REF_BATCH_SIZE = 64                          # what every published arm trained at
+REF_STEPS_PER_EPOCH = REF_TRAIN_SIZE // REF_BATCH_SIZE
 
 
 def main():
@@ -152,9 +153,19 @@ def main():
     val_size = max(1, int(kept * args.val_fraction))
     train_size = kept - val_size
     spe = train_size // args.batch_size
+    # The shift that matters is holdout-vs-not, so compare against the reference epoch at
+    # THIS batch size — otherwise a batch-size arm reports a ~-90% "shift" that is just the
+    # batch change and hides the few-percent number the check is actually about.
+    ref_spe = max(1, REF_TRAIN_SIZE // args.batch_size)
     print(f"[4/5] epochs  kept={kept:,} train={train_size:,} val={val_size:,} "
-          f"steps/epoch={spe:,}  (non-holdout ref: train={REF_TRAIN_SIZE:,}, "
-          f"steps/epoch={REF_STEPS_PER_EPOCH:,}; shift {100.0 * (spe - REF_STEPS_PER_EPOCH) / REF_STEPS_PER_EPOCH:+.1f}%)")
+          f"steps/epoch={spe:,}  (non-holdout ref at batch {args.batch_size}: "
+          f"train={REF_TRAIN_SIZE:,}, steps/epoch={ref_spe:,}; "
+          f"shift {100.0 * (spe - ref_spe) / ref_spe:+.1f}%)")
+    if args.batch_size != REF_BATCH_SIZE:
+        print(f"        note: published arms used batch {REF_BATCH_SIZE} "
+              f"(steps/epoch={REF_STEPS_PER_EPOCH:,}); this run's epoch is "
+              f"{REF_STEPS_PER_EPOCH / max(1, spe):.1f}x shorter in steps, which moves the "
+              f"period of the T_max=-1 LR alternation but not its ~50% duty cycle.")
 
     # ---- 4b. optional: does the holdout cover the eval sample? ---------------
     if args.overlap_parquet:
@@ -192,9 +203,13 @@ def main():
 
         excluded = set(positions)
         kept_pos = [i for i in range(len(ds)) if i not in excluded]
+        # Shapes and finiteness don't depend on the batch size, and this probe reads the
+        # MEMMAP single-threaded, which is the slowest configuration there is (Ceph random
+        # reads). Cap it so a large-batch arm doesn't spend minutes re-checking a shape.
+        probe_bs = min(args.batch_size, 128)
         # Take a small contiguous slice (keeps parity mix) rather than the whole subset.
-        probe = Subset(ds, kept_pos[: 4 * args.batch_size])
-        dl = DataLoader(probe, batch_size=args.batch_size, shuffle=False,
+        probe = Subset(ds, kept_pos[: 4 * probe_bs])
+        dl = DataLoader(probe, batch_size=probe_bs, shuffle=False,
                         num_workers=0, collate_fn=collate_neighbors)
         for bi, batch in enumerate(dl):
             targets, samegals, sameins, masks, metadata = batch
