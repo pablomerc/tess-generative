@@ -79,6 +79,72 @@ soon as the next one lands):
 The headline arm is the last one. The other two exist so that "you gave contrastive 10x
 the compute" and "you undertrained it" cannot both be raised.
 
+## Outcome (job 19105116, 2026-07-28) — what the arm actually showed
+
+Trained to 100,000 steps / **64.0M images** in ~3h on one H200, peak GPU memory **3.4 GiB**.
+Both checkpoints evaluated against arm A (`contrastive-spatial-conv1x1-DWNVAL`, batch 64)
+with the identical n=5,469 / `--mlp-arch aion` / seed 0 protocol:
+`RESULT_contrastive-spatial-conv1x1-BS640{,-bestval}-DWNVAL.md`.
+
+| | best-val (step 6,000, 3.8M imgs) | final (step 100,000, 64.0M imgs) |
+|---|---|---|
+| mean ΔR² | **−0.010** | −0.057 |
+| median ΔR² | −0.012 | −0.043 |
+| cells beyond ±0.05 | 18 / 78 | 36 / 78 |
+
+### 1. The instrument-latent loss is caused by the negatives, not by training length
+
+The instrument cells move by the same amount at 6k and at 100k updates — a **17x change in
+update count shifts them by <0.02**:
+
+| instrument latent | batch 64 | 640 @ 6k | 640 @ 100k |
+|---|---|---|---|
+| Galaxy Depth R | +0.914 | +0.819 | +0.818 |
+| PSF Depth R | +0.909 | +0.817 | +0.817 |
+| # Observations R | +0.657 | +0.489 | +0.508 |
+| PSF FWHM r (HSC) | +0.641 | +0.499 | +0.489 |
+
+So ~0.09-0.15 R² of the contrastive instrument advantage is a **small-batch / negative-pool
+artefact**, and it is not an undertraining artefact — more updates do not recover it. This is
+independent evidence for §3's suspicion and for the paper's "contrastive objectives are
+sensitive to the composition of a training batch" claim, arrived at from the opposite
+direction: §3 restricts negatives, this arm multiplies them, and both degrade the
+instrument advantage.
+
+### 2. Physics R² did not improve with 10x the negatives — the objection is answered
+
+At the matched selection rule (best-val, how every published arm was chosen): redshift
+**+0.016**, log M\* **+0.011**, ellipticity **+0.008**, HSC ellipticity **+0.003** — every one
+inside the paired 5-fold noise floor (`RESULT_folds.md`, ~0.020 std, so |Δ| < ~0.04 is not
+resolvable). Ten times the negatives buys no measurable physics R².
+
+**That is the deliverable:** the contrastive arm's deficit on spectroscopic physics versus
+Ours is not negative-starvation, and "your baseline had 63 negatives / a 4x smaller batch
+than your own model" is no longer available as an explanation for any physics cell.
+
+### 3. The equal-optimizer-steps checkpoint is overtrained — quote best-val instead
+
+100k steps at batch 640 is **690 epochs** over 93,362 anchors, and it shows: `val/loss`
+bottomed at step 6,000 (2.86) and never improved again, and the final checkpoint's
+downstream R² is worse nearly everywhere (mean −0.057; the shape-from-instrument-latent
+cells collapse by −0.20 to −0.23). The val signal was real, not noise.
+
+Consequence for the write-up: **quote the best-val checkpoint.** That also keeps the
+selection rule identical to every other arm. The equal-steps checkpoint is still worth
+having — it is what proves finding 1 is not undertraining — but it is not the headline.
+
+### Honest limits of the comparison
+
+Neither pairing is matched on everything, which is why both were run. best-val vs best-val
+is close on images (3.8M vs 4.5M) and epochs (41 vs 48) but not on updates (6k vs 70k);
+final vs arm A is matched on updates but overtrained. The instrument result survives both,
+which is what makes it trustworthy; the physics result rests on the image/epoch-matched
+pair, where it is a null inside the noise floor.
+
+Worth noting for its own sake: **both arms turn over at ~40-50 epochs** (arm A best-val at
+48, arm I at 41) despite a 10x difference in negative count, i.e. the val-optimal point
+here is set by data exposure rather than by batch size.
+
 ## Submitting on Engaging (the live run)
 
 ```bash
