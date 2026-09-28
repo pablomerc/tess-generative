@@ -93,7 +93,7 @@ fresh `NeighborsEfficientDataset._preprocess` of the 160 px store, in case
 the HSC/Legacy preprocessing changed after 2026-07-25.
 Login-node caveat: `ulimit -v` is 32 GB there, so the 120 GB parent binary
 cannot be mmapped on the login node; use seek+read for smoke tests, as
-`ae_baseline/data.py` does. The 48 px stores are small enough to mmap anywhere.
+`single_latent/ae_baseline/data.py` does. The 48 px stores are small enough to mmap anywhere.
 *Built by:* step 2 script (to be written): `data_preprocessing/build_lsst48.py`,
 mirroring `build_ram48.py` but calling `preprocess_lsst`.
 
@@ -108,7 +108,7 @@ as the HDF5-mode default, so confirm nothing in HDF5 mode is still wanted.
 
 ### Open — D7. Train/val split convention
 Two conventions exist: the LSST AE baseline froze a 90/10 split by
-`sha1(object_id_hsc)` (`ae_baseline/data.py`, `val_object_ids.txt`), while
+`sha1(object_id_hsc)` (`single_latent/ae_baseline/data.py`, `val_object_ids.txt`), while
 the neighbours work excludes the 5,466 downstream-holdout anchors
 (`*-DWNVAL` variants). Comparability with one baseline or the other depends
 on which is chosen. Decide before step 3.
