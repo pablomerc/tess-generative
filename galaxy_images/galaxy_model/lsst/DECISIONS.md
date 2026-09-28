@@ -122,16 +122,32 @@ probe's survey accuracy changes.
 
 ---
 
-## Step order for the first run
+## Step order for the first run (status 2026-09-27)
 
-1. `build_lsst_neighbors.py` — neighbour index (seconds). ← current
-2. `build_cosmos48.py` — RAM store: 48 px griz float16 for COSMOS anchors,
-   their HSC/Legacy pool rows, and their LSST rows; `ok` mask per D3
-   stored alongside but not applied.
-3. Dataset class (same output contract as `NeighborsEfficientDataset`,
-   `collate_neighbors` unchanged), anchor = HSC or LSST at random, samegal =
-   the other, sameins = same-survey neighbours; D1–D3 applied here.
-4. Config + sbatch (mi2101x), smoke test, launch: 15–20k steps.
-5. Probes: MLP R² on frozen embeddings, instrument targets now include
+1. DONE `data_preprocessing/build_lsst_neighbors.py` — neighbour index →
+   `data/lsst_efficient/lsst_neighbors.{npz,json}` (commit eedaca2).
+2. DONE `data_preprocessing/build_lsst48.py` — `data/lsst_efficient/lsst48.bin`,
+   all 65,163 rows, griz 48 px float16, bit-for-bit vs `preprocess_lsst`
+   (commit eedaca2). HSC side already existed: `data/efficient_neighs_48/`.
+3. DONE `lsst/hsc_lsst_dataset.py` — `HscLsstRAM48Dataset`, same output
+   contract as `NeighborsEfficientDataset`; anchor alternates HSC/LSST by
+   position; D1–D3 applied as masks; HSC subset read with seek+read.
+4. DONE wiring — `config.py` (`data.lsst_*` fields, `model.survey_names`) and
+   `data_factory.py` (`mode == "hsc_lsst_ram48"`); holdout/lens options are
+   refused for this mode until re-wired to this index space (D7).
+5. DONE survey generalisation — `double_train_fm_neighbors.py` and
+   `validation_pairs.py` take a `survey_names` pair (default
+   `("hsc","legacy")`, byte-identical behaviour for existing runs); this run
+   logs `train/loss_generative_lsst`, `val/mse_lsst`, UMAP legend "LSST".
+   The DDPM ablation subclass keeps its historical keys via a fallback.
+6. DONE `configs/hsc_lsst_cosmos.json`, `lsst/hsc_lsst_train.py`,
+   `lsst/hsc_lsst_train.sbatch` (own launcher, mi2101x, 12 h). Full run:
+   `sbatch galaxy_images/galaxy_model/lsst/hsc_lsst_train.sbatch`;
+   20k steps ≈ 40 epochs ≈ 6–8 h on one MI210. `lr_schedule` left at
+   "paper" for comparability with the registry checkpoints.
+7. Smoke test on `-p devel` (job 440996, 2026-09-27) → then launch.
+8. Probes: MLP R² on frozen embeddings, instrument targets now include
    per-object `n_input_*` and `psf_fwhm_*`; leak check = physics-latent R²
    on `n_input_i` ≈ 0; UMAP of physics latent coloured by survey and n_input.
+   NOTE: with the D7 choice (no holdout exclusion) probe objects are inside
+   the training set; any R² from this run is on seen galaxies.
