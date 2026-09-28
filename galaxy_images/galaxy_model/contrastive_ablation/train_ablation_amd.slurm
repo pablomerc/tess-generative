@@ -109,6 +109,12 @@ export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 # workaround are required — this env var, and the guarded
 # torch.backends.cuda.preferred_blas_library("hipblas") call in the python entry.
 export TORCH_BLAS_PREFER_HIPBLASLT=0
+# MIOpen: give each job a private, node-local kernel cache. The default
+# ~/.config/miopen db is shared across concurrent jobs and races to
+# miopenStatusInternalError when several arms start at once (seen on job 356642).
+export MIOPEN_USER_DB_PATH="/tmp/miopen_${USER}_${SLURM_JOB_ID:-manual}"
+export MIOPEN_CUSTOM_CACHE_DIR="${MIOPEN_USER_DB_PATH}"
+mkdir -p "${MIOPEN_USER_DB_PATH}"
 
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
