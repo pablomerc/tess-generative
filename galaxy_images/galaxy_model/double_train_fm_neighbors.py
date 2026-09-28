@@ -579,6 +579,15 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
             epoch_str = self._format_time_hms(epoch_time)
             print(f"Epoch {self.current_epoch} completed in {epoch_str}")
 
+    def _wandb_log(self, payload: dict) -> None:
+        """Log rich media (image grids, UMAP figures) to W&B when W&B is the logger.
+        With wandb.enabled=false Lightning falls back to a CSV logger whose
+        `experiment` has no .log(), so smoke tests used to crash at the first
+        validation; scalars still go through self.log() regardless."""
+        exp = getattr(getattr(self, "logger", None), "experiment", None)
+        if exp is not None and hasattr(exp, "log"):
+            exp.log(payload)
+
     def _per_survey_losses(self) -> dict:
         """Per-survey generative losses for logging. Reads self._loss_by_survey
         (set by this module); falls back to the legacy attributes _loss_hsc /
@@ -915,7 +924,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         plt.figure(fig_row.number)
         plt.tight_layout()
 
-        self.logger.experiment.log({
+        self._wandb_log({
             "val/sample_grid": wandb.Image(fig_orig),
             "val/sample_grid_row_scaled": wandb.Image(fig_row),
             "global_step": self.global_step,
@@ -1212,7 +1221,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
         # Log to wandb if logger is available
         if self.logger and hasattr(self.logger, 'experiment'):
             import wandb
-            self.logger.experiment.log({
+            self._wandb_log({
                 "latent_space/umap_grid": wandb.Image(str(save_path)),
                 "global_step": self.global_step,
             })
@@ -1282,7 +1291,7 @@ class ConditionalFlowMatchingModule(pl.LightningModule):
 
         if self.logger and hasattr(self.logger, 'experiment'):
             import wandb
-            self.logger.experiment.log({
+            self._wandb_log({
                 "latent_space/umap_grid": wandb.Image(str(save_path)),
                 "global_step": self.global_step,
             })
