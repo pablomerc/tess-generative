@@ -290,6 +290,22 @@ def build_neighbors_dataloaders(
             random_neighbors=config.data.random_neighbors,
         )
         collate_fn = _collate_for_neighbors
+    elif config.data.mode == "hsc_lsst_ram48":
+        # HSC x LSST two-view triplets, everything in RAM (lsst/DECISIONS.md).
+        # Same output contract as the modes above, so nothing downstream changes.
+        # Field / band / n_input selection happens inside the dataset as masks;
+        # the seeded random_split below then carves the validation slice.
+        from galaxy_images.galaxy_model.lsst.hsc_lsst_dataset import HscLsstRAM48Dataset
+        dataset = HscLsstRAM48Dataset(
+            lsst_dir=config.data.lsst_data_dir,
+            hsc48_dir=config.data.hsc48_data_dir,
+            field=config.data.lsst_field,
+            min_n_input=config.data.lsst_min_n_input,
+            max_neighbors=config.data.max_neighbors,
+            random_neighbors=config.data.random_neighbors,
+            crop_size=config.model.image_size,
+        )
+        collate_fn = _collate_for_neighbors
     else:
         raise ValueError(f"Unsupported data mode: {config.data.mode}")
 

@@ -9,10 +9,20 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class DataConfig:
-    mode: str = "precomputed"  # precomputed | neighbors | efficient | ram48
+    mode: str = "precomputed"  # precomputed | neighbors | efficient | ram48 | hsc_lsst_ram48
     precomputed_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbor_batches/neighbours_vds.h5"
     neighbors_h5: str = "/data/vision/billf/scratch/pablomer/data/neighbours_v2.h5"
     efficient_data_dir: Optional[str] = None
+    # --- mode == "hsc_lsst_ram48" only (lsst/hsc_lsst_dataset.py; lsst/DECISIONS.md) ---
+    # LSST store dir holding lsst48.bin + lsst_neighbors.npz + lsst_meta.parquet,
+    # and the 48px HSC store dir (efficient_neighs_48). None -> the dataset's defaults.
+    lsst_data_dir: Optional[str] = None
+    hsc48_data_dir: Optional[str] = None
+    # Anchor selection applied as masks inside the dataset (never baked into a store):
+    # field restriction (None = all fields) and the per-band n_input floor on g,r,i,z,
+    # applied to anchors and to LSST neighbour slots.
+    lsst_field: Optional[str] = "COSMOS"
+    lsst_min_n_input: int = 5
     max_neighbors: int = 5
     val_ratio: float = 0.05
     batch_size: int = 64
@@ -79,6 +89,10 @@ class ModelConfig:
     instrument_flatten_to_one_token: bool = False
     encoder_2_global_conv: bool = False
     instrument_as_class_conditioning: bool = False
+    # The two survey names a batch's metadata["anchor_survey"] can take. Drives the
+    # per-survey metric keys (train/loss_generative_<name>, val/mse_<name>) and UMAP
+    # labels. Default keeps every existing run identical; HSC x LSST uses ["hsc", "lsst"].
+    survey_names: List[str] = field(default_factory=lambda: ["hsc", "legacy"])
     # Diffusion-ablation fields (ignored by FM modules via filter_supported_model_kwargs)
     prediction_type: str = "epsilon"
     num_train_timesteps: int = 1000
@@ -172,11 +186,21 @@ class ExperimentConfig:
         )
 
     def validate(self) -> None:
-        if self.data.mode not in {"precomputed", "neighbors", "efficient", "ram48"}:
+        if self.data.mode not in {"precomputed", "neighbors", "efficient", "ram48", "hsc_lsst_ram48"}:
             raise ValueError(
                 f"Unsupported data.mode={self.data.mode!r}. "
-                "Use 'precomputed', 'neighbors', 'efficient', or 'ram48'."
+                "Use 'precomputed', 'neighbors', 'efficient', 'ram48', or 'hsc_lsst_ram48'."
             )
+        if self.data.mode == "hsc_lsst_ram48":
+            if self.data.lsst_min_n_input < 0:
+                raise ValueError("data.lsst_min_n_input must be >= 0.")
+            if self.data.downstream_holdout_ids_txt or self.lens_val.enabled:
+                # Both resolve positions through the parent catalogue's anchor list,
+                # which is not this dataset's index space. Wire them explicitly if needed.
+                raise ValueError(
+                    "downstream_holdout_ids_txt and lens_val are not supported for "
+                    "data.mode='hsc_lsst_ram48' (see lsst/DECISIONS.md D7)."
+                )
         if self.data.mode == "precomputed" and not self.data.precomputed_h5:
             raise ValueError("data.precomputed_h5 must be set for data.mode='precomputed'.")
         if self.data.mode == "neighbors" and not self.data.neighbors_h5:
