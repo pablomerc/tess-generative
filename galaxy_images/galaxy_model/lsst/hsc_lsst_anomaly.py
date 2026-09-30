@@ -372,7 +372,7 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
     for i, (key, lab) in enumerate((("phys/lsst_mean/nsf", "physics (LSST image)"), ("ins/lsst_flat/nsf", "instrument (LSST image)"))):
         s = scores[key]
         for j, (col, xl) in enumerate((("n_input_i", "n_input_i (exposures in the i coadd)"), ("psf_fwhm_i", "psf_fwhm_i [″]"))):
-            rho = spearmanr(meta[col], s).statistic
+            rho = spearmanr(meta[col], s, nan_policy="omit").statistic     # DEEP2-3 has rows without a PSF value
             summary["spearman_vs_lsst_meta"][f"{key} vs {col}"] = float(rho)
             ax = axes[i, j]; ax.scatter(meta[col], s, s=3, alpha=0.4); ax.set_xlabel(xl); ax.set_ylabel(f"{lab} NSF score")
             ax.set_title(f"Spearman ρ = {rho:+.3f}", fontsize=10)
