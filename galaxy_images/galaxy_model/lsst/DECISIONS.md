@@ -226,3 +226,40 @@ smoke 444376 → 444377 cosine, 444378 paper (`*-lsstall-bothfields-cond-bal`),
 Spearman vs `n_input_i` near 0 within each group, DEEP2-3 and low-exposure
 COSMOS no longer shifted en bloc, and what remains at the top of the
 instrument ranking is texture / PSF / artefact rather than depth.
+
+### D11. Why v1/v2 conditioning could not work as a *score*, and the calibrated score (2026-09-30)
+All four single-field v1 runs and the anchors run came back with the same
+null result: instrument-space Spearman vs `n_input_i` −0.38 → −0.36 (COSMOS),
+−0.23 → −0.23 (DEEP2-3), −0.33 → −0.32 (anchors); rank correlation between
+the conditional and unconditional score 0.97–0.98; the COSMOS low-exposure
+group still +84…+102 above the fit set in instrument space. The reason is
+not (only) coverage of the conditioning variable. Inside the fit set itself
+the median conditional NLL runs from −8 at 5–10 visits to −65 at 80–100
+visits in the 64-d instrument space (COSMOS, cosine run), and −12 → −21
+across 1–20 visits in DEEP2-3. Shallow stamps give noisier tokens that fill a
+much larger volume of latent space, so a *correct* p(z | c) assigns them a
+lower density: −log p(z | c) measures the conditional **entropy** at that
+depth, not how unusual the object is for its depth. No flow, however well
+fitted or balanced, removes that trend from the raw conditional NLL.
+
+Fix: score with the highest-density-region tail probability under the same
+conditional flow, p = P[−log p(z′|c) ≥ −log p(z|c)] for z′ ~ p(·|c), estimated
+with K samples per row drawn from the flow at that row's context. Under the
+model p is Uniform(0, 1) for typical objects at **every** depth, so
+−log10 p is comparable across depths by construction ("anomalous for its
+number of visits" made literal). Implementation: `--calibrate K` on top of
+`--cond`; primary score becomes `<key>/ccal` = −log10 p + 10⁻³·z, where z is
+the standardised conditional NLL against the sampled NLLs (breaks ties at the
+1/(K+1) floor); p and z are stored in `scores.h5` under `calib/`. K = 512 →
+floor p = 1/513, top ≈ 0.2 %. New figure `depth_calibration.png`: median
+score per `n_input_i` bin over fit rows for nsf / cnsf / ccal (ccal should be
+flat at −log10 0.5) and the p-value histogram per group (uniform for fit
+rows). The raw conditional NLL (`cnsf`) is kept and its Spearman reported.
+Jobs: smoke 444452 → 444453 cosine / 444454 paper pooled
+(`*-lsstall-bothfields-ccal`), 444455/444456 COSMOS field, 444457/444458
+DEEP2-3 field (`*-{cosmos,deep23}-field-ccal`), all `--views lsst --cond
+n_input --balance --cond-epochs 150 --calibrate 512`. Success criterion
+becomes: fit-row p-values uniform in every depth bin; instrument-space
+Spearman(ccal, `n_input_i`) ≈ 0 within the fit set; residual shifts of
+cosmos_lowexp / deep23_held then mean "genuinely unusual for their depth",
+not "shallow".
