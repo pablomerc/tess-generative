@@ -108,7 +108,8 @@ METHODS = ("nsf", "iforest", "knn", "mahal")
 PM = "nsf"
 PM_LABEL = {"nsf": "−log p(z)", "cnsf": "−log p(z | log n_input g,r,i,z)",
             "ccal": "−log10 P[−log p(z′|c) ≥ −log p(z|c)], z′ ~ p(·|c)  (depth-calibrated)",
-            "cemp": "−log10 (within-context-cluster percentile of −log p(z|c) among fit rows)"}
+            "cemp": "−log10 (within-context-cluster percentile of −log p(z|c) among fit rows)",
+            "cez": "robust z of −log p(z|c) within its exposure-pattern cluster (median / 1.4826·MAD of fit rows)"}
 COND_BANDS = ("g", "r", "i", "z")
 
 
@@ -317,6 +318,27 @@ def empirical_tail_prob(nll_all: np.ndarray, lab_all: np.ndarray, fit_mask: np.n
         p_emp[rows] = (ge - self_in + 1.0) / (len(rs) - self_in + 1.0)
     return p_emp
 
+
+def empirical_zscore(nll_all: np.ndarray, lab_all: np.ndarray, fit_mask: np.ndarray, min_ref: int = 20) -> np.ndarray:
+    """Continuous companion of `cemp` ("cez"): the conditional NLL standardised
+    within its exposure-pattern cluster by the median and 1.4826·MAD of the
+    (out-of-fold) fit rows there. Same location/scale calibration per depth
+    as cemp, but no resolution floor: cemp saturates at 1/(n_ref+1), so a
+    cluster with 2,000 fit rows can reach −log10 p = 3.3 while one with 100
+    rows stops at 2.0 — the very top of a cemp ranking is therefore biased
+    towards well-populated exposure patterns (COSMOS 80–100 visits). cez
+    ranks the extreme tail fairly across clusters at the price of assuming
+    similar tail shapes. Clusters with < min_ref fit rows get z = 0
+    ("cannot judge", like cemp's p = 1)."""
+    n = len(nll_all); z = np.zeros(n, dtype=np.float32)
+    for c in np.unique(lab_all):
+        rows = np.where(lab_all == c)[0]; refrows = rows[fit_mask[rows]]
+        if len(refrows) < min_ref:
+            continue
+        med = np.median(nll_all[refrows]); mad = 1.4826 * np.median(np.abs(nll_all[refrows] - med))
+        z[rows] = (nll_all[rows] - med) / max(float(mad), 1e-6)
+    return z
+
 def score_iforest(train, allz):
     from sklearn.ensemble import IsolationForest
     clf = IsolationForest(n_estimators=200, contamination="auto", random_state=42, n_jobs=-1).fit(train)
@@ -413,6 +435,7 @@ def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx:
                 p_emp = empirical_tail_prob(s_c, lab, fit_mask)          # s_c IS −log p(z|c) of the (out-of-fold) flow
                 scores[f"{key}/ccal"] = (-np.log10(p) + 1e-3 * zs).astype(np.float32)
                 scores[f"{key}/cemp"] = (-np.log10(p_emp)).astype(np.float32)
+                scores[f"{key}/cez"] = empirical_zscore(s_c, lab, fit_mask)
                 calib[key] = {"p": p, "p_emp": p_emp, "z": zs, "cluster": lab.astype(np.int32)}
                 # calibration check: fraction of FIT rows with p < 0.1 (0.10 if the flow is right)
                 from scipy.stats import spearmanr as _sp
@@ -490,7 +513,7 @@ def umap_with_top_anomalies(latents: dict, scores: dict, meta: dict, figs: Path,
         sc = ax.scatter(emb[:, 0], emb[:, 1], s=3, c=meta["n_input_i"][idx], cmap="viridis", alpha=0.55)
         plt.colorbar(sc, ax=ax, label="n_input_i")
         xy = np.zeros((n, 2)); xy[idx] = emb
-        _mark(ax, xy, top, label=f"top-{k} NSF anomalies")
+        _mark(ax, xy, top, label=f"top-{k} {PM.upper()} anomalies")
         ax.set_title(f"{tag}: UMAP of {key} ({len(idx):,} pts) with top-{k} anomalies", fontsize=10)
         ax.set_xlabel("UMAP 1"); ax.set_ylabel("UMAP 2"); ax.legend(loc="best", fontsize=8)
         p = figs / f"umap_top{k}_{key.replace('/', '_')}.png"; fig.tight_layout(); fig.savefig(p, dpi=130); plt.close(fig); paths.append(p)
@@ -531,7 +554,7 @@ def umap_with_top_anomalies(latents: dict, scores: dict, meta: dict, figs: Path,
                 m_ = groups[idx] == g
                 ax.scatter(emb[m_, 0], emb[m_, 1], s=3, c=colors[g], alpha=0.45, label=f"{g} ({int(m_.sum()):,})")
             xy = np.zeros((n, 2)); xy[idx] = emb
-            _mark(ax, xy, top, label=f"top-{k} NSF anomalies (all groups)")
+            _mark(ax, xy, top, label=f"top-{k} {PM.upper()} anomalies (all groups)")
             ax.set_title(f"{tag}: LSST-view UMAP of the {title} by group ({len(idx):,} pts)", fontsize=10)
             ax.set_xlabel("UMAP 1"); ax.set_ylabel("UMAP 2"); ax.legend(loc="best", fontsize=8, markerscale=2)
             p = figs / f"umap_groups_{key.replace('/', '_')}_top{k}.png"; fig.tight_layout(); fig.savefig(p, dpi=130); plt.close(fig); paths.append(p)
@@ -580,7 +603,7 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
     summary["spearman_vs_lsst_meta"] = {}
     # Spearman for every flow variant present (nsf; cnsf and ccal when conditioning is on),
     # so the summary can show how much conditioning / calibration removed the depth trend
-    flow_methods = [m for m in dict.fromkeys(("nsf", "cnsf", "ccal", "cemp", PM)) if f"ins/lsst_flat/{m}" in scores]
+    flow_methods = [m for m in dict.fromkeys(("nsf", "cnsf", "ccal", "cemp", "cez", PM)) if f"ins/lsst_flat/{m}" in scores]
     for m in flow_methods:
         for key in (f"phys/lsst_mean/{m}", f"ins/lsst_flat/{m}"):
             for col in ("n_input_i", "psf_fwhm_i"):
@@ -660,6 +683,9 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
                 if m in ("ccal", "cemp"):   # honest y-range: flatness should look flat, not auto-zoomed noise
                     ax.axhline(-np.log10(0.5), color="0.5", ls="--", lw=1, label="−log10 0.5 (calibrated median)"); ax.legend(fontsize=7, frameon=False)
                     ax.set_ylim(0, max(0.8, 1.3 * np.nanmax(meds)))
+                elif m == "cez":
+                    ax.axhline(0, color="0.5", ls="--", lw=1, label="0 (calibrated median)"); ax.legend(fontsize=7, frameon=False)
+                    ax.set_ylim(min(-1, 1.3 * np.nanmin(meds)), max(1, 1.3 * np.nanmax(meds)))
                 ax.set_xticks(range(len(centers))); ax.set_xticklabels(centers, rotation=45, fontsize=7)
                 ax.set_xlabel("n_input_i bin (fit rows only)"); ax.set_ylabel(f"median {m.upper()} score"); ax.set_title(f"{lab}: {m}", fontsize=9.5)
             if calib and key in calib:
@@ -750,10 +776,12 @@ def finish(args, ds, meta, latents, scores, calib, nsf_nll, out, views, n, fit_m
     cond_txt = ("" if PM == "nsf" else
                 (f"**conditional flow p(z | log n_input g,r,i,z)**" + (f", **depth-calibrated tail probability** (K={args.calibrate} samples/row)" if PM == "ccal" else "")
                  + (", **empirical depth-calibrated percentile (cemp)**: rank of the out-of-fold conditional NLL among fit rows with the same exposure pattern" if PM == "cemp" else "")
+                 + (", **empirical depth-calibrated robust z (cez)**: out-of-fold conditional NLL standardised by median/MAD of fit rows with the same exposure pattern (no resolution floor)" if PM == "cez" else "")
                  + " is the primary score; unconditional kept for contrast\n"
                  f"Spearman vs n_input_i, UNconditional: physics {sp['phys/lsst_mean/nsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs n_input_i']:+.3f}\n")
-                + (f"Spearman vs n_input_i, raw conditional NLL: physics {sp['phys/lsst_mean/cnsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/cnsf vs n_input_i']:+.3f}\n" if PM in ("ccal", "cemp") else "")
-                + (f"Spearman vs n_input_i, model-calibrated ccal: physics {sp['phys/lsst_mean/ccal vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/ccal vs n_input_i']:+.3f}\n" if PM == "cemp" and "phys/lsst_mean/ccal vs n_input_i" in sp else ""))
+                + (f"Spearman vs n_input_i, raw conditional NLL: physics {sp['phys/lsst_mean/cnsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/cnsf vs n_input_i']:+.3f}\n" if PM in ("ccal", "cemp", "cez") else "")
+                + (f"Spearman vs n_input_i, model-calibrated ccal: physics {sp['phys/lsst_mean/ccal vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/ccal vs n_input_i']:+.3f}\n" if PM in ("cemp", "cez") and "phys/lsst_mean/ccal vs n_input_i" in sp else "")
+                + (f"Spearman vs n_input_i, empirical percentile cemp: physics {sp['phys/lsst_mean/cemp vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/cemp vs n_input_i']:+.3f}\n" if PM == "cez" and "phys/lsst_mean/cemp vs n_input_i" in sp else ""))
     scope_txt += f", {args.folds}-fold out-of-fold flows" if args.folds > 1 else ""
     text = (f"**HSC × LSST anomaly stage — `{args.tag}`** ({scope_txt}) done in {summary['wall_min']} min, N={n:,} LSST rows, "
             f"detectors fitted on {int(fit_mask.sum()):,} rows ({summary.get('fit_group', 'fit set')})\n"
@@ -821,10 +849,11 @@ def main():
                     help="--scope lsst_all only. cosmos_train: detectors fitted on the COSMOS train split (DEEP2-3 is an "
                          "OOD probe). both_fields: fitted on COSMOS train + a seeded 80%% slice of DEEP2-3, so the "
                          "conditioning variable is covered from 1 to 114 exposures; groups still reported separately.")
-    ap.add_argument("--primary", choices=("auto", "nsf", "cnsf", "ccal", "cemp"), default="auto",
+    ap.add_argument("--primary", choices=("auto", "nsf", "cnsf", "ccal", "cemp", "cez"), default="auto",
                     help="which flow score drives galleries / UMAP markers / overlaps / the Discord headline. auto = "
                          "ccal if --calibrate, else cnsf if --cond, else nsf. cemp (empirical within-context-cluster "
-                         "percentile of the out-of-fold conditional NLL) is the recommended final ranking (D12).")
+                         "percentile of the out-of-fold conditional NLL) is the calibrated percentile; cez (its robust "
+                         "z-score, no resolution floor) is the recommended final RANKING (D12).")
     ap.add_argument("--report-only", metavar="SRC_TAG", default=None,
                     help="skip encoding and scoring: load latents.h5 + scores.h5 of an existing run <SRC_TAG> and "
                          "re-run report/UMAP/Discord into --tag (a new dir), typically with --primary cemp. Needs no GPU.")
@@ -874,6 +903,10 @@ def main():
         args.scope = str(lattrs["scope"]); args.field = str(lattrs["field"]) or None
         args.checkpoint = str(lattrs["checkpoint"]); args.cond = str(sattrs.get("cond", "none"))
         args.calibrate = int(sattrs.get("calibrate_samples", 0)); args.folds = int(sattrs.get("folds", 1))
+        if "ins/lsst_flat/cnsf" in scores and calib and "ins/lsst_flat/cez" not in scores:
+            for key_, cd in calib.items():               # older runs: derive the robust-z score from saved cnsf + clusters
+                if f"{key_}/cnsf" in scores and "cluster" in cd:
+                    scores[f"{key_}/cez"] = empirical_zscore(scores[f"{key_}/cnsf"], cd["cluster"].astype(np.int64), fit_mask)
         if f"ins/lsst_flat/{PM}" not in scores:
             raise SystemExit(f"--primary {PM} not in {args.report_only}: available {sorted(k.split('/')[-1] for k in scores if k.startswith('ins/lsst_flat/'))}")
         try:
