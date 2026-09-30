@@ -96,11 +96,20 @@ PM = "nsf"
 COND_BANDS = ("g", "r", "i", "z")
 
 
-def build_context(meta: dict, fit_mask: np.ndarray) -> np.ndarray:
-    """Flow context: log1p(n_input) per griz band, standardised on the fit set.
-    log because exposures span 1–114 and depth ∝ log N; standardised so the
-    spline flow's context network sees O(1) inputs."""
-    c = np.log1p(np.stack([meta[f"n_input_{b}"].astype(np.float32) for b in COND_BANDS], 1))
+def build_context(meta: dict, fit_mask: np.ndarray, with_psf: bool = False) -> np.ndarray:
+    """Flow context: log1p(n_input) per griz band (column 0 = i band, the
+    reference for balancing), optionally followed by psf_fwhm per band;
+    standardised on the fit set. log because exposures span 1–114 and depth ∝
+    log N; standardised so the spline flow's context network sees O(1) inputs.
+    Missing PSF values (some DEEP2-3 rows) are filled with the fit-set median."""
+    cols = [np.log1p(meta["n_input_i"].astype(np.float32))] + \
+           [np.log1p(meta[f"n_input_{b}"].astype(np.float32)) for b in COND_BANDS if b != "i"]
+    if with_psf:
+        for b in COND_BANDS:
+            p = meta[f"psf_fwhm_{b}"].astype(np.float32).copy()
+            p[~np.isfinite(p)] = np.nanmedian(p[fit_mask])
+            cols.append(p)
+    c = np.stack(cols, 1)
     mu, sd = c[fit_mask].mean(0), c[fit_mask].std(0) + 1e-6
     return ((c - mu) / sd).astype(np.float32)
 # representations that get galleries/diagnostics (the paper's choice: physics =
@@ -170,11 +179,29 @@ def encode(model, ds: HscLsstRAM48Dataset, device, batch_size=512, n_max=None, v
 
 
 # -------------------------------------------------------------------- score
-def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0, ctx_train=None, ctx_all=None):
+def context_weights(ctx_train: np.ndarray, n_bins: int = 12) -> np.ndarray:
+    """Inverse-density weights on the first context column (log exposures in the
+    reference band), so that a fit set dominated by one depth (COSMOS: 75–105
+    exposures) still teaches the conditional flow what latents look like at the
+    depths where it is sparse. Weights are clipped to [0.2, 20] and normalised
+    to mean 1, so the loss scale is unchanged."""
+    c = ctx_train[:, 0]
+    edges = np.quantile(c, np.linspace(0, 1, n_bins + 1)); edges[0] -= 1e-6; edges[-1] += 1e-6
+    # quantile bins have equal counts by construction, so density ∝ 1 / bin width
+    width = np.diff(edges)
+    idx = np.clip(np.searchsorted(edges, c, side="right") - 1, 0, n_bins - 1)
+    w = width[idx] / width.mean()                     # wide (sparse) bins get large weights
+    w = np.clip(w, 0.2, 20.0)
+    return (w / w.mean()).astype(np.float32)
+
+
+def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0, ctx_train=None, ctx_all=None, weights=None):
     """Neural spline flow anomaly score −log p(z) (paper recipe), or, when a
     context is given, the CONDITIONAL score −log p(z | c): the flow learns the
     latent distribution at each observing depth, so a stamp is only anomalous
-    if it is unusual for its own number of exposures."""
+    if it is unusual for its own number of exposures. `weights` (per fit row,
+    mean 1) turn the NLL into a weighted NLL — used to balance the fit set
+    across the context range."""
     import zuko
     torch.manual_seed(seed)
     cdim = 0 if ctx_train is None else ctx_train.shape[1]
@@ -182,6 +209,7 @@ def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0, ctx_tr
     opt = torch.optim.Adam(flow.parameters(), lr=lr)
     tr = torch.tensor(train, dtype=torch.float32, device=device)
     ctr = None if cdim == 0 else torch.tensor(ctx_train, dtype=torch.float32, device=device)
+    wtr = None if weights is None else torch.tensor(weights, dtype=torch.float32, device=device)
     dist = (lambda c: flow()) if cdim == 0 else (lambda c: flow(c))
     best, best_state = float("inf"), None
     for _ in range(epochs):
@@ -190,7 +218,8 @@ def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0, ctx_tr
         tot, nb = 0.0, 0
         for i in range(0, len(tr), batch):
             sel = perm[i:i + batch]
-            loss = -dist(None if ctr is None else ctr[sel]).log_prob(tr[sel]).mean()
+            nll = -dist(None if ctr is None else ctr[sel]).log_prob(tr[sel])
+            loss = nll.mean() if wtr is None else (nll * wtr[sel]).mean()
             opt.zero_grad(); loss.backward(); opt.step()
             tot += loss.item(); nb += 1
         if tot / nb < best:
@@ -226,13 +255,21 @@ def score_mahal(train, allz):
     return np.sqrt(np.einsum("ij,jk,ik->i", d, icov, d)).astype(np.float32)
 
 
-def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx: np.ndarray | None = None):
+def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx: np.ndarray | None = None,
+              cond_epochs: int | None = None, balance: bool = False):
     """fit_mask: rows the detectors are fitted on (the in-distribution set);
     every row is scored. For --scope anchors that is the model's train split;
-    for --scope lsst_all it is the COSMOS train split inside the full store.
+    for --scope lsst_all it is the COSMOS train split inside the full store
+    (or both fields' fit slices with --fit-on both_fields).
     ctx: optional (N, d) context; when given a second flow p(z | ctx) is fitted
-    and stored under <key>/cnsf next to the unconditional <key>/nsf."""
+    and stored under <key>/cnsf next to the unconditional <key>/nsf. It gets
+    `cond_epochs` (default: same as the unconditional budget) and, if `balance`,
+    inverse-density weights over the context so sparse depths are learned."""
     scores, nsf_nll = {}, {}
+    w = context_weights(ctx[fit_mask]) if (ctx is not None and balance) else None
+    if w is not None:
+        print(f"[score] context balancing: weights min {w.min():.2f} max {w.max():.2f} "
+              f"(effective sample size {int(w.sum() ** 2 / (w ** 2).sum()):,} of {int(fit_mask.sum()):,})", flush=True)
     for key, z in latents.items():
         tr = z[fit_mask]
         t0 = time.time()
@@ -240,7 +277,8 @@ def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx:
         scores[f"{key}/nsf"] = s; nsf_nll[key] = nll
         msg = f"nsf NLL {nll:8.2f}"
         if ctx is not None:
-            s_c, nll_c = score_nsf(tr, z, device, epochs=nsf_epochs, ctx_train=ctx[fit_mask], ctx_all=ctx)
+            s_c, nll_c = score_nsf(tr, z, device, epochs=cond_epochs or nsf_epochs,
+                                   ctx_train=ctx[fit_mask], ctx_all=ctx, weights=w)
             scores[f"{key}/cnsf"] = s_c; nsf_nll[f"{key}/cond"] = nll_c
             msg += f"  cond-nsf NLL {nll_c:8.2f}"
         scores[f"{key}/iforest"] = score_iforest(tr, z)
@@ -507,10 +545,18 @@ def main():
     ap.add_argument("--views", choices=("both", "lsst"), default="both",
                     help="both: encode HSC and LSST images (default). lsst: encode only the LSST image; every "
                          "flow, ranking, UMAP and diagnostic then uses latents of the LSST image alone.")
-    ap.add_argument("--cond", choices=("none", "n_input"), default="none",
+    ap.add_argument("--cond", choices=("none", "n_input", "n_input_psf"), default="none",
                     help="n_input: also fit a CONDITIONAL flow p(z | log n_input in g,r,i,z) and use it as the primary "
-                         "score (<key>/cnsf) — objects anomalous for their own number of visits. The unconditional "
-                         "flow is still fitted for comparison.")
+                         "score (<key>/cnsf) — objects anomalous for their own number of visits. n_input_psf adds "
+                         "psf_fwhm per band to the context. The unconditional flow is still fitted for comparison.")
+    ap.add_argument("--cond-epochs", type=int, default=None, help="epochs for the conditional flow (default: same as --nsf-epochs)")
+    ap.add_argument("--balance", action="store_true",
+                    help="weight the conditional flow's fit by the inverse density of the context (log n_input_i), so the "
+                         "sparse shallow depths are learned rather than drowned by the 75-105 exposure bulk")
+    ap.add_argument("--fit-on", choices=("cosmos_train", "both_fields"), default="cosmos_train",
+                    help="--scope lsst_all only. cosmos_train: detectors fitted on the COSMOS train split (DEEP2-3 is an "
+                         "OOD probe). both_fields: fitted on COSMOS train + a seeded 80%% slice of DEEP2-3, so the "
+                         "conditioning variable is covered from 1 to 114 exposures; groups still reported separately.")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
     if args.scope == "field" and not args.field:
@@ -558,6 +604,14 @@ def main():
         is_val = np.array([int(r) in val_rows for r in rows])
         fit_mask = np.array([int(r) in train_rows for r in rows])       # the model's own COSMOS train split
         group = np.where(fit_mask, "cosmos_train", np.where(is_val, "cosmos_val", np.where(field == "COSMOS", "cosmos_lowexp", "deep23")))
+        if args.scope == "lsst_all" and args.fit_on == "both_fields":
+            # pool a seeded 80 % slice of DEEP2-3 into the fit set; its other 20 % is a held-out group
+            d_pos = np.where(field == "DEEP2-3")[0]
+            d_held = train_val_positions(len(d_pos), val_ratio=0.2, seed=SPLIT_SEED)
+            fit_mask[d_pos[~d_held]] = True
+            group = np.array(group, dtype=object)
+            group[d_pos[~d_held]] = "deep23_fit"; group[d_pos[d_held]] = "deep23_held"
+            group = group.astype(str)
     meta = {"object_id_hsc": lm["object_id_hsc"].to_numpy()[rows], "lsst_row": rows,
             "parent_row": ds.parent_row[rows], "is_val": is_val, "fit_mask": fit_mask, "field": field, "group": group}
     for b in BANDS:
@@ -581,8 +635,9 @@ def main():
                         "dim": latents[f"phys/{views[-1]}_mean"].shape[1], "flow_fit_on": "meta/fit_mask == True"})
     print(f"[encode] saved latents for {n:,} rows ({time.time() - t0:.0f}s)", flush=True)
 
-    ctx = build_context(meta, fit_mask) if args.cond == "n_input" else None
-    scores, nsf_nll = score_all(latents, fit_mask, device, args.nsf_epochs, ctx=ctx)
+    ctx = build_context(meta, fit_mask, with_psf=(args.cond == "n_input_psf")) if args.cond != "none" else None
+    scores, nsf_nll = score_all(latents, fit_mask, device, args.nsf_epochs, ctx=ctx,
+                                cond_epochs=args.cond_epochs, balance=args.balance)
     with h5py.File(out / "scores.h5", "w") as f:
         for k, v in scores.items():
             f.create_dataset(k, data=v, compression="gzip", compression_opts=4)
@@ -591,7 +646,9 @@ def main():
             f.create_dataset("context", data=ctx)
         f.attrs.update({"checkpoint": args.checkpoint, "tag": args.tag, "nsf_epochs": args.nsf_epochs,
                         "methods": list(METHODS) + (["cnsf"] if ctx is not None else []), "primary_method": PM,
-                        "cond": args.cond, "context_desc": "standardised log1p(n_input) for g,r,i,z" if ctx is not None else ""})
+                        "cond": args.cond, "fit_on": args.fit_on, "cond_epochs": args.cond_epochs or args.nsf_epochs,
+                        "context_balanced": args.balance,
+                        "context_desc": ("standardised log1p(n_input) i,g,r,z" + (" + psf_fwhm g,r,i,z" if args.cond == "n_input_psf" else "")) if ctx is not None else ""})
     df = pd.DataFrame({k.replace("/", "__"): v for k, v in scores.items()})
     for k in ("object_id_hsc", "lsst_row", "parent_row", "is_val", "fit_mask", "field", "group", "n_input_i", "psf_fwhm_i"):
         df[k] = meta[k]

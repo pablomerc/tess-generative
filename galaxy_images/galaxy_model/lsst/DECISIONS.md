@@ -202,3 +202,27 @@ instrument-space Spearman vs n_input drops toward 0, and what remains in
 instrument space is texture/PSF/artefact-driven rather than depth-driven.
 Not conditioned on PSF (kept as a diagnostic axis) — a `--cond n_input_psf`
 variant is the obvious follow-up if PSF still dominates.
+
+**First conditional result (COSMOS field, cosine, 444332):** almost no effect —
+instrument-space Spearman vs `n_input_i` −0.38 → −0.36, rank correlation of
+conditional vs unconditional scores 0.98, low-exposure shift +91 → +84, flow
+NLL better by ~1 nat over 64 dims. Cause = coverage of the conditioning
+variable: 22,789 of 34,132 COSMOS objects have 80–100 i-band exposures and
+only 1,354 have < 20, so the context network sees almost no depth variation
+and the 786 objects below 5 exposures are extrapolated. DEEP2-3 has 31,031
+objects at 1–20 exposures and nothing above.
+
+### D10. Conditional flow v2: pooled fields, balanced context, longer fit
+Three opt-in flags (defaults keep the D9 behaviour so the running v1 jobs
+stay comparable): `--fit-on both_fields` (lsst_all scope; fit set = COSMOS
+train split ∪ seeded 80 % of DEEP2-3, groups still reported separately, so
+the context spans 1–114 exposures with only 20–40 thin), `--balance`
+(inverse-density weights on log `n_input_i` over quantile bins, clipped to
+[0.2, 20], mean 1, applied to the conditional flow's NLL), `--cond-epochs`
+(150 for the conditional flow vs 50 unconditional). `--cond n_input_psf` adds
+per-band `psf_fwhm` to the context (missing values → fit-set median). Jobs:
+smoke 444376 → 444377 cosine, 444378 paper (`*-lsstall-bothfields-cond-bal`),
+444379 cosine with PSF (`*-condpsf-bal`). Success criterion: instrument-space
+Spearman vs `n_input_i` near 0 within each group, DEEP2-3 and low-exposure
+COSMOS no longer shifted en bloc, and what remains at the top of the
+instrument ranking is texture / PSF / artefact rather than depth.
