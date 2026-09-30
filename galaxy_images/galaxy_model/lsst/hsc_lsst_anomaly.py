@@ -87,6 +87,22 @@ def discord_post(text: str, file_paths=None) -> bool:
 BANDS = ("g", "r", "i", "z")
 SPLIT_SEED, VAL_RATIO = 42, 0.05          # must match configs/hsc_lsst_cosmos.json
 METHODS = ("nsf", "iforest", "knn", "mahal")
+# Primary flow score used for galleries, UMAP markers, overlaps and the Discord
+# headline: "nsf" (unconditional) by default; main() switches it to "cnsf" when
+# --cond n_input is given, i.e. p(z | log exposures per band) — "anomalous for
+# its number of visits". The unconditional flow is still fitted alongside so
+# every diagnostic can show what the conditioning removed.
+PM = "nsf"
+COND_BANDS = ("g", "r", "i", "z")
+
+
+def build_context(meta: dict, fit_mask: np.ndarray) -> np.ndarray:
+    """Flow context: log1p(n_input) per griz band, standardised on the fit set.
+    log because exposures span 1–114 and depth ∝ log N; standardised so the
+    spline flow's context network sees O(1) inputs."""
+    c = np.log1p(np.stack([meta[f"n_input_{b}"].astype(np.float32) for b in COND_BANDS], 1))
+    mu, sd = c[fit_mask].mean(0), c[fit_mask].std(0) + 1e-6
+    return ((c - mu) / sd).astype(np.float32)
 # representations that get galleries/diagnostics (the paper's choice: physics =
 # pooled encoder_1, instrument = flattened encoder_2), on each survey's image
 GALLERY_KEYS = ["phys/hsc_mean", "phys/lsst_mean", "ins/hsc_flat", "ins/lsst_flat"]
@@ -154,27 +170,37 @@ def encode(model, ds: HscLsstRAM48Dataset, device, batch_size=512, n_max=None, v
 
 
 # -------------------------------------------------------------------- score
-def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0):
+def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0, ctx_train=None, ctx_all=None):
+    """Neural spline flow anomaly score −log p(z) (paper recipe), or, when a
+    context is given, the CONDITIONAL score −log p(z | c): the flow learns the
+    latent distribution at each observing depth, so a stamp is only anomalous
+    if it is unusual for its own number of exposures."""
     import zuko
     torch.manual_seed(seed)
-    flow = zuko.flows.NSF(features=allz.shape[1], context=0, transforms=6, hidden_features=[64, 64]).to(device)
+    cdim = 0 if ctx_train is None else ctx_train.shape[1]
+    flow = zuko.flows.NSF(features=allz.shape[1], context=cdim, transforms=6, hidden_features=[64, 64]).to(device)
     opt = torch.optim.Adam(flow.parameters(), lr=lr)
     tr = torch.tensor(train, dtype=torch.float32, device=device)
+    ctr = None if cdim == 0 else torch.tensor(ctx_train, dtype=torch.float32, device=device)
+    dist = (lambda c: flow()) if cdim == 0 else (lambda c: flow(c))
     best, best_state = float("inf"), None
     for _ in range(epochs):
         flow.train()
         perm = torch.randperm(len(tr), device=device)
         tot, nb = 0.0, 0
         for i in range(0, len(tr), batch):
-            loss = -flow().log_prob(tr[perm[i:i + batch]]).mean()
+            sel = perm[i:i + batch]
+            loss = -dist(None if ctr is None else ctr[sel]).log_prob(tr[sel]).mean()
             opt.zero_grad(); loss.backward(); opt.step()
             tot += loss.item(); nb += 1
         if tot / nb < best:
             best, best_state = tot / nb, {k: v.clone() for k, v in flow.state_dict().items()}
     flow.load_state_dict(best_state); flow.eval()
     al = torch.tensor(allz, dtype=torch.float32, device=device)
+    cal = None if cdim == 0 else torch.tensor(ctx_all, dtype=torch.float32, device=device)
     with torch.no_grad():
-        s = np.concatenate([(-flow().log_prob(al[i:i + batch])).cpu().numpy() for i in range(0, len(al), batch)])
+        s = np.concatenate([(-dist(None if cal is None else cal[i:i + batch]).log_prob(al[i:i + batch])).cpu().numpy()
+                            for i in range(0, len(al), batch)])
     return s.astype(np.float32), float(best)
 
 
@@ -200,20 +226,27 @@ def score_mahal(train, allz):
     return np.sqrt(np.einsum("ij,jk,ik->i", d, icov, d)).astype(np.float32)
 
 
-def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int):
+def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx: np.ndarray | None = None):
     """fit_mask: rows the detectors are fitted on (the in-distribution set);
     every row is scored. For --scope anchors that is the model's train split;
-    for --scope lsst_all it is the COSMOS train split inside the full store."""
+    for --scope lsst_all it is the COSMOS train split inside the full store.
+    ctx: optional (N, d) context; when given a second flow p(z | ctx) is fitted
+    and stored under <key>/cnsf next to the unconditional <key>/nsf."""
     scores, nsf_nll = {}, {}
     for key, z in latents.items():
         tr = z[fit_mask]
         t0 = time.time()
         s, nll = score_nsf(tr, z, device, epochs=nsf_epochs)
         scores[f"{key}/nsf"] = s; nsf_nll[key] = nll
+        msg = f"nsf NLL {nll:8.2f}"
+        if ctx is not None:
+            s_c, nll_c = score_nsf(tr, z, device, epochs=nsf_epochs, ctx_train=ctx[fit_mask], ctx_all=ctx)
+            scores[f"{key}/cnsf"] = s_c; nsf_nll[f"{key}/cond"] = nll_c
+            msg += f"  cond-nsf NLL {nll_c:8.2f}"
         scores[f"{key}/iforest"] = score_iforest(tr, z)
         scores[f"{key}/knn"] = score_knn(tr, z)
         scores[f"{key}/mahal"] = score_mahal(tr, z)
-        print(f"[score] {key:<18} dim={z.shape[1]:>3}  nsf train NLL {nll:8.2f}  ({time.time() - t0:.0f}s)", flush=True)
+        print(f"[score] {key:<18} dim={z.shape[1]:>3}  {msg}  ({time.time() - t0:.0f}s)", flush=True)
     return scores, nsf_nll
 
 
@@ -273,7 +306,7 @@ def umap_with_top_anomalies(latents: dict, scores: dict, meta: dict, figs: Path,
 
     # --- per-space panels
     for key in gallery_keys(views):
-        z, s = latents[key], scores[f"{key}/nsf"]
+        z, s = latents[key], scores[f"{key}/{PM}"]
         top = np.argsort(-s)[:k]
         idx = np.unique(np.concatenate([base, top]))
         pos = {p: i for i, p in enumerate(idx)}
@@ -291,8 +324,8 @@ def umap_with_top_anomalies(latents: dict, scores: dict, meta: dict, figs: Path,
     for enc, title in ((("phys", "physics encoder (encoder_1)"), ("ins", "instrument encoder (encoder_2)")) if set(views) == {"hsc", "lsst"} else ()):
         rep = "mean" if enc == "phys" else "flat"
         zh, zl = latents[f"{enc}/hsc_{rep}"], latents[f"{enc}/lsst_{rep}"]
-        top_phys = np.argsort(-scores[f"phys/lsst_mean/nsf"])[:k]
-        top_ins = np.argsort(-scores[f"ins/lsst_flat/nsf"])[:k]
+        top_phys = np.argsort(-scores[f"phys/lsst_mean/{PM}"])[:k]
+        top_ins = np.argsort(-scores[f"ins/lsst_flat/{PM}"])[:k]
         idx = np.unique(np.concatenate([base, top_phys, top_ins]))
         Z = np.concatenate([zh[idx], zl[idx]])
         emb = umap.UMAP(n_neighbors=30, min_dist=0.1, random_state=seed).fit_transform(Z)
@@ -314,7 +347,7 @@ def umap_with_top_anomalies(latents: dict, scores: dict, meta: dict, figs: Path,
     if len(gnames) > 1:
         colors = GROUP_COLORS
         for key, title in (("phys/lsst_mean", "physics encoder"), ("ins/lsst_flat", "instrument encoder")):
-            z, s = latents[key], scores[f"{key}/nsf"]
+            z, s = latents[key], scores[f"{key}/{PM}"]
             top = np.argsort(-s)[:k]
             idx = np.unique(np.concatenate([base, top]))
             emb = umap.UMAP(n_neighbors=30, min_dist=0.1, random_state=seed).fit_transform(z[idx])
@@ -344,9 +377,11 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
     summary = {"tag": tag, "n": int(n), "n_val": int(meta["is_val"].sum()), "views": list(views)}
     gkeys = gallery_keys(views)
 
-    # 1) galleries for the paper's physics / instrument representations, NSF and IForest
+    # 1) galleries for the paper's physics / instrument representations: the primary
+    #    flow, the unconditional flow when they differ, and IForest
+    gal_methods = tuple(dict.fromkeys((PM, "nsf", "iforest")))
     for key in gkeys:
-        for m in ("nsf", "iforest"):
+        for m in gal_methods:
             s = scores[f"{key}/{m}"]; order = np.argsort(-s)
             gallery(ds, meta, order, s, f"{tag}: top anomalies in {key} by {m} (each galaxy shown as HSC | LSST)",
                     figs / f"top16_{key.replace('/', '_')}_{m}.png")
@@ -356,7 +391,7 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
     summary["overlap_top1pct"] = {}
     fig, axes = plt.subplots(1, len(views), figsize=(5.5 * len(views), 4.8), squeeze=False); axes = axes[0]
     for ax, sv in zip(axes, views):
-        sp, si = scores[f"phys/{sv}_mean/nsf"], scores[f"ins/{sv}_flat/nsf"]
+        sp, si = scores[f"phys/{sv}_mean/{PM}"], scores[f"ins/{sv}_flat/{PM}"]
         tp, ti = set(np.argsort(-sp)[:k]), set(np.argsort(-si)[:k])
         ov = len(tp & ti); summary["overlap_top1pct"][sv] = {"k": k, "overlap": ov, "expected_random": k * k / n}
         sc = ax.scatter(sp, si, s=3, c=meta["n_input_i"], cmap="viridis", alpha=0.6)
@@ -368,12 +403,17 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
 
     # 3) does the score track depth / PSF? Spearman per space, per survey (LSST metadata only exists for LSST)
     summary["spearman_vs_lsst_meta"] = {}
+    # Spearman for every flow variant present (nsf, and cnsf when conditioning is on),
+    # so the summary can show how much conditioning removed the depth trend
+    for m in dict.fromkeys(("nsf", PM)):
+        for key in (f"phys/lsst_mean/{m}", f"ins/lsst_flat/{m}"):
+            for col in ("n_input_i", "psf_fwhm_i"):
+                summary["spearman_vs_lsst_meta"][f"{key} vs {col}"] = float(spearmanr(meta[col], scores[key], nan_policy="omit").statistic)
     fig, axes = plt.subplots(2, 2, figsize=(11, 8))
-    for i, (key, lab) in enumerate((("phys/lsst_mean/nsf", "physics (LSST image)"), ("ins/lsst_flat/nsf", "instrument (LSST image)"))):
+    for i, (key, lab) in enumerate(((f"phys/lsst_mean/{PM}", "physics (LSST image)"), (f"ins/lsst_flat/{PM}", "instrument (LSST image)"))):
         s = scores[key]
         for j, (col, xl) in enumerate((("n_input_i", "n_input_i (exposures in the i coadd)"), ("psf_fwhm_i", "psf_fwhm_i [″]"))):
-            rho = spearmanr(meta[col], s, nan_policy="omit").statistic     # DEEP2-3 has rows without a PSF value
-            summary["spearman_vs_lsst_meta"][f"{key} vs {col}"] = float(rho)
+            rho = summary["spearman_vs_lsst_meta"][f"{key} vs {col}"]
             ax = axes[i, j]; ax.scatter(meta[col], s, s=3, alpha=0.4); ax.set_xlabel(xl); ax.set_ylabel(f"{lab} NSF score")
             ax.set_title(f"Spearman ρ = {rho:+.3f}", fontsize=10)
     fig.suptitle(f"{tag}: anomaly score vs LSST observing conditions (instrument space should track these; physics should not)", fontsize=9.5)
@@ -390,7 +430,26 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
 
     # 5) held-out vs fit score shift (a flow that memorised its fit set scores held-out rows higher)
     held = ~meta["fit_mask"]
-    summary["heldout_minus_fit_median_nsf"] = {k: float(np.median(scores[f"{k}/nsf"][held]) - np.median(scores[f"{k}/nsf"][~held])) for k in gkeys} if held.any() else {}
+    summary["heldout_minus_fit_median_nsf"] = {k: float(np.median(scores[f"{k}/{PM}"][held]) - np.median(scores[f"{k}/{PM}"][~held])) for k in gkeys} if held.any() else {}
+
+    # 5b) conditional vs unconditional flow: what did conditioning on exposures remove?
+    if PM != "nsf":
+        summary["cond_vs_uncond"] = {}
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        for ax, (key, lab) in zip(axes, (("phys/lsst_mean", "physics (LSST image)"), ("ins/lsst_flat", "instrument (LSST image)"))):
+            su, sc_ = scores[f"{key}/nsf"], scores[f"{key}/{PM}"]
+            kk = max(1, int(0.01 * n)); tu, tc = set(np.argsort(-su)[:kk]), set(np.argsort(-sc_)[:kk])
+            rho = spearmanr(su, sc_).statistic
+            summary["cond_vs_uncond"][key] = {"spearman_scores": float(rho), "top1pct_overlap": len(tu & tc), "k": kk,
+                                              "spearman_uncond_vs_n_input_i": summary["spearman_vs_lsst_meta"][f"{key}/nsf vs n_input_i"],
+                                              "spearman_cond_vs_n_input_i": summary["spearman_vs_lsst_meta"][f"{key}/{PM} vs n_input_i"]}
+            im = ax.scatter(su, sc_, s=3, c=meta["n_input_i"], cmap="viridis", alpha=0.6); plt.colorbar(im, ax=ax, label="n_input_i")
+            ax.set_xlabel("unconditional NSF score  −log p(z)"); ax.set_ylabel("conditional NSF score  −log p(z | log n_input g,r,i,z)")
+            ax.set_title(f"{lab}: ρ(scores)={rho:+.2f}, top-1% overlap {len(tu & tc)}/{kk}\n"
+                         f"ρ vs n_input_i: uncond {summary['cond_vs_uncond'][key]['spearman_uncond_vs_n_input_i']:+.2f} → cond "
+                         f"{summary['cond_vs_uncond'][key]['spearman_cond_vs_n_input_i']:+.2f}", fontsize=9.5)
+        fig.suptitle(f"{tag}: conditioning the flow on exposures per band — depth-driven anomalies should leave the ranking", fontsize=9.5)
+        fig.tight_layout(); fig.savefig(figs / "cond_vs_uncond.png", dpi=130); plt.close(fig)
 
     # 6) group breakdown (any scope with >1 group): how each group scores relative
     #    to the group the detectors were fitted on, in physics vs instrument space.
@@ -406,14 +465,14 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
         summary["fit_group"] = ref_group
         summary["group_median_nsf_minus_fit_group"] = {}
         fig, axes = plt.subplots(1, 2, figsize=(12, 4.6))
-        for ax, (key, lab) in zip(axes, (("phys/lsst_mean/nsf", "physics space (encoder_1, LSST image)"),
-                                        ("ins/lsst_flat/nsf", "instrument space (encoder_2, LSST image)"))):
+        for ax, (key, lab) in zip(axes, ((f"phys/lsst_mean/{PM}", "physics space (encoder_1, LSST image)"),
+                                        (f"ins/lsst_flat/{PM}", "instrument space (encoder_2, LSST image)"))):
             s = scores[key]; ref = np.median(s[groups == ref_group])
             lo, hi = np.percentile(s, [0.5, 99.5]); bins = np.linspace(lo, hi, 80)
             for g in gnames:
                 ax.hist(s[groups == g], bins=bins, histtype="step", lw=1.6, density=True, color=GROUP_COLORS.get(g), label=f"{g} (n={int((groups == g).sum()):,})")
                 summary["group_median_nsf_minus_fit_group"][f"{key} | {g}"] = float(np.median(s[groups == g]) - ref)
-            ax.set_xlabel(f"NSF anomaly score (−log p, fitted on {ref_group})"); ax.set_ylabel("density"); ax.set_title(lab, fontsize=10)
+            ax.set_xlabel(f"{PM.upper()} anomaly score (−log p{' | n_input' if PM != 'nsf' else ''}, fitted on {ref_group})"); ax.set_ylabel("density"); ax.set_title(lab, fontsize=10)
             ax.legend(fontsize=8, frameon=False)
         fig.suptitle(f"{tag}: score distributions per group (detectors fitted on {ref_group})", fontsize=9.5)
         fig.tight_layout(); fig.savefig(figs / "group_score_distributions.png", dpi=130); plt.close(fig)
@@ -423,9 +482,9 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
                 continue
             sel = np.where(groups == g)[0]
             for key in ("phys/lsst_mean", "ins/lsst_flat"):
-                s = scores[f"{key}/nsf"]; order = sel[np.argsort(-s[sel])]
-                gallery(ds, meta, order, s, f"{tag}: top anomalies within {g} in {key} by nsf (HSC | LSST)",
-                        figs / f"top16_{g}_{key.replace('/', '_')}_nsf.png")
+                s = scores[f"{key}/{PM}"]; order = sel[np.argsort(-s[sel])]
+                gallery(ds, meta, order, s, f"{tag}: top anomalies within {g} in {key} by {PM} (HSC | LSST)",
+                        figs / f"top16_{g}_{key.replace('/', '_')}_{PM}.png")
     return summary
 
 
@@ -448,11 +507,17 @@ def main():
     ap.add_argument("--views", choices=("both", "lsst"), default="both",
                     help="both: encode HSC and LSST images (default). lsst: encode only the LSST image; every "
                          "flow, ranking, UMAP and diagnostic then uses latents of the LSST image alone.")
+    ap.add_argument("--cond", choices=("none", "n_input"), default="none",
+                    help="n_input: also fit a CONDITIONAL flow p(z | log n_input in g,r,i,z) and use it as the primary "
+                         "score (<key>/cnsf) — objects anomalous for their own number of visits. The unconditional "
+                         "flow is still fitted for comparison.")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
     if args.scope == "field" and not args.field:
         ap.error("--scope field needs --field COSMOS|DEEP2-3")
     views = ("hsc", "lsst") if args.views == "both" else ("lsst",)
+    global PM
+    PM = "cnsf" if args.cond != "none" else "nsf"
 
     out = OUT_ROOT / args.tag
     if out.exists() and not args.force:
@@ -516,12 +581,17 @@ def main():
                         "dim": latents[f"phys/{views[-1]}_mean"].shape[1], "flow_fit_on": "meta/fit_mask == True"})
     print(f"[encode] saved latents for {n:,} rows ({time.time() - t0:.0f}s)", flush=True)
 
-    scores, nsf_nll = score_all(latents, fit_mask, device, args.nsf_epochs)
+    ctx = build_context(meta, fit_mask) if args.cond == "n_input" else None
+    scores, nsf_nll = score_all(latents, fit_mask, device, args.nsf_epochs, ctx=ctx)
     with h5py.File(out / "scores.h5", "w") as f:
         for k, v in scores.items():
             f.create_dataset(k, data=v, compression="gzip", compression_opts=4)
         f.create_dataset("is_val", data=is_val)
-        f.attrs.update({"checkpoint": args.checkpoint, "tag": args.tag, "nsf_epochs": args.nsf_epochs, "methods": list(METHODS)})
+        if ctx is not None:
+            f.create_dataset("context", data=ctx)
+        f.attrs.update({"checkpoint": args.checkpoint, "tag": args.tag, "nsf_epochs": args.nsf_epochs,
+                        "methods": list(METHODS) + (["cnsf"] if ctx is not None else []), "primary_method": PM,
+                        "cond": args.cond, "context_desc": "standardised log1p(n_input) for g,r,i,z" if ctx is not None else ""})
     df = pd.DataFrame({k.replace("/", "__"): v for k, v in scores.items()})
     for k in ("object_id_hsc", "lsst_row", "parent_row", "is_val", "fit_mask", "field", "group", "n_input_i", "psf_fwhm_i"):
         df[k] = meta[k]
@@ -541,27 +611,30 @@ def main():
     shift = ""
     if "group_median_nsf_minus_fit_group" in summary:
         gm = summary["group_median_nsf_minus_fit_group"]; ref = summary["fit_group"]
-        parts = [f"{g}: physics {gm.get(f'phys/lsst_mean/nsf | {g}', float('nan')):+.2f} | instrument {gm.get(f'ins/lsst_flat/nsf | {g}', float('nan')):+.2f}"
+        parts = [f"{g}: physics {gm.get(f'phys/lsst_mean/{PM} | {g}', float('nan')):+.2f} | instrument {gm.get(f'ins/lsst_flat/{PM} | {g}', float('nan')):+.2f}"
                  for g in summary["group_sizes"] if g != ref]
-        shift = f"median NSF score shift vs {ref} — " + "; ".join(parts) + "\n"
+        shift = f"median {PM.upper()} score shift vs {ref} — " + "; ".join(parts) + "\n"
     ovl = "; ".join(f"{sv.upper()} {ov[sv]['overlap']}/{ov[sv]['k']}" for sv in views)
     scope_txt = f"{args.scope}{'/' + args.field if args.field else ''}, views={'+'.join(views)}"
+    cond_txt = ("" if PM == "nsf" else
+                f"**conditional flow p(z | log n_input g,r,i,z)** is the primary score; unconditional kept for contrast\n"
+                f"Spearman vs n_input_i, UNconditional: physics {sp['phys/lsst_mean/nsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs n_input_i']:+.3f}\n")
     text = (f"**HSC × LSST anomaly stage — `{args.tag}`** ({scope_txt}) done in {summary['wall_min']} min, N={n:,} LSST rows, "
             f"detectors fitted on {int(fit_mask.sum()):,} rows ({summary.get('fit_group', 'fit set')})\n"
-            f"ckpt: `{Path(args.checkpoint).parent.parent.name}/{Path(args.checkpoint).name}`\n" + shift +
-            f"top-1% overlap physics∩instrument: {ovl} (random ≈ {ov['lsst']['expected_random']:.1f})\n"
-            f"Spearman vs n_input_i: physics {sp['phys/lsst_mean/nsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs n_input_i']:+.3f}\n"
-            f"Spearman vs psf_fwhm_i: physics {sp['phys/lsst_mean/nsf vs psf_fwhm_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs psf_fwhm_i']:+.3f}\n"
+            f"ckpt: `{Path(args.checkpoint).parent.parent.name}/{Path(args.checkpoint).name}`\n" + cond_txt + shift +
+            f"top-1% overlap physics∩instrument ({PM}): {ovl} (random ≈ {ov['lsst']['expected_random']:.1f})\n"
+            f"Spearman vs n_input_i ({PM}): physics {sp[f'phys/lsst_mean/{PM} vs n_input_i']:+.3f} | instrument {sp[f'ins/lsst_flat/{PM} vs n_input_i']:+.3f}\n"
+            f"Spearman vs psf_fwhm_i ({PM}): physics {sp[f'phys/lsst_mean/{PM} vs psf_fwhm_i']:+.3f} | instrument {sp[f'ins/lsst_flat/{PM} vs psf_fwhm_i']:+.3f}\n"
             f"outputs: `{out}`")
-    batch1 = [figs / "top16_phys_lsst_mean_nsf.png", figs / "top16_ins_lsst_flat_nsf.png",
-              figs / "phys_vs_ins_scatter.png", figs / "score_vs_depth_psf.png"]
-    batch2 = umap_paths + [figs / "top16_phys_hsc_mean_nsf.png", figs / "top16_ins_hsc_flat_nsf.png", figs / "score_correlation.png"]
+    batch1 = [figs / f"top16_phys_lsst_mean_{PM}.png", figs / f"top16_ins_lsst_flat_{PM}.png",
+              figs / "phys_vs_ins_scatter.png", figs / "score_vs_depth_psf.png", figs / "cond_vs_uncond.png"]
+    batch2 = umap_paths + [figs / f"top16_phys_hsc_mean_{PM}.png", figs / f"top16_ins_hsc_flat_{PM}.png", figs / "score_correlation.png"]
     ok1 = discord_post(text, [str(p) for p in batch1 if Path(p).exists()])
     ok2 = discord_post(f"`{args.tag}` — UMAPs with the top-{TOP_K_UMAP} anomalies marked, HSC-view galleries, score correlations",
                        [str(p) for p in batch2 if Path(p).exists()][:10])
     ok3 = True
     if (figs / "group_score_distributions.png").exists():
-        batch3 = [figs / "group_score_distributions.png"] + sorted(p for p in figs.glob("top16_*_nsf.png")
+        batch3 = [figs / "group_score_distributions.png"] + sorted(p for p in figs.glob(f"top16_*_{PM}.png")
                                                                     if p.name.split("_")[1] in ("deep23", "cosmos") and not p.name.startswith(("top16_phys", "top16_ins")))
         ok3 = discord_post(f"`{args.tag}` — score distributions per group (fitted on {summary.get('fit_group')}) and within-group galleries",
                            [str(p) for p in batch3 if Path(p).exists()][:10])

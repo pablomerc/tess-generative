@@ -180,3 +180,25 @@ Three scopes, chosen 2026-09-29:
   prediction: DEEP2-3 shifts in instrument space, not physics space). Built,
   not yet run.
 Caveat carried from D7: the fit set contains the downstream-probe galaxies.
+
+Results of the six unconditional runs (anchors ×2, field ×4), all COMPLETED
+2026-09-29: instrument-space NSF score tracks `n_input_i` (Spearman −0.33 to
+−0.38) three to four times more strongly than the physics-space score (−0.07
+to −0.15); within COSMOS the 786 low-exposure stamps shift by +12 to +16 in
+physics space but +91 to +103 in instrument space; DEEP2-3 held-out shifts
+< 1 in both spaces. Top-1 % physics∩instrument overlap 49–151 of ~330
+(random 3): the shared tail is depth-driven plus large bright galaxies, and
+on DEEP2-3 the physics-space list is led by pedestal / no-data artefacts.
+
+### D9. Conditional flow: anomalous *for its number of visits* (2026-09-29)
+Pablo's request after the unconditional results. `--cond n_input` fits a
+second spline flow p(z | c) with c = standardised log1p(n_input) in g,r,i,z
+(4-d context; standardisation on the fit set) and makes it the primary score
+`<key>/cnsf`; the unconditional `<key>/nsf` is still fitted so
+`figures/cond_vs_uncond.png` and the Discord headline show what conditioning
+removed (Spearman vs n_input before/after, top-1 % overlap of the two
+rankings). Expected effect: the shallow-stamp tail leaves both rankings, the
+instrument-space Spearman vs n_input drops toward 0, and what remains in
+instrument space is texture/PSF/artefact-driven rather than depth-driven.
+Not conditioned on PSF (kept as a diagnostic axis) — a `--cond n_input_psf`
+variant is the obvious follow-up if PSF still dominates.
