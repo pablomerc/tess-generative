@@ -151,3 +151,32 @@ probe's survey accuracy changes.
    on `n_input_i` ≈ 0; UMAP of physics latent coloured by survey and n_input.
    NOTE: with the D7 choice (no holdout exclusion) probe objects are inside
    the training set; any R² from this run is on seen galaxies.
+
+## 2026-09-29 — training outcome and anomaly stage
+
+Both runs completed (4 h 24 m each, one MI210): `paper` final val/loss 0.148,
+best at step 12k; `cosine` 0.142, best at step 10k (callback 0.1389).
+
+### D8. Anomaly search = the paper recipe on the dual-encoder latents
+`lsst/hsc_lsst_anomaly.py` (+ `.sbatch`): encode every row through both
+encoders; per representation fit NSF (zuko, 6 transforms, [64,64], 50 epochs),
+IsolationForest, kNN(5) and Mahalanobis on a fit set, score all rows (higher =
+more anomalous); galleries as HSC | LSST pairs; physics-vs-instrument top-1 %
+overlap; Spearman of scores vs `n_input_i` / `psf_fwhm_i`; UMAPs with the
+top-10 marked (per space, and joint HSC+LSST per encoder); Discord post on
+success (summary + figures) and on failure (log tail). Outputs under
+`/work1/.../outputs/hsc_lsst/anomaly/<tag>/`, never overwritten.
+Three scopes, chosen 2026-09-29:
+- `anchors` — the 33,346 training anchors, fit on the model's train split
+  (jobs 444251 cosine, 444252 paper).
+- `field --field F --views lsst` (Pablo's request: "each field separately,
+  flow on the LSST-image latents, not HSC") — COSMOS fit on the model's train
+  split and scored over all 34,132 COSMOS rows incl. the 786 low-exposure
+  ones; DEEP2-3 (never trained on) fit on a seeded 80 % slice of its 31,031
+  rows, 20 % held out. Galleries still show the HSC counterpart for context;
+  no HSC latent is used anywhere. Four jobs: {cosine, paper} × {COSMOS, DEEP2-3}.
+- `lsst_all` — every store row, fit on COSMOS train only: DEEP2-3 and
+  low-exposure COSMOS as out-of-distribution probes (the disentanglement
+  prediction: DEEP2-3 shifts in instrument space, not physics space). Built,
+  not yet run.
+Caveat carried from D7: the fit set contains the downstream-probe galaxies.
