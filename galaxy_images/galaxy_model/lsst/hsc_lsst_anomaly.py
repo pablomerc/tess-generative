@@ -580,7 +580,7 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
     summary["spearman_vs_lsst_meta"] = {}
     # Spearman for every flow variant present (nsf; cnsf and ccal when conditioning is on),
     # so the summary can show how much conditioning / calibration removed the depth trend
-    flow_methods = [m for m in dict.fromkeys(("nsf", "cnsf", PM, "cemp")) if f"ins/lsst_flat/{m}" in scores]
+    flow_methods = [m for m in dict.fromkeys(("nsf", "cnsf", "ccal", "cemp", PM)) if f"ins/lsst_flat/{m}" in scores]
     for m in flow_methods:
         for key in (f"phys/lsst_mean/{m}", f"ins/lsst_flat/{m}"):
             for col in ("n_input_i", "psf_fwhm_i"):
@@ -627,7 +627,7 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
         fig.suptitle(f"{tag}: conditioning the flow on exposures per band — depth-driven anomalies should leave the ranking", fontsize=9.5)
         fig.tight_layout(); fig.savefig(figs / "cond_vs_uncond.png", dpi=130); plt.close(fig)
 
-    if "ins/lsst_flat/cemp" in scores and PM == "ccal":
+    if "ins/lsst_flat/cemp" in scores and "ins/lsst_flat/ccal" in scores:
         summary["ccal_vs_cemp"] = {key: {"spearman": float(spearmanr(scores[f"{key}/ccal"], scores[f"{key}/cemp"]).statistic),
                                          "top1pct_overlap": len(set(np.argsort(-scores[f"{key}/ccal"])[:max(1, int(0.01 * n))]) &
                                                                 set(np.argsort(-scores[f"{key}/cemp"])[:max(1, int(0.01 * n))]))}
@@ -720,9 +720,66 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
 
 
 # --------------------------------------------------------------------- main
+
+def finish(args, ds, meta, latents, scores, calib, nsf_nll, out, views, n, fit_mask, t0):
+    """Report + UMAPs + summary.json + Discord. Shared by the full pipeline and
+    --report-only (which re-reports saved latents/scores under a different
+    primary score, e.g. the empirical depth-calibrated `cemp`)."""
+    summary = report(ds, meta, scores, out, args.tag, views=views, calib=calib or None)
+    figs = out / "figures"
+    umap_paths = umap_with_top_anomalies(latents, scores, meta, figs, args.tag, views=views)
+    summary.update({"checkpoint": args.checkpoint, "nsf_train_nll": nsf_nll, "wall_min": round((time.time() - t0) / 60, 1)})
+    with open(out / "summary.json", "w") as f:
+        json.dump(summary, f, indent=2, default=float)
+    print(json.dumps({k: summary.get(k) for k in ("overlap_top1pct", "spearman_vs_lsst_meta", "heldout_minus_fit_median_nsf", "group_median_nsf_minus_fit_group")}, indent=1, default=float))
+    print(f"[done] {out}  ({summary['wall_min']} min)", flush=True)
+
+    # ---------------------------------------------------------- Discord
+    ov = summary["overlap_top1pct"]; sp = summary["spearman_vs_lsst_meta"]
+    shift = ""
+    if "group_median_nsf_minus_fit_group" in summary:
+        gm = summary["group_median_nsf_minus_fit_group"]; ref = summary["fit_group"]
+        parts = [f"{g}: physics {gm.get(f'phys/lsst_mean/{PM} | {g}', float('nan')):+.2f} | instrument {gm.get(f'ins/lsst_flat/{PM} | {g}', float('nan')):+.2f}"
+                 for g in summary["group_sizes"] if g != ref]
+        shift = f"median {PM.upper()} score shift vs {ref} — " + "; ".join(parts) + "\n"
+        ts = summary.get("top1pct_group_share", {}); gs = summary.get("group_share", {})
+        shift += ("top-1% composition, instrument ({}): ".format(PM) +
+                  "; ".join(f"{g} {100 * ts.get(f'ins/lsst_flat/{PM} | {g}', 0):.0f}% (pop {100 * gs.get(g, 0):.0f}%)" for g in summary["group_sizes"]) + "\n")
+    ovl = "; ".join(f"{sv.upper()} {ov[sv]['overlap']}/{ov[sv]['k']}" for sv in views)
+    scope_txt = f"{args.scope}{'/' + args.field if args.field else ''}, views={'+'.join(views)}"
+    cond_txt = ("" if PM == "nsf" else
+                (f"**conditional flow p(z | log n_input g,r,i,z)**" + (f", **depth-calibrated tail probability** (K={args.calibrate} samples/row)" if PM == "ccal" else "")
+                 + (", **empirical depth-calibrated percentile (cemp)**: rank of the out-of-fold conditional NLL among fit rows with the same exposure pattern" if PM == "cemp" else "")
+                 + " is the primary score; unconditional kept for contrast\n"
+                 f"Spearman vs n_input_i, UNconditional: physics {sp['phys/lsst_mean/nsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs n_input_i']:+.3f}\n")
+                + (f"Spearman vs n_input_i, raw conditional NLL: physics {sp['phys/lsst_mean/cnsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/cnsf vs n_input_i']:+.3f}\n" if PM in ("ccal", "cemp") else "")
+                + (f"Spearman vs n_input_i, model-calibrated ccal: physics {sp['phys/lsst_mean/ccal vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/ccal vs n_input_i']:+.3f}\n" if PM == "cemp" and "phys/lsst_mean/ccal vs n_input_i" in sp else ""))
+    scope_txt += f", {args.folds}-fold out-of-fold flows" if args.folds > 1 else ""
+    text = (f"**HSC × LSST anomaly stage — `{args.tag}`** ({scope_txt}) done in {summary['wall_min']} min, N={n:,} LSST rows, "
+            f"detectors fitted on {int(fit_mask.sum()):,} rows ({summary.get('fit_group', 'fit set')})\n"
+            f"ckpt: `{Path(args.checkpoint).parent.parent.name}/{Path(args.checkpoint).name}`\n" + cond_txt + shift +
+            f"top-1% overlap physics∩instrument ({PM}): {ovl} (random ≈ {ov['lsst']['expected_random']:.1f})\n"
+            f"Spearman vs n_input_i ({PM}): physics {sp[f'phys/lsst_mean/{PM} vs n_input_i']:+.3f} | instrument {sp[f'ins/lsst_flat/{PM} vs n_input_i']:+.3f}\n"
+            f"Spearman vs psf_fwhm_i ({PM}): physics {sp[f'phys/lsst_mean/{PM} vs psf_fwhm_i']:+.3f} | instrument {sp[f'ins/lsst_flat/{PM} vs psf_fwhm_i']:+.3f}\n"
+            f"outputs: `{out}`")
+    batch1 = [figs / f"top16_phys_lsst_mean_{PM}.png", figs / f"top16_ins_lsst_flat_{PM}.png",
+              figs / "phys_vs_ins_scatter.png", figs / "score_vs_depth_psf.png", figs / "cond_vs_uncond.png", figs / "depth_calibration.png"]
+    batch2 = umap_paths + [figs / f"top16_phys_hsc_mean_{PM}.png", figs / f"top16_ins_hsc_flat_{PM}.png", figs / "score_correlation.png"]
+    ok1 = discord_post(text, [str(p) for p in batch1 if Path(p).exists()])
+    ok2 = discord_post(f"`{args.tag}` — UMAPs with the top-{TOP_K_UMAP} anomalies marked, HSC-view galleries, score correlations",
+                       [str(p) for p in batch2 if Path(p).exists()][:10])
+    ok3 = True
+    if (figs / "group_score_distributions.png").exists():
+        batch3 = [figs / "group_score_distributions.png"] + sorted(p for p in figs.glob(f"top16_*_{PM}.png")
+                                                                    if p.name.split("_")[1] in ("deep23", "cosmos") and not p.name.startswith(("top16_phys", "top16_ins")))
+        ok3 = discord_post(f"`{args.tag}` — score distributions per group (fitted on {summary.get('fit_group')}) and within-group galleries",
+                           [str(p) for p in batch3 if Path(p).exists()][:10])
+    print(f"[notify] discord: summary {'sent' if ok1 else 'FAILED'}, figures {'sent' if ok2 else 'FAILED'}, groups {'sent' if ok3 else 'FAILED'}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--checkpoint", required=True)
+    ap.add_argument("--checkpoint", default=None, help="model checkpoint (required unless --report-only)")
     ap.add_argument("--tag", required=True, help="output subdir name, e.g. cosine-best10k")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--batch-size", type=int, default=512)
@@ -764,8 +821,16 @@ def main():
                     help="--scope lsst_all only. cosmos_train: detectors fitted on the COSMOS train split (DEEP2-3 is an "
                          "OOD probe). both_fields: fitted on COSMOS train + a seeded 80%% slice of DEEP2-3, so the "
                          "conditioning variable is covered from 1 to 114 exposures; groups still reported separately.")
-    ap.add_argument("--force", action="store_true")
+    ap.add_argument("--primary", choices=("auto", "nsf", "cnsf", "ccal", "cemp"), default="auto",
+                    help="which flow score drives galleries / UMAP markers / overlaps / the Discord headline. auto = "
+                         "ccal if --calibrate, else cnsf if --cond, else nsf. cemp (empirical within-context-cluster "
+                         "percentile of the out-of-fold conditional NLL) is the recommended final ranking (D12).")
+    ap.add_argument("--report-only", metavar="SRC_TAG", default=None,
+                    help="skip encoding and scoring: load latents.h5 + scores.h5 of an existing run <SRC_TAG> and "
+                         "re-run report/UMAP/Discord into --tag (a new dir), typically with --primary cemp. Needs no GPU.")
     args = ap.parse_args()
+    if args.report_only is None and not args.checkpoint:
+        ap.error("--checkpoint is required unless --report-only is given")
     if args.scope == "field" and not args.field:
         ap.error("--scope field needs --field COSMOS|DEEP2-3")
     views = ("hsc", "lsst") if args.views == "both" else ("lsst",)
@@ -773,6 +838,8 @@ def main():
         ap.error("--calibrate needs --cond n_input|n_input_psf (it calibrates the conditional flow)")
     global PM
     PM = "ccal" if (args.cond != "none" and args.calibrate) else ("cnsf" if args.cond != "none" else "nsf")
+    if args.primary != "auto":
+        PM = args.primary
 
     out = OUT_ROOT / args.tag
     if out.exists() and not args.force:
@@ -780,6 +847,52 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     device = torch.device(args.device)
     t0 = time.time()
+
+    if args.report_only:
+        # ------------------------------------------------ re-report a finished run under another primary score
+        srcdir = OUT_ROOT / args.report_only
+        latents, meta, scores, calib = {}, {}, {}, {}
+        with h5py.File(srcdir / "latents.h5") as f:
+            def _lat(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    if name.startswith("meta/"):
+                        v = obj[:]; meta[name[5:]] = v.astype(str) if v.dtype.kind == "S" else v
+                    else:
+                        latents[name] = obj[:]
+            f.visititems(_lat); lattrs = dict(f.attrs)
+        with h5py.File(srcdir / "scores.h5") as f:
+            def _sc(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    if name.startswith("calib/"):
+                        _, enc, rep_, what = name.split("/"); calib.setdefault(f"{enc}/{rep_}", {})[what] = obj[:]
+                    elif name not in ("is_val", "context"):
+                        scores[name] = obj[:]
+            f.visititems(_sc); sattrs = dict(f.attrs)
+        views = tuple(str(lattrs["views"]).split(","))
+        n = len(meta["is_val"]); fit_mask = meta["fit_mask"].astype(bool); meta["is_val"] = meta["is_val"].astype(bool); meta["fit_mask"] = fit_mask
+        # scope / field / recipe of the source run, so the Discord text and dataset match it
+        args.scope = str(lattrs["scope"]); args.field = str(lattrs["field"]) or None
+        args.checkpoint = str(lattrs["checkpoint"]); args.cond = str(sattrs.get("cond", "none"))
+        args.calibrate = int(sattrs.get("calibrate_samples", 0)); args.folds = int(sattrs.get("folds", 1))
+        if f"ins/lsst_flat/{PM}" not in scores:
+            raise SystemExit(f"--primary {PM} not in {args.report_only}: available {sorted(k.split('/')[-1] for k in scores if k.startswith('ins/lsst_flat/'))}")
+        try:
+            nsf_nll = json.load(open(srcdir / "summary.json")).get("nsf_train_nll")
+        except FileNotFoundError:
+            nsf_nll = None
+        if args.scope == "anchors":
+            ds = HscLsstRAM48Dataset()
+        elif args.scope == "lsst_all":
+            ds = HscLsstRAM48Dataset(field=None, min_n_input=0)
+        else:
+            ds = HscLsstRAM48Dataset(field=args.field, min_n_input=0)
+        assert np.array_equal(ds.anchor_rows[:n], meta["lsst_row"]), "dataset rows do not match the saved run"
+        print(f"[report-only] {args.report_only} -> {out}: primary {PM}, {n:,} rows, views {views}, "
+              f"scores {sorted(set(k.split('/')[-1] for k in scores))}", flush=True)
+        with open(out / "REPORT_ONLY.txt", "w") as f:
+            f.write(f"re-report of {srcdir} with --primary {PM}; latents/scores live there, not here\n")
+        finish(args, ds, meta, latents, scores, calib, nsf_nll, out, views, n, fit_mask, t0)
+        return
 
     lm = pd.read_parquet(Path(LSST_DIR_DEFAULT) / "lsst_meta.parquet")
     # The training selection (D1-D3) and its seed-42 split, expressed as store rows.
@@ -871,55 +984,7 @@ def main():
         df[k] = meta[k]
     df.to_parquet(out / "scores.parquet", index=False)
 
-    summary = report(ds, meta, scores, out, args.tag, views=views, calib=calib or None)
-    figs = out / "figures"
-    umap_paths = umap_with_top_anomalies(latents, scores, meta, figs, args.tag, views=views)
-    summary.update({"checkpoint": args.checkpoint, "nsf_train_nll": nsf_nll, "wall_min": round((time.time() - t0) / 60, 1)})
-    with open(out / "summary.json", "w") as f:
-        json.dump(summary, f, indent=2, default=float)
-    print(json.dumps({k: summary.get(k) for k in ("overlap_top1pct", "spearman_vs_lsst_meta", "heldout_minus_fit_median_nsf", "group_median_nsf_minus_fit_group")}, indent=1, default=float))
-    print(f"[done] {out}  ({summary['wall_min']} min)", flush=True)
-
-    # ---------------------------------------------------------- Discord
-    ov = summary["overlap_top1pct"]; sp = summary["spearman_vs_lsst_meta"]
-    shift = ""
-    if "group_median_nsf_minus_fit_group" in summary:
-        gm = summary["group_median_nsf_minus_fit_group"]; ref = summary["fit_group"]
-        parts = [f"{g}: physics {gm.get(f'phys/lsst_mean/{PM} | {g}', float('nan')):+.2f} | instrument {gm.get(f'ins/lsst_flat/{PM} | {g}', float('nan')):+.2f}"
-                 for g in summary["group_sizes"] if g != ref]
-        shift = f"median {PM.upper()} score shift vs {ref} — " + "; ".join(parts) + "\n"
-        ts = summary.get("top1pct_group_share", {}); gs = summary.get("group_share", {})
-        shift += ("top-1% composition, instrument ({}): ".format(PM) +
-                  "; ".join(f"{g} {100 * ts.get(f'ins/lsst_flat/{PM} | {g}', 0):.0f}% (pop {100 * gs.get(g, 0):.0f}%)" for g in summary["group_sizes"]) + "\n")
-    ovl = "; ".join(f"{sv.upper()} {ov[sv]['overlap']}/{ov[sv]['k']}" for sv in views)
-    scope_txt = f"{args.scope}{'/' + args.field if args.field else ''}, views={'+'.join(views)}"
-    cond_txt = ("" if PM == "nsf" else
-                (f"**conditional flow p(z | log n_input g,r,i,z)**" + (f", **depth-calibrated tail probability** (K={args.calibrate} samples/row)" if PM == "ccal" else "")
-                 + " is the primary score; unconditional kept for contrast\n"
-                 f"Spearman vs n_input_i, UNconditional: physics {sp['phys/lsst_mean/nsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs n_input_i']:+.3f}\n")
-                + (f"Spearman vs n_input_i, raw conditional NLL: physics {sp['phys/lsst_mean/cnsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/cnsf vs n_input_i']:+.3f}\n" if PM == "ccal" else ""))
-    scope_txt += f", {args.folds}-fold out-of-fold flows" if args.folds > 1 else ""
-    text = (f"**HSC × LSST anomaly stage — `{args.tag}`** ({scope_txt}) done in {summary['wall_min']} min, N={n:,} LSST rows, "
-            f"detectors fitted on {int(fit_mask.sum()):,} rows ({summary.get('fit_group', 'fit set')})\n"
-            f"ckpt: `{Path(args.checkpoint).parent.parent.name}/{Path(args.checkpoint).name}`\n" + cond_txt + shift +
-            f"top-1% overlap physics∩instrument ({PM}): {ovl} (random ≈ {ov['lsst']['expected_random']:.1f})\n"
-            f"Spearman vs n_input_i ({PM}): physics {sp[f'phys/lsst_mean/{PM} vs n_input_i']:+.3f} | instrument {sp[f'ins/lsst_flat/{PM} vs n_input_i']:+.3f}\n"
-            f"Spearman vs psf_fwhm_i ({PM}): physics {sp[f'phys/lsst_mean/{PM} vs psf_fwhm_i']:+.3f} | instrument {sp[f'ins/lsst_flat/{PM} vs psf_fwhm_i']:+.3f}\n"
-            f"outputs: `{out}`")
-    batch1 = [figs / f"top16_phys_lsst_mean_{PM}.png", figs / f"top16_ins_lsst_flat_{PM}.png",
-              figs / "phys_vs_ins_scatter.png", figs / "score_vs_depth_psf.png", figs / "cond_vs_uncond.png", figs / "depth_calibration.png"]
-    batch2 = umap_paths + [figs / f"top16_phys_hsc_mean_{PM}.png", figs / f"top16_ins_hsc_flat_{PM}.png", figs / "score_correlation.png"]
-    ok1 = discord_post(text, [str(p) for p in batch1 if Path(p).exists()])
-    ok2 = discord_post(f"`{args.tag}` — UMAPs with the top-{TOP_K_UMAP} anomalies marked, HSC-view galleries, score correlations",
-                       [str(p) for p in batch2 if Path(p).exists()][:10])
-    ok3 = True
-    if (figs / "group_score_distributions.png").exists():
-        batch3 = [figs / "group_score_distributions.png"] + sorted(p for p in figs.glob(f"top16_*_{PM}.png")
-                                                                    if p.name.split("_")[1] in ("deep23", "cosmos") and not p.name.startswith(("top16_phys", "top16_ins")))
-        ok3 = discord_post(f"`{args.tag}` — score distributions per group (fitted on {summary.get('fit_group')}) and within-group galleries",
-                           [str(p) for p in batch3 if Path(p).exists()][:10])
-    print(f"[notify] discord: summary {'sent' if ok1 else 'FAILED'}, figures {'sent' if ok2 else 'FAILED'}, groups {'sent' if ok3 else 'FAILED'}", flush=True)
-
+    finish(args, ds, meta, latents, scores, calib, nsf_nll, out, views, n, fit_mask, t0)
 
 if __name__ == "__main__":
     main()
