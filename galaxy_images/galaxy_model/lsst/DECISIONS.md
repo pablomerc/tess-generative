@@ -301,3 +301,45 @@ at its population share. Jobs: smoke 444569 → 444570 cosine / 444571 paper
 pooled (`*-lsstall-bothfields-oof`), 444572/444573 COSMOS, 444574/444575
 DEEP2-3 (`*-{cosmos,deep23}-field-oof`), all `--folds 5 --headline-only
 --calibrate 1024 --cond-epochs 150 --balance --views lsst`.
+
+#### D12 results (2026-09-30, six `*-oof` runs, 5 folds, `--headline-only --calibrate 1024`)
+Spearman(score, `n_input_i`) inside the conditioning coverage, instrument
+space `ins/lsst_flat` (cosine | paper checkpoint):
+
+| run | nsf (uncond.) | cnsf (raw cond. NLL) | ccal (model tail-prob) | cemp (emp. percentile) | cez (emp. robust z) |
+|---|---|---|---|---|---|
+| COSMOS field | −0.33 \| −0.32 | −0.29 \| −0.28 | −0.23 \| −0.23 | +0.01 \| +0.01 | +0.01 \| +0.02 |
+| DEEP2-3 field | −0.23 \| −0.25 | −0.27 \| −0.28 | −0.17 \| −0.21 | −0.01 \| −0.01 | −0.01 \| −0.01 |
+| pooled fields | −0.78 \| −0.79 | −0.77 \| −0.78 | −0.18 \| −0.35 | +0.01 \| +0.01 | +0.02 \| +0.05 |
+
+Physics space `phys/lsst_mean`: nsf −0.13/−0.07/−0.30 (COSMOS/DEEP2-3/pooled)
+→ cez 0.00 everywhere. Memorisation is gone: the same-distribution held-out
+slice is 3.6–4.5 % of the cez top 1 % in COSMOS (population 5 %), 19–22 % in
+DEEP2-3 (20 %), 6–13 % pooled (9.5 %). Out of sample the **model-based**
+tail probability is over-dispersed (16–39 % of fit rows fall in the model's
+own 10 % tail) and keeps a residual depth trend, so the *empirical* scores
+are the ones to use. `cemp` saturates at 1/(n_ref+1) per cluster, which
+favoured the populous 80–100-visit COSMOS clusters at the very top (pooled
+cemp top-16: 0/16 DEEP2-3); **`cez` (robust z within the exposure-pattern
+cluster) is the final ranking**: pooled top-16 is 56–62 % DEEP2-3 in
+instrument space (population 48 %). Group medians under cemp/cez are equal
+across cosmos_train / cosmos_val / deep23_fit / deep23_held (0.29–0.30, i.e.
+p ≈ 0.5), so the two fields are exchangeable under the calibrated score.
+`cosmos_lowexp` (786 rows, <5 visits in some griz band) has an exposure
+pattern (median g4 r7 i8 z3) that no fit object shares (DEEP2-3's shallow
+rows are g1 r4 i4 z8): 345 of them sit in context clusters with zero fit
+rows, so they pin to the model floor and get "cannot judge" (0) under
+cemp/cez — reported, not ranked.
+
+What the calibrated ranking surfaces (cez / cemp galleries, `*-oof-cez`,
+`*-oof-cemp`): large galaxies filling the 48-px stamp, bright close pairs
+and star–galaxy blends, edge-on disks, compact very red sources, faint
+objects on a bright neighbour's halo, and — the case the conditioning was
+built for — stamps at ~95 visits whose LSST image is far noisier than the
+depth warrants (COSMOS #1 in both spaces). The 1–2-visit noise stamps that
+topped the unconditional and raw-conditional rankings are gone.
+Physics∩instrument top-1 % overlap under ccal 118–317 (random 3–7): the
+"oversized object" signal is shared by both encoders. Re-reports from saved
+latents: `--report-only <tag> --primary cez|cemp` (2 min, no GPU).
+Commits: 05c5f28 (D11), f7e34c4 (folds), 1997b9c (report-only), 2f46893
+(cez). Consolidated table: scratchpad `consolidate.py oof`.
