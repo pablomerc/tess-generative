@@ -253,44 +253,35 @@ def score_nsf(train, allz, device, epochs=50, lr=1e-3, batch=512, seed=0, ctx_tr
     return s.astype(np.float32), float(best)
 
 
-def calibrated_scores(flow, allz, ctx_all, fit_mask, device, n_samples=1024, n_centroids=256, seed=1, batch=512):
-    """Depth-calibrated anomaly scores from a fitted CONDITIONAL flow.
+def context_clusters(ctx_all: np.ndarray, n_centroids: int = 256, seed: int = 1):
+    """k-means over the (standardised) context. The context is 4 strongly
+    correlated log-exposure numbers, so 256 centroids tile it densely; every
+    calibration below is done per cluster."""
+    from sklearn.cluster import KMeans
+    k = int(min(n_centroids, len(np.unique(ctx_all, axis=0))))
+    km = KMeans(n_clusters=k, n_init=1, random_state=seed).fit(ctx_all.astype(np.float64))
+    return km.labels_.astype(np.int64), km.cluster_centers_.astype(np.float32)
 
-    Model-based ("ccal"). For a context c the flow implies a distribution of
-    its own NLL values, −log p(z' | c) for z' ~ p(· | c). The highest-density-
-    region tail probability of row i is
+
+def model_tail_prob(flow, z_rows, ctx_rows, lab_rows, centers, device, n_samples=1024, seed=1, batch=512):
+    """Model-based depth-calibrated score ("ccal") from a fitted CONDITIONAL flow.
+
+    For a context c the flow implies a distribution of its own NLL values,
+    −log p(z' | c) for z' ~ p(· | c). The highest-density-region tail
+    probability of row i is
         p_i = P[ −log p(z' | c_i)  >=  −log p(z_i | c_i) ],
     the probability mass of the region of latent space LESS likely than z_i at
     its own depth. If the flow is right, p is Uniform(0, 1) for in-distribution
     rows at every depth, whatever the spread of the latents there — which
-    −log p(z | c) itself is not (see PM_LABEL). Sampling an autoregressive
-    flow costs one network pass per latent dimension, so instead of K samples
-    per row we sample K per context CENTROID: the contexts are k-means'd into
-    n_centroids clusters (the context is 4 correlated log-exposure numbers, so
-    256 centroids tile it densely), the reference NLL distribution is drawn
-    once per centroid (n_samples each), and every row is compared with the
-    reference of its nearest centroid. ~250k samples instead of 30M.
-
-    Empirical ("cemp"). Same idea without trusting the flow's calibration: the
-    reference set for row i is the FIT rows in the same context cluster and
-    p_i^emp is the fraction of them with a larger conditional NLL (the row
-    itself excluded). Calibrated on fit rows by construction; noisier where a
-    cluster is small. Agreement between ccal and cemp validates the flow.
-
-    Returns dict(ccal, cemp, p, p_emp, z, cluster):
-      ccal   = −log10 p + 1e-3 · z   (monotone in p at the 1/(K+1) resolution;
-               the z-score breaks ties among rows at the floor)
-      cemp   = −log10 p_emp
-      z      = (−log p(z_i|c_i) − mean_ref) / std_ref of the reference NLLs.
-    """
-    from sklearn.cluster import KMeans
-    n = len(allz)
-    k = int(min(n_centroids, len(np.unique(ctx_all, axis=0))))
-    km = KMeans(n_clusters=k, n_init=1, random_state=seed).fit(ctx_all.astype(np.float64))
-    lab = km.labels_.astype(np.int64)
-    cen = torch.tensor(km.cluster_centers_, dtype=torch.float32, device=device)
+    −log p(z | c) itself is not (see PM_LABEL). Sampling an autoregressive flow
+    costs one network pass per latent dimension, so the reference NLL
+    distribution is drawn once per context CENTROID (n_samples each) and every
+    row is compared with the reference of its own cluster (~250k samples
+    instead of 30M). Returns (p, z): p = (count + 1) / (n_samples + 1), and
+    z = (−log p(z_i|c_i) − mean_ref) / std_ref, used to break ties at the floor."""
     torch.manual_seed(seed)
     flow.eval()
+    k = len(centers); cen = torch.tensor(centers, dtype=torch.float32, device=device)
     ref = torch.empty(k, n_samples, device=device)
     with torch.no_grad():
         for j in range(0, k, 16):                               # 16 centroids × n_samples per sampling call
@@ -298,28 +289,33 @@ def calibrated_scores(flow, allz, ctx_all, fit_mask, device, n_samples=1024, n_c
             smp = d.sample((n_samples,))                        # (K, B, D) — one context per column
             ref[j:j + 16] = (-d.log_prob(smp)).T                # (B, K)
         ref, _ = torch.sort(ref, dim=1)
-        al = torch.tensor(allz, dtype=torch.float32, device=device)
-        cal = torch.tensor(ctx_all, dtype=torch.float32, device=device)
-        nll_obs = torch.cat([-flow(cal[i:i + batch]).log_prob(al[i:i + batch]) for i in range(0, n, batch)])
-        labt = torch.tensor(lab, device=device)
-        r = ref[labt]                                           # (n, K) reference NLLs of each row's centroid
-        cnt = (r >= nll_obs[:, None]).sum(1).float()            # samples less likely than the row
+        al = torch.tensor(z_rows, dtype=torch.float32, device=device)
+        cal = torch.tensor(ctx_rows, dtype=torch.float32, device=device)
+        nll = torch.cat([-flow(cal[i:i + batch]).log_prob(al[i:i + batch]) for i in range(0, len(al), batch)])
+        r = ref[torch.tensor(lab_rows, device=device)]          # (rows, K) reference NLLs of each row's centroid
+        cnt = (r >= nll[:, None]).sum(1).float()                # samples less likely than the row
         p = ((cnt + 1.0) / (n_samples + 1.0)).cpu().numpy().astype(np.float32)
-        z = ((nll_obs - r.mean(1)) / r.std(1).clamp_min(1e-6)).cpu().numpy().astype(np.float32)
-        nll_np = nll_obs.cpu().numpy()
-    # empirical conditional percentile against fit rows of the same cluster
-    p_emp = np.ones(n, dtype=np.float32)
-    for c in range(k):
-        rows = np.where(lab == c)[0]; refrows = rows[fit_mask[rows]]
+        z = ((nll - r.mean(1)) / r.std(1).clamp_min(1e-6)).cpu().numpy().astype(np.float32)
+    return p, z
+
+
+def empirical_tail_prob(nll_all: np.ndarray, lab_all: np.ndarray, fit_mask: np.ndarray) -> np.ndarray:
+    """Empirical depth-calibrated score ("cemp"): the reference set for row i is
+    the FIT rows in the same context cluster and p_i is the fraction of them
+    with a larger conditional NLL (the row itself excluded). With out-of-fold
+    scoring every NLL here is out-of-sample, so fit and non-fit rows are
+    exchangeable. Calibrated on fit rows by construction; noisier where a
+    cluster is small. Agreement with the model-based p validates the flow."""
+    n = len(nll_all); p_emp = np.ones(n, dtype=np.float32)
+    for c in np.unique(lab_all):
+        rows = np.where(lab_all == c)[0]; refrows = rows[fit_mask[rows]]
         if len(refrows) == 0:
-            continue
-        rs = np.sort(nll_np[refrows])
-        ge = len(rs) - np.searchsorted(rs, nll_np[rows], side="left")     # ref rows with NLL >= own
+            continue                                            # no reference at this context: p = 1 (cannot judge)
+        rs = np.sort(nll_all[refrows])
+        ge = len(rs) - np.searchsorted(rs, nll_all[rows], side="left")     # ref rows with NLL >= own
         self_in = fit_mask[rows].astype(np.int64)                          # a fit row counts itself once: drop it
         p_emp[rows] = (ge - self_in + 1.0) / (len(rs) - self_in + 1.0)
-    ccal = (-np.log10(p) + 1e-3 * z).astype(np.float32)
-    cemp = (-np.log10(p_emp)).astype(np.float32)
-    return {"ccal": ccal, "cemp": cemp, "p": p, "p_emp": p_emp, "z": z, "cluster": lab.astype(np.int32)}
+    return p_emp
 
 def score_iforest(train, allz):
     from sklearn.ensemble import IsolationForest
@@ -344,7 +340,8 @@ def score_mahal(train, allz):
 
 
 def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx: np.ndarray | None = None,
-              cond_epochs: int | None = None, balance: bool = False, calibrate: int = 0, calib_centroids: int = 256):
+              cond_epochs: int | None = None, balance: bool = False, calibrate: int = 0, calib_centroids: int = 256,
+              folds: int = 1):
     """fit_mask: rows the detectors are fitted on (the in-distribution set);
     every row is scored. For --scope anchors that is the model's train split;
     for --scope lsst_all it is the COSMOS train split inside the full store
@@ -353,42 +350,80 @@ def score_all(latents: dict, fit_mask: np.ndarray, device, nsf_epochs: int, ctx:
     and stored under <key>/cnsf next to the unconditional <key>/nsf. It gets
     `cond_epochs` (default: same as the unconditional budget) and, if `balance`,
     inverse-density weights over the context so sparse depths are learned.
-    calibrate > 0: also compute the depth-calibrated tail-probability score
-    <key>/ccal from the conditional flow with that many samples per context
-    centroid, and the empirical within-cluster percentile <key>/cemp (see
-    calibrated_scores); p-values, z-scores and cluster ids come back in `calib`."""
+    calibrate > 0: also the depth-calibrated tail-probability score <key>/ccal
+    (model-based, `calibrate` flow samples per context centroid) and the
+    empirical within-cluster percentile <key>/cemp; p-values, z-scores and
+    cluster ids come back in `calib`.
+    folds > 1: OUT-OF-FOLD scoring of both flows. A flow fitted for 50–150
+    epochs on ~25k points memorises: rows it was fitted on get systematically
+    lower NLL than rows it never saw, so held-out rows crowd the top of the
+    ranking (DEEP2-3: 20 % of the rows but 80 % of the top 0.1 % under the
+    150-epoch conditional flow). With folds, the fit rows are split into
+    `folds` seeded folds, one flow per fold is fitted on the other folds and
+    scores the held-out fold; every non-fit row is assigned to one fold and
+    scored by that fold's flow. Every row is therefore scored by a flow that
+    did not see it, fit and non-fit rows are exchangeable, and the reported
+    NLL is the mean over folds. IForest / kNN / Mahalanobis stay in-sample."""
     scores, nsf_nll, calib = {}, {}, {}
+    n = len(fit_mask); tr_idx = np.where(fit_mask)[0]; other_idx = np.where(~fit_mask)[0]
     w = context_weights(ctx[fit_mask]) if (ctx is not None and balance) else None
+    w_full = None
     if w is not None:
+        w_full = np.zeros(n, dtype=np.float32); w_full[fit_mask] = w
         print(f"[score] context balancing: weights min {w.min():.2f} max {w.max():.2f} "
               f"(effective sample size {int(w.sum() ** 2 / (w ** 2).sum()):,} of {int(fit_mask.sum()):,})", flush=True)
+    folds = max(1, int(folds))
+    fold_of = np.zeros(n, dtype=np.int64)
+    if folds > 1:
+        rng = np.random.default_rng(SPLIT_SEED)
+        fold_of[tr_idx] = rng.permutation(len(tr_idx)) % folds
+        fold_of[other_idx] = rng.integers(0, folds, len(other_idx))
+        print(f"[score] out-of-fold scoring with {folds} folds: {len(tr_idx):,} fit rows -> "
+              f"{np.bincount(fold_of[tr_idx]).tolist()} per fold; {len(other_idx):,} non-fit rows spread over the folds", flush=True)
+    lab = centers = None
+    if calibrate > 0 and ctx is not None:
+        lab, centers = context_clusters(ctx, calib_centroids)
     for key, z in latents.items():
-        tr = z[fit_mask]
         t0 = time.time()
-        s, nll = score_nsf(tr, z, device, epochs=nsf_epochs)
-        scores[f"{key}/nsf"] = s; nsf_nll[key] = nll
-        msg = f"nsf NLL {nll:8.2f}"
+        s_u = np.empty(n, np.float32); s_c = np.empty(n, np.float32); p = np.empty(n, np.float32); zs = np.empty(n, np.float32)
+        nll_u_f, nll_c_f = [], []
+        for f in range(folds):
+            if folds > 1:
+                train_rows = tr_idx[fold_of[tr_idx] != f]; score_rows = np.where(fold_of == f)[0]
+            else:
+                train_rows = tr_idx; score_rows = np.arange(n)
+            su, nll_u = score_nsf(z[train_rows], z[score_rows], device, epochs=nsf_epochs, seed=f)
+            s_u[score_rows] = su; nll_u_f.append(nll_u)
+            if ctx is not None:
+                sc, nll_c, cflow = score_nsf(z[train_rows], z[score_rows], device, epochs=cond_epochs or nsf_epochs, seed=f,
+                                             ctx_train=ctx[train_rows], ctx_all=ctx[score_rows],
+                                             weights=None if w_full is None else w_full[train_rows], return_flow=True)
+                s_c[score_rows] = sc; nll_c_f.append(nll_c)
+                if calibrate > 0:
+                    pf, zf = model_tail_prob(cflow, z[score_rows], ctx[score_rows], lab[score_rows], centers, device,
+                                             n_samples=calibrate, seed=f)
+                    p[score_rows] = pf; zs[score_rows] = zf
+                del cflow
+        scores[f"{key}/nsf"] = s_u; nsf_nll[key] = float(np.mean(nll_u_f))
+        msg = f"nsf NLL {nsf_nll[key]:8.2f}"
         if ctx is not None:
-            s_c, nll_c, cflow = score_nsf(tr, z, device, epochs=cond_epochs or nsf_epochs,
-                                          ctx_train=ctx[fit_mask], ctx_all=ctx, weights=w, return_flow=True)
-            scores[f"{key}/cnsf"] = s_c; nsf_nll[f"{key}/cond"] = nll_c
-            msg += f"  cond-nsf NLL {nll_c:8.2f}"
+            scores[f"{key}/cnsf"] = s_c; nsf_nll[f"{key}/cond"] = float(np.mean(nll_c_f))
+            msg += f"  cond-nsf NLL {nsf_nll[f'{key}/cond']:8.2f}"
             if calibrate > 0:
-                t1 = time.time()
-                cs = calibrated_scores(cflow, z, ctx, fit_mask, device, n_samples=calibrate, n_centroids=calib_centroids)
-                scores[f"{key}/ccal"] = cs["ccal"]; scores[f"{key}/cemp"] = cs["cemp"]
-                calib[key] = {k_: cs[k_] for k_ in ("p", "p_emp", "z", "cluster")}
+                p_emp = empirical_tail_prob(s_c, lab, fit_mask)          # s_c IS −log p(z|c) of the (out-of-fold) flow
+                scores[f"{key}/ccal"] = (-np.log10(p) + 1e-3 * zs).astype(np.float32)
+                scores[f"{key}/cemp"] = (-np.log10(p_emp)).astype(np.float32)
+                calib[key] = {"p": p, "p_emp": p_emp, "z": zs, "cluster": lab.astype(np.int32)}
                 # calibration check: fraction of FIT rows with p < 0.1 (0.10 if the flow is right)
                 from scipy.stats import spearmanr as _sp
-                msg += (f"  calib K={calibrate}: fit-row frac(p<0.1)={float((cs['p'][fit_mask] < 0.1).mean()):.3f} "
-                        f"rho(ccal,cemp)={_sp(cs['ccal'], cs['cemp']).statistic:+.2f} ({time.time() - t1:.0f}s)")
-            del cflow
+                msg += (f"  calib K={calibrate}: fit-row frac(p<0.1)={float((p[fit_mask] < 0.1).mean()):.3f} "
+                        f"rho(ccal,cemp)={_sp(scores[f'{key}/ccal'], scores[f'{key}/cemp']).statistic:+.2f}")
+        tr = z[fit_mask]
         scores[f"{key}/iforest"] = score_iforest(tr, z)
         scores[f"{key}/knn"] = score_knn(tr, z)
         scores[f"{key}/mahal"] = score_mahal(tr, z)
         print(f"[score] {key:<18} dim={z.shape[1]:>3}  {msg}  ({time.time() - t0:.0f}s)", flush=True)
     return scores, nsf_nll, calib
-
 
 # ------------------------------------------------------------------- report
 def _rgb(x):
@@ -649,6 +684,15 @@ def report(ds, meta: dict, scores: dict, out: Path, tag: str, views=("hsc", "lss
     ref_group = str(groups[meta["fit_mask"]][0])
     if len(gnames) > 1:
         summary["group_sizes"] = {g: int((groups == g).sum()) for g in gnames}
+        # who fills the top 1 %? A group over-represented relative to its population share is either
+        # genuinely unusual or (for a same-distribution held-out slice) a sign the flow memorised its fit rows
+        kk = max(1, int(0.01 * n))
+        summary["group_share"] = {g: float(np.mean(groups == g)) for g in gnames}
+        summary["top1pct_group_share"] = {}
+        for key in (f"phys/lsst_mean/{PM}", f"ins/lsst_flat/{PM}"):
+            top = np.argsort(-scores[key])[:kk]
+            for g in gnames:
+                summary["top1pct_group_share"][f"{key} | {g}"] = float(np.mean(groups[top] == g))
         summary["fit_group"] = ref_group
         summary["group_median_nsf_minus_fit_group"] = {}
         fig, axes = plt.subplots(1, 2, figsize=(12, 4.6))
@@ -706,6 +750,13 @@ def main():
                          "high — it tracks the conditional entropy at each depth, not how unusual the object is for its "
                          "depth. K=1024 gives a floor of p = 1/1025 (top ~0.1%%).")
     ap.add_argument("--calib-centroids", type=int, default=256, help="k-means clusters over the context for --calibrate")
+    ap.add_argument("--folds", type=int, default=1,
+                    help="out-of-fold scoring of both flows with this many seeded folds (see score_all): every row is "
+                         "scored by a flow that did not see it, so memorisation cannot push held-out rows to the top. "
+                         "1 = single in-sample fit (paper recipe).")
+    ap.add_argument("--headline-only", action="store_true",
+                    help="fit flows only for the headline representations (physics token-mean, instrument flat) of "
+                         "the requested views; the others are still encoded and saved. Halves the flow time with --folds.")
     ap.add_argument("--balance", action="store_true",
                     help="weight the conditional flow's fit by the inverse density of the context (log n_input_i), so the "
                          "sparse shallow depths are learned rather than drowned by the 75-105 exposure bulk")
@@ -794,9 +845,12 @@ def main():
     print(f"[encode] saved latents for {n:,} rows ({time.time() - t0:.0f}s)", flush=True)
 
     ctx = build_context(meta, fit_mask, with_psf=(args.cond == "n_input_psf")) if args.cond != "none" else None
+    if args.headline_only:
+        latents = {k: v for k, v in latents.items() if k in gallery_keys(views) or k.split("/")[1].startswith("joint")}
+        print(f"[score] --headline-only: flows for {sorted(latents)}", flush=True)
     scores, nsf_nll, calib = score_all(latents, fit_mask, device, args.nsf_epochs, ctx=ctx,
                                        cond_epochs=args.cond_epochs, balance=args.balance, calibrate=args.calibrate,
-                                       calib_centroids=args.calib_centroids)
+                                       calib_centroids=args.calib_centroids, folds=args.folds)
     with h5py.File(out / "scores.h5", "w") as f:
         for k, v in scores.items():
             f.create_dataset(k, data=v, compression="gzip", compression_opts=4)
@@ -810,6 +864,7 @@ def main():
                         "methods": list(METHODS) + (["cnsf"] if ctx is not None else []) + (["ccal", "cemp"] if calib else []), "primary_method": PM,
                         "cond": args.cond, "fit_on": args.fit_on, "cond_epochs": args.cond_epochs or args.nsf_epochs,
                         "context_balanced": args.balance, "calibrate_samples": args.calibrate, "calib_centroids": args.calib_centroids,
+                        "folds": args.folds, "headline_only": args.headline_only,
                         "context_desc": ("standardised log1p(n_input) i,g,r,z" + (" + psf_fwhm g,r,i,z" if args.cond == "n_input_psf" else "")) if ctx is not None else ""})
     df = pd.DataFrame({k.replace("/", "__"): v for k, v in scores.items()})
     for k in ("object_id_hsc", "lsst_row", "parent_row", "is_val", "fit_mask", "field", "group", "n_input_i", "psf_fwhm_i"):
@@ -833,6 +888,9 @@ def main():
         parts = [f"{g}: physics {gm.get(f'phys/lsst_mean/{PM} | {g}', float('nan')):+.2f} | instrument {gm.get(f'ins/lsst_flat/{PM} | {g}', float('nan')):+.2f}"
                  for g in summary["group_sizes"] if g != ref]
         shift = f"median {PM.upper()} score shift vs {ref} — " + "; ".join(parts) + "\n"
+        ts = summary.get("top1pct_group_share", {}); gs = summary.get("group_share", {})
+        shift += ("top-1% composition, instrument ({}): ".format(PM) +
+                  "; ".join(f"{g} {100 * ts.get(f'ins/lsst_flat/{PM} | {g}', 0):.0f}% (pop {100 * gs.get(g, 0):.0f}%)" for g in summary["group_sizes"]) + "\n")
     ovl = "; ".join(f"{sv.upper()} {ov[sv]['overlap']}/{ov[sv]['k']}" for sv in views)
     scope_txt = f"{args.scope}{'/' + args.field if args.field else ''}, views={'+'.join(views)}"
     cond_txt = ("" if PM == "nsf" else
@@ -840,6 +898,7 @@ def main():
                  + " is the primary score; unconditional kept for contrast\n"
                  f"Spearman vs n_input_i, UNconditional: physics {sp['phys/lsst_mean/nsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/nsf vs n_input_i']:+.3f}\n")
                 + (f"Spearman vs n_input_i, raw conditional NLL: physics {sp['phys/lsst_mean/cnsf vs n_input_i']:+.3f} | instrument {sp['ins/lsst_flat/cnsf vs n_input_i']:+.3f}\n" if PM == "ccal" else ""))
+    scope_txt += f", {args.folds}-fold out-of-fold flows" if args.folds > 1 else ""
     text = (f"**HSC × LSST anomaly stage — `{args.tag}`** ({scope_txt}) done in {summary['wall_min']} min, N={n:,} LSST rows, "
             f"detectors fitted on {int(fit_mask.sum()):,} rows ({summary.get('fit_group', 'fit set')})\n"
             f"ckpt: `{Path(args.checkpoint).parent.parent.name}/{Path(args.checkpoint).name}`\n" + cond_txt + shift +

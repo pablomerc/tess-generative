@@ -263,3 +263,41 @@ becomes: fit-row p-values uniform in every depth bin; instrument-space
 Spearman(ccal, `n_input_i`) ≈ 0 within the fit set; residual shifts of
 cosmos_lowexp / deep23_held then mean "genuinely unusual for their depth",
 not "shallow".
+
+### D12. Flow memorisation → out-of-fold scoring (2026-09-30)
+The calibrated runs (444474–444479, `*-ccal`) do what D11 asked: inside the
+conditioning coverage the instrument-space Spearman vs `n_input_i` goes
+−0.38 → −0.05 (ccal) / 0.00 (cemp) in COSMOS and −0.23 → −0.06 / −0.02 in
+DEEP2-3, the in-sample median score is flat across visit bins, and the
+model-based and empirical calibrated scores agree at rank correlation 0.99
+within coverage. Two things they also exposed:
+1. **Out-of-coverage groups pin to the floor.** In the COSMOS-only fit the
+   786 `cosmos_lowexp` objects (`n_input` < 5, never in the fit set) all get
+   p = 1/1025 in both spaces and are 100 % of the top 1 % — the flow is
+   extrapolating in the context, not judging. The pooled fit
+   (`--fit-on both_fields`, DEEP2-3 supplies 2,824 rows at 1–5 visits) is the
+   only run where `cosmos_lowexp` has a real reference; COSMOS-only rankings
+   are read within `cosmos_train`/`cosmos_val`.
+2. **The flow memorises its fit rows.** A same-distribution held-out slice
+   should be exchangeable with the fit rows, but held-out rows crowd the
+   extreme tail: DEEP2-3 held (20 % of rows) is 39–42 % of the top 0.1 %
+   under the 50-epoch unconditional flow and 81–84 % under the 150-epoch
+   conditional flow; COSMOS val (5 %) is 42 % of the instrument-space top
+   0.1 % under ccal. The galleries' top 16 were 14/16 held-out rows. This is
+   in-sample vs out-of-sample NLL bias, not astrophysics.
+Fix = `--folds K`: fit rows split into K seeded folds; one flow per fold
+(unconditional and conditional) is fitted on the other folds and scores the
+held-out fold; every non-fit row is assigned to one fold and scored by that
+fold's flow. Every row is scored by a flow that never saw it, so fit /
+held-out rows are exchangeable and the empirical percentile (`cemp`) compares
+out-of-sample NLLs with out-of-sample NLLs. Reported NLL = mean over folds.
+IForest / kNN / Mahalanobis stay in-sample (paper recipe). `--headline-only`
+restricts the flows to `phys/lsst_mean` and `ins/lsst_flat` (the two
+representations every gallery / UMAP / diagnostic uses) to keep 5 folds ×
+(50 + 150) epochs inside the wall limit. New summary field
+`top1pct_group_share` (+ `group_share`) and a Discord line with the top-1 %
+composition make the memorisation check explicit: a held-out slice should sit
+at its population share. Jobs: smoke 444569 → 444570 cosine / 444571 paper
+pooled (`*-lsstall-bothfields-oof`), 444572/444573 COSMOS, 444574/444575
+DEEP2-3 (`*-{cosmos,deep23}-field-oof`), all `--folds 5 --headline-only
+--calibrate 1024 --cond-epochs 150 --balance --views lsst`.
