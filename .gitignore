@@ -87,3 +87,4 @@ galaxy_images/galaxy_model/checkpoints
 galaxy_images/galaxy_model/cross_predict_experiment/extra_targets_per_h5_row.parquet
 # transient SLURM job-id handoff written by the RAM48 build script
 galaxy_images/galaxy_model/contrastive_baseline/.build48_jid
+galaxy_images/galaxy_model/lsst/lense_lsst/outputs/
