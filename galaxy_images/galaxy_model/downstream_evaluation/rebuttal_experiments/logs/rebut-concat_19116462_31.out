@@ -1,0 +1,17 @@
+[task 31] variant=contr-e1e2m-leg fold=4/5
+            emb=/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/rebuttal_experiments/outputs/embeddings/contr-e1e2m-leg.h5
+            out=/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/rebuttal_experiments/outputs/predictions/folds/predict_contr-e1e2m-leg__aion_f4of5.csv
+Reading embeddings from /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/rebuttal_experiments/outputs/embeddings/contr-e1e2m-leg.h5
+  checkpoint_name=contrastive-spatial-conv1x1-e1e2m-leg  arch=contrastive-e1e2m-leg  has_e2=True
+  mlp_arch=aion
+  cross-validation: fold 4 of 5 (disjoint partition)
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/rebuttal_experiments/outputs/predictions/folds/predict_contr-e1e2m-leg__aion_f4of5.csv  (78 rows)
+[done] /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/rebuttal_experiments/outputs/predictions/folds/predict_contr-e1e2m-leg__aion_f4of5.csv
+79 /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/rebuttal_experiments/outputs/predictions/folds/predict_contr-e1e2m-leg__aion_f4of5.csv

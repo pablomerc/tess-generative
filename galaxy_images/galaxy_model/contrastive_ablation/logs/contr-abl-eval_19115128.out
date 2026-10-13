@@ -1,0 +1,5 @@
+[eval] checkpoint: /orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1-BS640-DWNVAL/last.ckpt
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1-BS640-DWNVAL/last.ckpt
+Module/class: contrastive_ablation/dual_encoder_contrastive_variants.py :: ContrastiveNegativeAblationModule
+[ContrastiveNegativeAblationModule] galaxy_negatives=mixed instrument_negatives=mixed use_projection_head=True

@@ -1,0 +1,6 @@
+[report] latest=step 100000 | best-val=best-epoch=41-step=6000.ckpt (step 6000)
+[report] WARNING: post failed: HTTP Error 403: Forbidden
+[report] WARNING: post failed: HTTP Error 403: Forbidden
+[report] WARNING: post failed: HTTP Error 403: Forbidden
+[report] WARNING: post failed: HTTP Error 403: Forbidden
+Done at Tue Jul 28 19:37:19 EDT 2026
