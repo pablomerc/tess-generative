@@ -1,0 +1,139 @@
+=== [smoke-r3] training arm=cf-token ===
+[ckpt] run directory: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/cf-token
+[cfg] arm=cf-token encoder_pool=conv1x1 max_steps=30 batch_size=8 lr=0.0001
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=False | max_neighbors=5 | random_neighbors=False
+[data] total=103,741  train=98,554  val=5,187
+[model] CFTokenJEPAModule  trainable_params=6,192,864
+[umap] fixed pair set: 64 anchors per survey
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name                       ┃ Type               ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ context_encoder_galaxy     │ PatchViT           │  2.7 M │ train │     0 │
+│ 1 │ context_encoder_instrument │ PatchViT           │  2.7 M │ train │     0 │
+│ 2 │ predictor_galaxy           │ TokenTranslator    │  498 K │ train │     0 │
+│ 3 │ predictor_instrument       │ CrossAttnPredictor │  274 K │ train │     0 │
+│ 4 │ target_encoder_galaxy      │ PatchViT           │  2.7 M │ train │     0 │
+│ 5 │ target_encoder_instrument  │ PatchViT           │  2.7 M │ train │     0 │
+└───┴────────────────────────────┴────────────────────┴────────┴───────┴───────┘
+Trainable params: 6.2 M                                                         
+Non-trainable params: 5.4 M                                                     
+Total params: 11.6 M                                                            
+Total estimated model params size (MB): 46                                      
+Modules in train mode: 660                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+[checkpoint] saved: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/cf-token/best-epoch=00-step=20.ckpt
+[checkpoint] saved: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/cf-token/last.ckpt
+Epoch 0/-2 ━━━━━━━━━━━━━━━━━ 30/30 0:00:29 • 0:00:00 1.00it/s v_num: 207r       
+                                                              train/loss_step:  
+                                                              1.284 val/loss:   
+                                                              1.461             
+                                                              train/loss_epoch: 
+                                                              1.758             
+[done] reached 30 steps; wrote DONE marker.
+[1;34mwandb[0m: 
+[1;34mwandb[0m: You can sync this run to the cloud by running:
+[1;34mwandb[0m: [1mwandb sync wandb/offline-run-20260801_191455-ns0r207r[0m
+=== [smoke-r3] training arm=xjepa ===
+[ckpt] run directory: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/xjepa
+[cfg] arm=xjepa encoder_pool=conv1x1 max_steps=30 batch_size=8 lr=0.0001
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=False | max_neighbors=5 | random_neighbors=False
+[data] total=103,741  train=98,554  val=5,187
+[model] XJEPAModule  trainable_params=3,982,176
+[umap] fixed pair set: 64 anchors per survey
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name                 ┃ Type               ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ trunk                │ PatchViT           │  2.7 M │ train │     0 │
+│ 1 │ phys_head            │ Sequential         │ 25.0 K │ train │     0 │
+│ 2 │ inst_head            │ Sequential         │ 12.5 K │ train │     0 │
+│ 3 │ predictor_mask       │ ViTPredictor       │  498 K │ train │     0 │
+│ 4 │ predictor_galaxy     │ TokenTranslator    │  486 K │ train │     0 │
+│ 5 │ predictor_instrument │ CrossAttnPredictor │  250 K │ train │     0 │
+│ 6 │ target_trunk         │ PatchViT           │  2.7 M │ train │     0 │
+│ 7 │ target_phys_head     │ Sequential         │ 25.0 K │ train │     0 │
+│ 8 │ target_inst_head     │ Sequential         │ 12.5 K │ train │     0 │
+└───┴──────────────────────┴────────────────────┴────────┴───────┴───────┘
+Trainable params: 4.0 M                                                         
+Non-trainable params: 2.7 M                                                     
+Total params: 6.7 M                                                             
+Total estimated model params size (MB): 26                                      
+Modules in train mode: 493                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+[checkpoint] saved: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/xjepa/best-epoch=00-step=20.ckpt
+[checkpoint] saved: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/xjepa/last.ckpt
+Epoch 0/-2 ━━━━━━━━━━━━━━━━━ 30/30 0:00:20 • 0:00:00 1.42it/s v_num: sqv7       
+                                                              train/loss_step:  
+                                                              1.343 val/loss:   
+                                                              1.615             
+                                                              train/loss_epoch: 
+                                                              2.051             
+[done] reached 30 steps; wrote DONE marker.
+[1;34mwandb[0m: 
+[1;34mwandb[0m: You can sync this run to the cloud by running:
+[1;34mwandb[0m: [1mwandb sync wandb/offline-run-20260801_191546-2m90sqv7[0m
+=== [smoke-r3] training arm=multi-vit ===
+[ckpt] run directory: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/multi-vit
+[cfg] arm=multi-vit encoder_pool=conv1x1 max_steps=30 batch_size=8 lr=0.0001
+[AllStamps48Dataset] 366,706 HSC + 205,232 Legacy = 571,938 stamps | in_ram=False
+[data] total=571,938  train=543,342  val=28,596
+[model] IJEPAViTModule  trainable_params=3,208,320
+[umap] fixed pair set: 64 anchors per survey
+┏━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name            ┃ Type         ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ context_encoder │ PatchViT     │  2.7 M │ train │     0 │
+│ 1 │ predictor       │ ViTPredictor │  498 K │ train │     0 │
+│ 2 │ target_encoder  │ PatchViT     │  2.7 M │ train │     0 │
+└───┴─────────────────┴──────────────┴────────┴───────┴───────┘
+Trainable params: 3.2 M                                                         
+Non-trainable params: 2.7 M                                                     
+Total params: 5.9 M                                                             
+Total estimated model params size (MB): 23                                      
+Modules in train mode: 365                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+[checkpoint] saved: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/multi-vit/best-epoch=00-step=20.ckpt
+[checkpoint] saved: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/multi-vit/last.ckpt
+Epoch 0/-2 ━━━━━━━━━━━━━━━━━ 30/30 0:00:20 • 0:00:00 1.43it/s v_num: jx8w       
+                                                              train/loss_step:  
+                                                              0.711 val/loss:   
+                                                              0.757             
+                                                              train/loss_epoch: 
+                                                              0.901             
+[done] reached 30 steps; wrote DONE marker.
+[1;34mwandb[0m: 
+[1;34mwandb[0m: You can sync this run to the cloud by running:
+[1;34mwandb[0m: [1mwandb sync wandb/offline-run-20260801_191624-vmgbjx8w[0m
+=== [smoke-r3] prepare_combined on xjepa (asymmetric widths) ===
+Device: cuda
+Checkpoint: /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/xjepa/last.ckpt
+Module/class: jepa_ablation/jepa_round3.py :: XJEPAModule
+Architecture: contrastive  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1448.0 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1000.5 img/s)
+[legacy_only] writing labels
+
+Wrote /orcd/data/mki_aryeh/001/pablomer/jepa_ablation/smoke_r3/xjepa/smoke_embeddings.h5
+[smoke-r3] xjepa overlap e1 (5469, 128) e2 (5469, 64)
+=== [smoke-r3] check_collapse on cf-token ===
+[collapse] cf-token  ckpt=last.ckpt  n=256  single_encoder=False  device=cuda
+  physics/e1     dim= 192  norm_std=0.0329 (rel 0.46, centered 0.88)  eff_rank=2.8  top1_var=0.757  -> weak [offset-dominated]
+  instrument/e2  dim= 192  norm_std=0.0313 (rel 0.43, centered 0.88)  eff_rank=2.6  top1_var=0.781  -> weak [offset-dominated]
+=== [smoke-r3] all stages passed — submitting the real runs ===
+submitted jepa-cf-token: 19467097
+submitted jepa-xjepa: 19467098
+submitted jepa-multi-vit: 19467099
+Done at Sat Aug  1 19:19:23 EDT 2026

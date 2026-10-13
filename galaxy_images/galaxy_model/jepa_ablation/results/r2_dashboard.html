@@ -1,0 +1,285 @@
+<title>JEPA ablation — downstream R²</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb; --plane: #f9f9f7;
+  --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s-ours: #2a78d6; --s-aion: #e34948; --s-contrastive: #eb6834;
+  --s-jepa-hsc-vit: #1baf7a; --s-jepa-hsc-vit-pca64: var(--s-jepa-hsc-vit);
+  --s-ae-hsc: #e87ba4; --s-jepa-cf-vit: var(--s-jepa-cf); --s-cf-token: var(--s-jepa-cf); --s-multi-vit: var(--s-jepa-hsc-vit); --s-xjepa: var(--s-jepa-cross);
+  --s-jepa-hsc-resnet: #008300; --s-jepa-cf: #eda100; --s-jepa-cross: #4a3aa7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface: #1a1a19; --plane: #0d0d0d;
+    --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --ring: rgba(255,255,255,0.10);
+    --s-ours: #3987e5; --s-aion: #e66767; --s-contrastive: #d95926;
+    --s-jepa-hsc-vit: #199e70; --s-jepa-hsc-vit-pca64: var(--s-jepa-hsc-vit);
+    --s-ae-hsc: #d55181; --s-jepa-cf-vit: var(--s-jepa-cf); --s-cf-token: var(--s-jepa-cf); --s-multi-vit: var(--s-jepa-hsc-vit); --s-xjepa: var(--s-jepa-cross);
+    --s-jepa-hsc-resnet: #008300; --s-jepa-cf: #c98500; --s-jepa-cross: #9085e9;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19; --plane: #0d0d0d;
+  --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835; --ring: rgba(255,255,255,0.10);
+  --s-ours: #3987e5; --s-aion: #e66767; --s-contrastive: #d95926;
+  --s-jepa-hsc-vit: #199e70; --s-jepa-hsc-vit-pca64: var(--s-jepa-hsc-vit);
+  --s-ae-hsc: #d55181; --s-jepa-cf-vit: var(--s-jepa-cf); --s-cf-token: var(--s-jepa-cf); --s-multi-vit: var(--s-jepa-hsc-vit); --s-xjepa: var(--s-jepa-cross);
+  --s-jepa-hsc-resnet: #008300; --s-jepa-cf: #c98500; --s-jepa-cross: #9085e9;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface: #fcfcfb; --plane: #f9f9f7;
+  --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s-ours: #2a78d6; --s-aion: #e34948; --s-contrastive: #eb6834;
+  --s-jepa-hsc-vit: #1baf7a; --s-jepa-hsc-vit-pca64: var(--s-jepa-hsc-vit);
+  --s-ae-hsc: #e87ba4; --s-jepa-cf-vit: var(--s-jepa-cf); --s-cf-token: var(--s-jepa-cf); --s-multi-vit: var(--s-jepa-hsc-vit); --s-xjepa: var(--s-jepa-cross);
+  --s-jepa-hsc-resnet: #008300; --s-jepa-cf: #eda100; --s-jepa-cross: #4a3aa7;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--plane); color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 24px 64px; }
+header h1 { font-size: 22px; font-weight: 650; margin: 0 0 4px; text-wrap: balance; }
+header p.sub { margin: 0; color: var(--ink2); font-size: 13.5px; }
+header p.sub b { font-weight: 600; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 9px; border: 1px solid var(--ring); border-radius: 999px;
+  background: var(--surface); color: var(--ink2); font: inherit; font-size: 13px;
+  cursor: pointer;
+}
+.chip .sw { width: 12px; height: 12px; border-radius: 3px; background: var(--c); }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--c); }
+.chip[aria-pressed="false"] .sw { background: transparent; border: 1.5px solid var(--c); }
+.chip:focus-visible { outline: 2px solid var(--s-ours); outline-offset: 2px; }
+.chiprow-note { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--ring); border-radius: 10px;
+  padding: 18px 18px 8px; margin: 18px 0;
+}
+.panel h2 { font-size: 15.5px; font-weight: 600; margin: 0 0 2px; }
+.panel .means { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 4px;
+  color: var(--ink2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.panel .means .m { display: inline-flex; align-items: center; gap: 6px; }
+.panel .means .sw { width: 9px; height: 9px; border-radius: 2px; }
+.chart { width: 100%; overflow-x: auto; }
+svg text { font: 11px system-ui, sans-serif; fill: var(--muted); }
+svg .tname { font-size: 10.5px; fill: var(--ink2); }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .zero { stroke: var(--baseline); stroke-width: 1.25; }
+svg rect.bar { stroke: var(--surface); stroke-width: 1; }
+@media (prefers-reduced-motion: no-preference) { svg rect.bar { transition: opacity .12s; } }
+svg rect.bar:hover { opacity: 0.82; }
+
+#tip {
+  position: fixed; pointer-events: none; display: none; z-index: 10;
+  background: var(--ink); color: var(--surface); border-radius: 6px;
+  padding: 6px 9px; font-size: 12.5px; font-variant-numeric: tabular-nums;
+  max-width: 280px;
+}
+#tip b { font-weight: 600; }
+
+details.tbl { margin: 26px 0 0; }
+details.tbl summary { cursor: pointer; color: var(--ink2); font-size: 14px; }
+details.tbl h3 { font-size: 13.5px; margin: 18px 0 6px; }
+.tblwrap { overflow-x: auto; border: 1px solid var(--ring); border-radius: 8px; }
+table { border-collapse: collapse; font-size: 12.5px; min-width: 640px; width: 100%;
+  font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 5px 10px; border-top: 1px solid var(--grid); }
+th { color: var(--ink2); font-weight: 600; background: var(--surface); }
+td:first-child, th:first-child { text-align: left; }
+tbody tr:nth-child(odd) td { background: color-mix(in srgb, var(--grid) 22%, transparent); }
+
+footer.notes { margin-top: 26px; color: var(--muted); font-size: 12.5px; }
+footer.notes ul { margin: 6px 0 0; padding-left: 18px; }
+footer.notes li { margin: 3px 0; }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>JEPA ablation — downstream R² by target</h1>
+  <p class="sub">n=5469 HSC×Legacy overlap · AION MLP probe (90/10, seed 0) · final checkpoints ·
+    <b>toggle runs to compare</b></p>
+</header>
+
+<div class="chips" id="chips" role="group" aria-label="Runs"></div>
+<p class="chiprow-note">Color is fixed per run. Single-space runs decode both property families from one embedding.</p>
+
+<div id="panels"></div>
+<div id="tip"></div>
+
+<details class="tbl"><summary>Table view — every target, every run</summary><div id="tables"></div></details>
+
+<footer class="notes">
+  Reading notes:
+  <ul>
+    <li><b>Single-space runs</b> (AION, JEPA HSC-ViT, HSC-ViT→PCA-64, Multi-survey ViT, HSC-ResNet, AE baseline, Cross-survey) have one embedding; their physics and instrument bars probe the same space. Ours, Contrastive, CF, CF-ViT, CF-Token and X-JEPA have two spaces — but note CF-Token's and X-JEPA's two spaces are heavily entangled (see REPORT.md §4c leakage table).</li>
+    <li><b>Hatched bars are variants</b> sharing their parent run's hue, distinguished by stripe angle: of HSC-ViT — PCA-64 (45°) and Multi-survey ViT (135°); of CF — CF-ViT (45°) and CF-Token (135°); of Cross-survey — X-JEPA (45°).</li>
+    <li>The <b>AE baseline</b> is plain pixel reconstruction — not a JEPA objective; it shares the harness only.</li>
+    <li><b>Probe input width differs</b>: 128-d for the 64-d encoders (HSC+Legacy concat), 384-d for HSC-ViT, 64-d for the PCA control (deliberately conservative), 1536-d for AION.</li>
+    <li>For HSC-only runs (HSC-ViT, HSC-ResNet and their PCA control), Legacy-side bars are <b>zero-shot transfer</b> — the encoder never saw Legacy images.</li>
+    <li>JEPA runs use a fixed cosine+warmup LR schedule; the published Ours/Contrastive arms carry the repo's T_max quirk. A matched-schedule contrastive control is pending before objective-level claims.</li>
+    <li>Source CSVs: <code>downstream_evaluation/engaging/outputs/predictions/predict_*__aion.csv</code> · repo doc: <code>jepa_ablation/REPORT.md</code></li>
+  </ul>
+</footer>
+</div>
+
+<script>
+const DATA = {"physics_provabgs": {"desi_z": {"ours": 0.8007, "aion": 0.8573, "contrastive": 0.7405, "jepa-hsc-vit": 0.8756, "jepa-hsc-vit-pca64": 0.8658, "multi-vit": 0.8888, "jepa-hsc-resnet": 0.728, "ae-hsc": 0.7554, "jepa-cf": 0.4913, "jepa-cf-vit": 0.7474, "cf-token": 0.8523, "jepa-cross": 0.4955, "xjepa": 0.8476}, "provabgs_logmstar": {"ours": 0.7547, "aion": 0.8182, "contrastive": 0.675, "jepa-hsc-vit": 0.8162, "jepa-hsc-vit-pca64": 0.8091, "multi-vit": 0.8299, "jepa-hsc-resnet": 0.6576, "ae-hsc": 0.7251, "jepa-cf": 0.2694, "jepa-cf-vit": 0.7143, "cf-token": 0.8238, "jepa-cross": 0.3983, "xjepa": 0.8236}, "provabgs_tage_mw": {"ours": 0.2575, "aion": 0.3532, "contrastive": 0.2058, "jepa-hsc-vit": 0.3625, "jepa-hsc-vit-pca64": 0.3499, "multi-vit": 0.3936, "jepa-hsc-resnet": 0.2318, "ae-hsc": 0.1974, "jepa-cf": 0.1298, "jepa-cf-vit": 0.2219, "cf-token": 0.3259, "jepa-cross": 0.133, "xjepa": 0.2923}, "provabgs_z_mw": {"ours": 0.2505, "aion": 0.2761, "contrastive": 0.2718, "jepa-hsc-vit": 0.4278, "jepa-hsc-vit-pca64": 0.4321, "multi-vit": 0.4149, "jepa-hsc-resnet": 0.3989, "ae-hsc": 0.2469, "jepa-cf": 0.0762, "jepa-cf-vit": 0.2527, "cf-token": 0.4368, "jepa-cross": 0.1099, "xjepa": 0.4131}, "ssfr": {"ours": 0.5585, "aion": 0.6236, "contrastive": 0.4816, "jepa-hsc-vit": 0.6159, "jepa-hsc-vit-pca64": 0.6126, "multi-vit": 0.6258, "jepa-hsc-resnet": 0.4782, "ae-hsc": 0.5145, "jepa-cf": 0.2757, "jepa-cf-vit": 0.5214, "cf-token": 0.5917, "jepa-cross": 0.3699, "xjepa": 0.5622}, "legacy_shape_e1": {"ours": 0.9183, "aion": 0.939, "contrastive": 0.9176, "jepa-hsc-vit": 0.9229, "jepa-hsc-vit-pca64": 0.9103, "multi-vit": 0.8106, "jepa-hsc-resnet": 0.5495, "ae-hsc": 0.9202, "jepa-cf": 0.8085, "jepa-cf-vit": 0.512, "cf-token": 0.9128, "jepa-cross": 0.7646, "xjepa": 0.9238}, "legacy_shape_e2": {"ours": 0.9341, "aion": 0.941, "contrastive": 0.8949, "jepa-hsc-vit": 0.9404, "jepa-hsc-vit-pca64": 0.9267, "multi-vit": 0.6404, "jepa-hsc-resnet": 0.7533, "ae-hsc": 0.9301, "jepa-cf": 0.8157, "jepa-cf-vit": 0.4072, "cf-token": 0.9103, "jepa-cross": 0.8075, "xjepa": 0.916}, "hsc_shape_e1_i": {"ours": 0.9186, "aion": 0.9294, "contrastive": 0.8825, "jepa-hsc-vit": 0.8734, "jepa-hsc-vit-pca64": 0.8688, "multi-vit": 0.7673, "jepa-hsc-resnet": 0.5244, "ae-hsc": 0.9204, "jepa-cf": 0.7734, "jepa-cf-vit": 0.4364, "cf-token": 0.8637, "jepa-cross": 0.7201, "xjepa": 0.8586}, "hsc_shape_e2_i": {"ours": 0.9462, "aion": 0.9414, "contrastive": 0.8933, "jepa-hsc-vit": 0.9382, "jepa-hsc-vit-pca64": 0.9313, "multi-vit": 0.6055, "jepa-hsc-resnet": 0.7253, "ae-hsc": 0.9422, "jepa-cf": 0.8155, "jepa-cf-vit": 0.3991, "cf-token": 0.9026, "jepa-cross": 0.796, "xjepa": 0.8895}}, "instrument_hsc": {"a_g": {"ours": 0.606, "aion": 0.2985, "contrastive": 0.733, "jepa-hsc-vit": 0.6044, "jepa-hsc-vit-pca64": 0.5706, "multi-vit": 0.6405, "jepa-hsc-resnet": 0.3281, "ae-hsc": 0.1742, "jepa-cf": 0.4756, "jepa-cf-vit": 0.5196, "cf-token": 0.6115, "jepa-cross": 0.039, "xjepa": 0.7247}, "a_r": {"ours": 0.6036, "aion": 0.3033, "contrastive": 0.7278, "jepa-hsc-vit": 0.6034, "jepa-hsc-vit-pca64": 0.5752, "multi-vit": 0.6428, "jepa-hsc-resnet": 0.3282, "ae-hsc": 0.1724, "jepa-cf": 0.4789, "jepa-cf-vit": 0.5238, "cf-token": 0.6084, "jepa-cross": 0.0425, "xjepa": 0.7245}, "a_i": {"ours": 0.6027, "aion": 0.3012, "contrastive": 0.7269, "jepa-hsc-vit": 0.6001, "jepa-hsc-vit-pca64": 0.5764, "multi-vit": 0.646, "jepa-hsc-resnet": 0.3319, "ae-hsc": 0.1698, "jepa-cf": 0.4763, "jepa-cf-vit": 0.5268, "cf-token": 0.6094, "jepa-cross": 0.0343, "xjepa": 0.7251}, "a_z": {"ours": 0.6025, "aion": 0.304, "contrastive": 0.73, "jepa-hsc-vit": 0.6042, "jepa-hsc-vit-pca64": 0.5773, "multi-vit": 0.6406, "jepa-hsc-resnet": 0.3268, "ae-hsc": 0.1787, "jepa-cf": 0.4754, "jepa-cf-vit": 0.5244, "cf-token": 0.6046, "jepa-cross": 0.0412, "xjepa": 0.7232}, "a_y": {"ours": 0.6061, "aion": 0.2901, "contrastive": 0.725, "jepa-hsc-vit": 0.6036, "jepa-hsc-vit-pca64": 0.5755, "multi-vit": 0.6397, "jepa-hsc-resnet": 0.3272, "ae-hsc": 0.1678, "jepa-cf": 0.4784, "jepa-cf-vit": 0.5184, "cf-token": 0.6164, "jepa-cross": 0.0343, "xjepa": 0.7259}, "psf_fwhm_g": {"ours": 0.3107, "aion": 0.0286, "contrastive": 0.4622, "jepa-hsc-vit": 0.476, "jepa-hsc-vit-pca64": 0.3926, "multi-vit": 0.6106, "jepa-hsc-resnet": 0.0486, "ae-hsc": 0.0662, "jepa-cf": 0.1628, "jepa-cf-vit": 0.1051, "cf-token": 0.3812, "jepa-cross": 0.0089, "xjepa": 0.5663}, "psf_fwhm_r": {"ours": 0.4421, "aion": 0.0529, "contrastive": 0.6279, "jepa-hsc-vit": 0.3608, "jepa-hsc-vit-pca64": 0.3745, "multi-vit": 0.5141, "jepa-hsc-resnet": 0.2088, "ae-hsc": 0.0997, "jepa-cf": 0.1241, "jepa-cf-vit": 0.1983, "cf-token": 0.4691, "jepa-cross": -0.0018, "xjepa": 0.5918}, "psf_fwhm_i": {"ours": 0.5085, "aion": 0.1506, "contrastive": 0.7, "jepa-hsc-vit": 0.5505, "jepa-hsc-vit-pca64": 0.5473, "multi-vit": 0.6203, "jepa-hsc-resnet": 0.2223, "ae-hsc": 0.1979, "jepa-cf": 0.2423, "jepa-cf-vit": 0.3098, "cf-token": 0.5741, "jepa-cross": 0.0601, "xjepa": 0.7}, "psf_fwhm_z": {"ours": 0.7508, "aion": 0.1553, "contrastive": 0.8404, "jepa-hsc-vit": 0.7421, "jepa-hsc-vit-pca64": 0.7114, "multi-vit": 0.7815, "jepa-hsc-resnet": 0.3346, "ae-hsc": 0.3216, "jepa-cf": 0.2535, "jepa-cf-vit": 0.4689, "cf-token": 0.7402, "jepa-cross": 0.0605, "xjepa": 0.8569}}, "instrument_legacy": {"PSFSIZE_G": {"ours": 0.5386, "aion": 0.3189, "contrastive": 0.646, "jepa-hsc-vit": 0.7093, "jepa-hsc-vit-pca64": 0.6751, "multi-vit": 0.7735, "jepa-hsc-resnet": 0.1338, "ae-hsc": 0.2075, "jepa-cf": 0.3344, "jepa-cf-vit": 0.357, "cf-token": 0.4976, "jepa-cross": 0.0211, "xjepa": 0.7401}, "PSFSIZE_R": {"ours": 0.589, "aion": 0.2649, "contrastive": 0.7818, "jepa-hsc-vit": 0.7534, "jepa-hsc-vit-pca64": 0.6975, "multi-vit": 0.8032, "jepa-hsc-resnet": 0.2452, "ae-hsc": 0.2419, "jepa-cf": 0.3236, "jepa-cf-vit": 0.3465, "cf-token": 0.7051, "jepa-cross": -0.0175, "xjepa": 0.757}, "PSFSIZE_I": {"ours": 0.6952, "aion": 0.2928, "contrastive": 0.8509, "jepa-hsc-vit": 0.7395, "jepa-hsc-vit-pca64": 0.5766, "multi-vit": 0.8222, "jepa-hsc-resnet": 0.3613, "ae-hsc": 0.2605, "jepa-cf": 0.5086, "jepa-cf-vit": 0.4403, "cf-token": 0.7488, "jepa-cross": -0.0052, "xjepa": 0.8394}, "PSFSIZE_Z": {"ours": 0.678, "aion": 0.2837, "contrastive": 0.7733, "jepa-hsc-vit": 0.6987, "jepa-hsc-vit-pca64": 0.599, "multi-vit": 0.7604, "jepa-hsc-resnet": 0.3406, "ae-hsc": 0.3455, "jepa-cf": 0.3782, "jepa-cf-vit": 0.4784, "cf-token": 0.677, "jepa-cross": 0.0817, "xjepa": 0.8069}, "PSFDEPTH_G": {"ours": 0.5759, "aion": 0.1781, "contrastive": 0.7854, "jepa-hsc-vit": 0.6785, "jepa-hsc-vit-pca64": 0.5433, "multi-vit": 0.801, "jepa-hsc-resnet": 0.1521, "ae-hsc": 0.0042, "jepa-cf": 0.4, "jepa-cf-vit": 0.4063, "cf-token": 0.6153, "jepa-cross": -0.015, "xjepa": 0.8277}, "PSFDEPTH_R": {"ours": 0.7896, "aion": 0.5577, "contrastive": 0.9085, "jepa-hsc-vit": 0.7707, "jepa-hsc-vit-pca64": 0.7095, "multi-vit": 0.8772, "jepa-hsc-resnet": 0.4049, "ae-hsc": 0.2181, "jepa-cf": 0.6071, "jepa-cf-vit": 0.6754, "cf-token": 0.813, "jepa-cross": -0.0191, "xjepa": 0.8869}, "PSFDEPTH_I": {"ours": 0.7738, "aion": 0.403, "contrastive": 0.9095, "jepa-hsc-vit": 0.7272, "jepa-hsc-vit-pca64": 0.6943, "multi-vit": 0.8693, "jepa-hsc-resnet": 0.2298, "ae-hsc": 0.1359, "jepa-cf": 0.5311, "jepa-cf-vit": 0.7591, "cf-token": 0.7872, "jepa-cross": 0.0215, "xjepa": 0.8968}, "PSFDEPTH_Z": {"ours": 0.7756, "aion": 0.4972, "contrastive": 0.8722, "jepa-hsc-vit": 0.7492, "jepa-hsc-vit-pca64": 0.6989, "multi-vit": 0.8418, "jepa-hsc-resnet": 0.3032, "ae-hsc": 0.068, "jepa-cf": 0.6046, "jepa-cf-vit": 0.7461, "cf-token": 0.7689, "jepa-cross": -0.0002, "xjepa": 0.8526}, "GALDEPTH_G": {"ours": 0.5943, "aion": 0.1995, "contrastive": 0.7798, "jepa-hsc-vit": 0.6822, "jepa-hsc-vit-pca64": 0.547, "multi-vit": 0.8001, "jepa-hsc-resnet": 0.1587, "ae-hsc": 0.0265, "jepa-cf": 0.4244, "jepa-cf-vit": 0.4388, "cf-token": 0.6264, "jepa-cross": -0.008, "xjepa": 0.838}, "GALDEPTH_R": {"ours": 0.7992, "aion": 0.5612, "contrastive": 0.9136, "jepa-hsc-vit": 0.7728, "jepa-hsc-vit-pca64": 0.7121, "multi-vit": 0.881, "jepa-hsc-resnet": 0.4086, "ae-hsc": 0.2166, "jepa-cf": 0.6096, "jepa-cf-vit": 0.6766, "cf-token": 0.8149, "jepa-cross": -0.028, "xjepa": 0.8936}, "GALDEPTH_I": {"ours": 0.7744, "aion": 0.42, "contrastive": 0.9127, "jepa-hsc-vit": 0.7257, "jepa-hsc-vit-pca64": 0.7, "multi-vit": 0.8692, "jepa-hsc-resnet": 0.2322, "ae-hsc": 0.1579, "jepa-cf": 0.5281, "jepa-cf-vit": 0.7643, "cf-token": 0.7988, "jepa-cross": 0.0185, "xjepa": 0.8999}, "GALDEPTH_Z": {"ours": 0.786, "aion": 0.5223, "contrastive": 0.8887, "jepa-hsc-vit": 0.77, "jepa-hsc-vit-pca64": 0.7219, "multi-vit": 0.853, "jepa-hsc-resnet": 0.3447, "ae-hsc": 0.0975, "jepa-cf": 0.6378, "jepa-cf-vit": 0.7795, "cf-token": 0.7855, "jepa-cross": 0.0112, "xjepa": 0.8598}, "MW_TRANSMISSION_G": {"ours": 0.6183, "aion": 0.3286, "contrastive": 0.7401, "jepa-hsc-vit": 0.5923, "jepa-hsc-vit-pca64": 0.5788, "multi-vit": 0.6461, "jepa-hsc-resnet": 0.2933, "ae-hsc": 0.2172, "jepa-cf": 0.4748, "jepa-cf-vit": 0.4971, "cf-token": 0.6243, "jepa-cross": 0.0562, "xjepa": 0.7284}, "MW_TRANSMISSION_R": {"ours": 0.6143, "aion": 0.3253, "contrastive": 0.7388, "jepa-hsc-vit": 0.593, "jepa-hsc-vit-pca64": 0.5783, "multi-vit": 0.6473, "jepa-hsc-resnet": 0.2909, "ae-hsc": 0.22, "jepa-cf": 0.4736, "jepa-cf-vit": 0.5011, "cf-token": 0.6087, "jepa-cross": 0.0562, "xjepa": 0.7316}, "MW_TRANSMISSION_I": {"ours": 0.6201, "aion": 0.3235, "contrastive": 0.7421, "jepa-hsc-vit": 0.5937, "jepa-hsc-vit-pca64": 0.5739, "multi-vit": 0.6463, "jepa-hsc-resnet": 0.292, "ae-hsc": 0.2218, "jepa-cf": 0.4726, "jepa-cf-vit": 0.4991, "cf-token": 0.6124, "jepa-cross": 0.0556, "xjepa": 0.7307}, "MW_TRANSMISSION_Z": {"ours": 0.6171, "aion": 0.3235, "contrastive": 0.7402, "jepa-hsc-vit": 0.5972, "jepa-hsc-vit-pca64": 0.5846, "multi-vit": 0.6495, "jepa-hsc-resnet": 0.2918, "ae-hsc": 0.2207, "jepa-cf": 0.4786, "jepa-cf-vit": 0.4969, "cf-token": 0.6133, "jepa-cross": 0.0549, "xjepa": 0.7296}, "EBV": {"ours": 0.6159, "aion": 0.3256, "contrastive": 0.7402, "jepa-hsc-vit": 0.5957, "jepa-hsc-vit-pca64": 0.5746, "multi-vit": 0.6481, "jepa-hsc-resnet": 0.2943, "ae-hsc": 0.2216, "jepa-cf": 0.4764, "jepa-cf-vit": 0.5002, "cf-token": 0.6147, "jepa-cross": 0.0589, "xjepa": 0.7294}, "NOBS_G": {"ours": 0.4798, "aion": 0.1253, "contrastive": 0.6732, "jepa-hsc-vit": 0.5585, "jepa-hsc-vit-pca64": 0.4903, "multi-vit": 0.7098, "jepa-hsc-resnet": 0.1697, "ae-hsc": 0.0519, "jepa-cf": 0.2311, "jepa-cf-vit": 0.3813, "cf-token": 0.5309, "jepa-cross": -0.0091, "xjepa": 0.6989}, "NOBS_R": {"ours": 0.4151, "aion": 0.2228, "contrastive": 0.6587, "jepa-hsc-vit": 0.4094, "jepa-hsc-vit-pca64": 0.3422, "multi-vit": 0.5739, "jepa-hsc-resnet": 0.0957, "ae-hsc": 0.0363, "jepa-cf": 0.1505, "jepa-cf-vit": 0.2716, "cf-token": 0.4711, "jepa-cross": -0.0221, "xjepa": 0.5483}, "NOBS_I": {"ours": 0.7008, "aion": 0.1733, "contrastive": 0.8644, "jepa-hsc-vit": 0.6911, "jepa-hsc-vit-pca64": 0.6631, "multi-vit": 0.8199, "jepa-hsc-resnet": 0.3148, "ae-hsc": 0.2036, "jepa-cf": 0.3883, "jepa-cf-vit": 0.6327, "cf-token": 0.7494, "jepa-cross": -0.0029, "xjepa": 0.8401}, "NOBS_Z": {"ours": 0.5744, "aion": 0.1422, "contrastive": 0.7699, "jepa-hsc-vit": 0.5413, "jepa-hsc-vit-pca64": 0.4858, "multi-vit": 0.6433, "jepa-hsc-resnet": 0.0618, "ae-hsc": 0.0881, "jepa-cf": 0.277, "jepa-cf-vit": 0.4545, "cf-token": 0.5816, "jepa-cross": -0.0217, "xjepa": 0.7145}}};
+
+const RUNS = [
+  { id: "ours",               label: "Ours (counterfactual-generative)", on: true  },
+  { id: "contrastive",        label: "Contrastive (sp-conv1x1)",         on: true  },
+  { id: "jepa-hsc-vit",       label: "JEPA HSC-ViT",                     on: true  },
+  { id: "jepa-hsc-vit-pca64", label: "HSC-ViT → PCA-64",     on: false, hatch: 45,  parent: "jepa-hsc-vit" },
+  { id: "multi-vit",          label: "Multi-survey ViT",     on: false, hatch: 135, parent: "jepa-hsc-vit" },
+  { id: "jepa-cf",            label: "JEPA CF",                          on: true  },
+  { id: "jepa-cf-vit",        label: "JEPA CF-ViT",          on: false, hatch: 45,  parent: "jepa-cf" },
+  { id: "cf-token",           label: "JEPA CF-Token",        on: true,  hatch: 135, parent: "jepa-cf" },
+  { id: "jepa-cross",         label: "JEPA Cross-survey",                on: false },
+  { id: "xjepa",              label: "X-JEPA (subspaces)",   on: true,  hatch: 45,  parent: "jepa-cross" },
+  { id: "jepa-hsc-resnet",    label: "JEPA HSC-ResNet",                  on: false },
+  { id: "ae-hsc",             label: "AE baseline (reconstruction)",     on: false },
+  { id: "aion",               label: "AION-1",                           on: false },
+];
+const FAMILIES = [
+  { key: "physics_provabgs",  title: "Physics properties",           sub: "physics latent (e1); single-space runs: the shared space" },
+  { key: "instrument_hsc",    title: "HSC instrument properties",    sub: "instrument latent (e2); single-space runs: the shared space" },
+  { key: "instrument_legacy", title: "Legacy instrument properties", sub: "instrument latent (e2); HSC-only runs: zero-shot transfer" },
+];
+const cssVar = id => getComputedStyle(document.documentElement).getPropertyValue("--s-" + id).trim();
+const shortName = t => t.replace("provabgs_", "").replace(/^legacy_/, "").replace(/^hsc_/, "");
+
+const HATCH_BG = (id, ang) =>
+  `repeating-linear-gradient(${ang}deg, var(--s-${id}) 0 3px, var(--surface) 3px 5px)`;
+
+const chipsEl = document.getElementById("chips");
+RUNS.forEach(r => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.style.setProperty("--c", `var(--s-${r.id})`);
+  b.setAttribute("aria-pressed", String(r.on));
+  b.innerHTML = `<span class="sw"></span>${r.label}`;
+  if (r.hatch) b.querySelector(".sw").style.background = HATCH_BG(r.id, r.hatch);
+  b.addEventListener("click", () => { r.on = !r.on; b.setAttribute("aria-pressed", String(r.on)); render(); });
+  chipsEl.appendChild(b);
+});
+
+const tip = document.getElementById("tip");
+function showTip(evt, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const pad = 14, w = tip.offsetWidth;
+  let x = evt.clientX + pad;
+  if (x + w > window.innerWidth - 8) x = evt.clientX - w - pad;
+  tip.style.left = x + "px"; tip.style.top = (evt.clientY + pad) + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+const panelsEl = document.getElementById("panels");
+FAMILIES.forEach(f => {
+  const d = document.createElement("div");
+  d.className = "panel";
+  d.innerHTML = `<h2>${f.title} <span style="color:var(--muted);font-weight:400;font-size:12.5px"> — ${f.sub}</span></h2>
+    <div class="means" id="means-${f.key}"></div><div class="chart" id="chart-${f.key}"></div>`;
+  panelsEl.appendChild(d);
+});
+
+function render() {
+  const active = RUNS.filter(r => r.on);
+  FAMILIES.forEach(f => {
+    const box = document.getElementById("chart-" + f.key);
+    const fam = DATA[f.key];
+    // targets sorted by first ACTIVE run's score (fallback: name)
+    const sorter = active[0] ? (a, b) => (fam[b][active[0].id] ?? -9) - (fam[a][active[0].id] ?? -9)
+                             : (a, b) => a.localeCompare(b);
+    const targets = Object.keys(fam).sort(sorter);
+
+    // means row
+    const meansEl = document.getElementById("means-" + f.key);
+    meansEl.innerHTML = active.map(r => {
+      const vals = targets.map(t => fam[t][r.id]).filter(v => v != null);
+      const m = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
+      const bg = r.hatch ? HATCH_BG(r.id, r.hatch) : `var(--s-${r.id})`;
+      return `<span class="m"><span class="sw" style="background:${bg}"></span>${r.label}: <b>${m.toFixed(3)}</b></span>`;
+    }).join("") || `<span style="color:var(--muted)">No runs selected.</span>`;
+
+    // geometry
+    const n = targets.length, k = Math.max(1, active.length);
+    const groupW = Math.max(26, k * 13 + 8), gap = 14;
+    const mL = 44, mR = 8, mT = 8, mB = 86;
+    const W = mL + mR + n * (groupW + gap);
+    const H = 300, plotH = H - mT - mB;
+    const vals = targets.flatMap(t => active.map(r => fam[t][r.id])).filter(v => v != null);
+    const yMin = Math.min(0, ...vals, 0), yMax = 1;
+    const y = v => mT + plotH * (1 - (v - yMin) / (yMax - yMin));
+
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${f.title} R-squared by target">`;
+    // hatched fills for variant runs (same hue as parent, 45deg texture)
+    const hatched = active.filter(r => r.hatch);
+    if (hatched.length) {
+      s += `<defs>${hatched.map(r =>
+        `<pattern id="h-${f.key}-${r.id}" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(${r.hatch})">
+           <rect width="6" height="6" fill="var(--s-${r.id})"></rect>
+           <line x1="1" y1="0" x2="1" y2="6" stroke="var(--surface)" stroke-width="2"></line>
+         </pattern>`).join("")}</defs>`;
+    }
+    for (let g = 0; g <= 1.0001; g += 0.2) {
+      const gv = Math.round(g * 10) / 10;
+      if (gv < yMin) continue;
+      s += `<line class="gridline" x1="${mL}" x2="${W - mR}" y1="${y(gv)}" y2="${y(gv)}"></line>
+            <text x="${mL - 6}" y="${y(gv) + 3.5}" text-anchor="end" style="font-variant-numeric:tabular-nums">${gv.toFixed(1)}</text>`;
+    }
+    s += `<line class="zero" x1="${mL}" x2="${W - mR}" y1="${y(0)}" y2="${y(0)}"></line>`;
+    targets.forEach((t, ti) => {
+      const x0 = mL + ti * (groupW + gap) + gap / 2;
+      const bw = (groupW - (k - 1) * 2) / k;   // 2px surface gap between adjacent bars
+      active.forEach((r, ri) => {
+        const v = fam[t][r.id];
+        if (v == null) return;
+        const x = x0 + ri * (bw + 2);
+        const yTop = Math.min(y(v), y(0)), h = Math.abs(y(v) - y(0));
+        const fill = r.hatch ? `url(#h-${f.key}-${r.id})` : `var(--s-${r.id})`;
+        s += `<rect class="bar" data-run="${r.id}" data-t="${t}" data-v="${v}"
+               x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 0.5).toFixed(1)}"
+               rx="2.5" fill="${fill}"></rect>`;
+      });
+      s += `<text class="tname" transform="rotate(-42 ${x0 + groupW / 2} ${H - mB + 14})"
+             x="${x0 + groupW / 2}" y="${H - mB + 14}" text-anchor="end">${shortName(t)}</text>`;
+    });
+    s += `</svg>`;
+    box.innerHTML = s;
+    box.querySelectorAll("rect.bar").forEach(rect => {
+      rect.addEventListener("mousemove", e => {
+        const run = RUNS.find(r => r.id === rect.dataset.run);
+        showTip(e, `<b>${run.label}</b><br>${rect.dataset.t}<br>R² = <b>${(+rect.dataset.v).toFixed(3)}</b>`);
+      });
+      rect.addEventListener("mouseleave", hideTip);
+    });
+  });
+}
+render();
+
+// table view (all runs, static)
+const tablesEl = document.getElementById("tables");
+tablesEl.innerHTML = FAMILIES.map(f => {
+  const fam = DATA[f.key];
+  const targets = Object.keys(fam);
+  return `<h3>${f.title}</h3><div class="tblwrap"><table>
+    <thead><tr><th>target</th>${RUNS.map(r => `<th>${r.label}</th>`).join("")}</tr></thead>
+    <tbody>${targets.map(t => `<tr><td>${t}</td>${RUNS.map(r =>
+      `<td>${fam[t][r.id] != null ? fam[t][r.id].toFixed(3) : "—"}</td>`).join("")}</tr>`).join("")}</tbody>
+  </table></div>`;
+}).join("");
+</script>

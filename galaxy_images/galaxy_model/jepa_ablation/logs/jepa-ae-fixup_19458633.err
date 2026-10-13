@@ -1,0 +1,6 @@
+/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
+  warn(
+/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/visualization_scripts/plot_umap_from_file.py:169: UserWarning: You passed a edgecolor/edgecolors ('black') for an unfilled marker ('x').  Matplotlib is ignoring the edgecolor in favor of the facecolor.  This behavior may change in the future.
+  ax.scatter(hsc_xy[idx, 0], hsc_xy[idx, 1], marker=marker,
+/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/visualization_scripts/plot_umap_from_file.py:172: UserWarning: You passed a edgecolor/edgecolors ('black') for an unfilled marker ('x').  Matplotlib is ignoring the edgecolor in favor of the facecolor.  This behavior may change in the future.
+  ax.scatter(legacy_xy[idx, 0], legacy_xy[idx, 1], marker=marker,

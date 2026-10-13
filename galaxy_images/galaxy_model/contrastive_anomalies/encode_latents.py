@@ -67,7 +67,10 @@ DEFAULT_OUT_DIR = "/orcd/pool/007/pablomer/outputs/contrastive_anomalies"
 
 
 def load_contrastive(ckpt_path: str, device: torch.device):
-    """Load a contrastive dual-encoder checkpoint (base or negative-ablation subclass)."""
+    """Load a contrastive dual-encoder checkpoint (base or negative-ablation subclass),
+    or a JEPA-ablation checkpoint (all four arms expose the same encoder_galaxy /
+    encoder_instrument duck-typed pair; single-encoder arms alias one EMA encoder
+    under both names, so their physics/instrument latents come out identical)."""
     from galaxy_images.galaxy_model.contrastive_baseline.dual_encoder_contrastive import (
         DualEncoderContrastiveModule,
     )
@@ -75,7 +78,51 @@ def load_contrastive(ckpt_path: str, device: torch.device):
     hp = torch.load(ckpt_path, map_location="cpu", weights_only=False).get("hyper_parameters", {})
     # The -DWNVAL arms carry three extra hparams and need the subclass; loading them
     # with the base class is the one way to get this silently wrong.
-    if any(k in hp for k in ("galaxy_negatives", "instrument_negatives", "use_projection_head")):
+    if "cross_attention_dim" in hp:
+        # Flow-matching / DDPM generative modules ("Ours"). They expose
+        # encoder_1 (physics) / encoder_2 (instrument); alias them to the
+        # duck-typed names so the rest of this pipeline runs unchanged.
+        if "prediction_type" in hp:
+            from galaxy_images.galaxy_model.diffusion_ablation.double_train_ddpm_neighbors import (
+                ConditionalDDPMModule as cls,
+            )
+        else:
+            from galaxy_images.galaxy_model.double_train_fm_neighbors import (
+                ConditionalFlowMatchingModule as cls,
+            )
+        model = cls.load_from_checkpoint(ckpt_path, map_location="cpu")
+        model.encoder_galaxy = model.encoder_1
+        model.encoder_instrument = model.encoder_2
+        model.eval()
+        torch.set_grad_enabled(False)
+        return model.to(device), dict(hp)
+    if "decoder_channels" in hp:
+        from galaxy_images.galaxy_model.jepa_ablation.autoencoder_baseline import (
+            AEHSCModule as cls,
+        )
+    elif "ema_base_momentum" in hp:
+        # JEPA family (jepa_ablation/PLAN.md); the arms are distinguished by
+        # hparams unique to each __init__ signature. Round-3 markers (phys_dim,
+        # translator_depth) MUST precede lambda_galaxy, which they also carry.
+        if "phys_dim" in hp:
+            from galaxy_images.galaxy_model.jepa_ablation.jepa_round3 import XJEPAModule as cls
+        elif "translator_depth" in hp:
+            from galaxy_images.galaxy_model.jepa_ablation.jepa_round3 import (
+                CFTokenJEPAModule as cls,
+            )
+        elif "pred_dim" in hp:
+            from galaxy_images.galaxy_model.jepa_ablation.jepa_vit import IJEPAViTModule as cls
+        elif "mask_frac_min" in hp:
+            from galaxy_images.galaxy_model.jepa_ablation.jepa_modules import JEPAHSCModule as cls
+        elif "lambda_galaxy" in hp:
+            from galaxy_images.galaxy_model.jepa_ablation.jepa_modules import (
+                JEPACounterfactualModule as cls,
+            )
+        else:
+            from galaxy_images.galaxy_model.jepa_ablation.jepa_modules import (
+                JEPACrossSurveyModule as cls,
+            )
+    elif any(k in hp for k in ("galaxy_negatives", "instrument_negatives", "use_projection_head")):
         from galaxy_images.galaxy_model.contrastive_ablation.dual_encoder_contrastive_variants import (
             ContrastiveNegativeAblationModule as cls,
         )

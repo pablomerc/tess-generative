@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_anomalies/plot_anomalies.py", line 425, in <module>
+    main()
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_anomalies/plot_anomalies.py", line 361, in main
+    meta, scores, attrs = load_scores(scores_path)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_anomalies/evaluate.py", line 42, in load_scores
+    meta = {k: f[k][:] for k in ("row_idx", "ra", "dec", "is_lens", "in_train")}
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/contrastive_anomalies/evaluate.py", line 42, in <dictcomp>
+    meta = {k: f[k][:] for k in ("row_idx", "ra", "dec", "is_lens", "in_train")}
+               ~^^^
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/h5py/_hl/group.py", line 407, in __getitem__
+    return self._get(name)
+           ^^^^^^^^^^^^^^^
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "/orcd/home/002/pablomer/miniforge3/envs/torchenv/lib/python3.11/site-packages/h5py/_hl/group.py", line 421, in _get
+    oid = h5o.open(self.id, self._e(name), lapl=lapl)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5o.pyx", line 255, in h5py.h5o.open
+KeyError: "Unable to synchronously open object (object 'row_idx' doesn't exist)"

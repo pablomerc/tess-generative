@@ -1,0 +1,53 @@
+[eval] checkpoint: /orcd/pool/007/pablomer/checkpoints_new/jepa-cf-token/latest-step=100000.ckpt
+[collapse] cf-token  ckpt=latest-step=100000.ckpt  n=1024  single_encoder=False  device=cuda
+  physics/e1     dim= 192  norm_std=0.0613 (rel 0.85, centered 0.98)  eff_rank=22.9  top1_var=0.209  -> healthy
+  instrument/e2  dim= 192  norm_std=0.0676 (rel 0.94, centered 0.99)  eff_rank=49.8  top1_var=0.161  -> healthy
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/jepa-cf-token/latest-step=100000.ckpt
+Module/class: jepa_ablation/jepa_round3.py :: CFTokenJEPAModule
+Architecture: contrastive  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1123.4 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (930.8 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/jepa-cf-token.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/jepa-cf-token.h5
+  checkpoint_name=jepa-cf-token  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_jepa-cf-token__aion.csv  (78 rows)
+Plot (PNG):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa-cf-token_vs_ours.png
+Plot (PDF):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa-cf-token_vs_ours.pdf
+Merged CSV:  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa-cf-token_vs_ours__merged.csv
+Convergence: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion__convergence.txt
+[eval] all 4 JEPA arms present — rendering combined comparison plot
+Plot (PNG):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa_all_vs_ours.png
+Plot (PDF):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa_all_vs_ours.pdf
+Merged CSV:  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa_all_vs_ours__merged.csv
+Convergence: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion__convergence.txt
+[umap-jepa] loaded CFTokenJEPAModule single_encoder=False
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=False | max_neighbors=0 | random_neighbors=False
+[umap-jepa] encoded dim=192 in 0.6s (load 1.9s)
+[umap-jepa] pair/unpaired ratios: e1=0.9084 e2=0.9826
+[umap-jepa] wrote umap_both_encoders_zdim192_zoom_flat_jepa-cf-token_jepa-cf-token-j19472552_data.npz + umap_both_encoders_zdim192_zoom_flat_jepa-cf-token_jepa-cf-token-j19472552_metadata.json
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/jepa_ablation/results/umap/umap_both_encoders_zdim192_zoom_flat_jepa-cf-token_jepa-cf-token-j19472552_tuned.png
+[umap-jepa] total 36.9s — png=/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/jepa_ablation/results/umap/umap_both_encoders_zdim192_zoom_flat_jepa-cf-token_jepa-cf-token-j19472552_tuned.png
+Submitted batch job 19472809
+Done at Sat Aug  1 21:13:10 EDT 2026

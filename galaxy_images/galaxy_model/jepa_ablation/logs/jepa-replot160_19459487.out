@@ -1,0 +1,10 @@
+[replot160] tags: jepa-ae-hsc
+=== jepa-ae-hsc -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc_160 ===
+[plot] tag=jepa-ae-hsc  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc_160
+[plot] prefetching 28 distinct stamps with 16 workers...
+[plot] prefetched in 0.1s (5 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc_160/joint_top12_flow_jepa-ae-hsc_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc_160/joint_top12_iforest_jepa-ae-hsc_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc_160/joint_top12_knn_jepa-ae-hsc_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc_160/joint_top12_mahal_jepa-ae-hsc_160.png
+Done at Sat Aug  1 17:10:48 EDT 2026

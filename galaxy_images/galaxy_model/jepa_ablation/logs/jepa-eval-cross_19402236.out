@@ -1,0 +1,47 @@
+[eval] checkpoint: /orcd/pool/007/pablomer/checkpoints_new/jepa-cross/latest-step=100000.ckpt
+[collapse] cross  ckpt=latest-step=100000.ckpt  n=1024  single_encoder=True  device=cuda
+  physics/e1     dim=  64  norm_std=0.0312 (rel 0.25)  eff_rank=16.8  top1_var=0.158  -> weak
+Device: cuda
+Checkpoint: /orcd/pool/007/pablomer/checkpoints_new/jepa-cross/latest-step=100000.ckpt
+Module/class: jepa_ablation/jepa_modules.py :: JEPACrossSurveyModule
+Architecture: contrastive  has_e2=True
+Subsets: overlap=5469  hsc_only=16000  legacy_only=16000
+HSC bin rows: 474,954   Legacy bin rows: 911,758
+
+[overlap] encoding HSC images
+[overlap] encoding Legacy images
+[overlap] writing labels
+
+[hsc_only] encoding HSC images
+    encoded   10240/16000  (1207.0 img/s)
+[hsc_only] writing labels
+
+[legacy_only] encoding Legacy images
+    encoded   10240/16000  (1015.9 img/s)
+[legacy_only] writing labels
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/jepa-cross.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/jepa-cross.h5
+  checkpoint_name=jepa-cross  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_jepa-cross__aion.csv  (78 rows)
+Plot (PNG):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa-cross_vs_ours.png
+Plot (PDF):  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa-cross_vs_ours.pdf
+Merged CSV:  /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_jepa-cross_vs_ours__merged.csv
+Convergence: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/plots_publication/unified_three_probes_aion__convergence.txt
+[umap-jepa] loaded JEPACrossSurveyModule single_encoder=True
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=False | max_neighbors=0 | random_neighbors=False
+[umap-jepa] encoded dim=64 in 0.2s (load 7.8s)
+[umap-jepa] pair/unpaired ratios: e1=0.5023 e2=0.5023
+[umap-jepa] wrote umap_both_encoders_zdim64_zoom_flat_jepa-cross_jepa-cross-j19402236_data.npz + umap_both_encoders_zdim64_zoom_flat_jepa-cross_jepa-cross-j19402236_metadata.json
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/jepa_ablation/results/umap/umap_both_encoders_zdim64_zoom_flat_jepa-cross_jepa-cross-j19402236_tuned.png
+[umap-jepa] total 31.8s — png=/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/jepa_ablation/results/umap/umap_both_encoders_zdim64_zoom_flat_jepa-cross_jepa-cross-j19402236_tuned.png
+Submitted batch job 19403735
+Done at Fri Jul 31 20:46:05 EDT 2026

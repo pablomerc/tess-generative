@@ -1,0 +1,18 @@
+[replot160] tags: jepa-cf-token jepa-xjepa
+=== jepa-cf-token -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf-token_160 ===
+[plot] tag=jepa-cf-token  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf-token_160
+[plot] prefetching 66 distinct stamps with 16 workers...
+[plot] prefetched in 0.5s (7 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf-token_160/joint_top12_flow_jepa-cf-token_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf-token_160/joint_top12_iforest_jepa-cf-token_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf-token_160/joint_top12_knn_jepa-cf-token_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf-token_160/joint_top12_mahal_jepa-cf-token_160.png
+=== jepa-xjepa -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-xjepa_160 ===
+[plot] tag=jepa-xjepa  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-xjepa_160
+[plot] prefetching 54 distinct stamps with 16 workers...
+[plot] prefetched in 0.2s (3 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-xjepa_160/joint_top12_flow_jepa-xjepa_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-xjepa_160/joint_top12_iforest_jepa-xjepa_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-xjepa_160/joint_top12_knn_jepa-xjepa_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-xjepa_160/joint_top12_mahal_jepa-xjepa_160.png
+Done at Sat Aug  1 21:32:55 EDT 2026

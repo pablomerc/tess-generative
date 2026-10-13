@@ -1,0 +1,24 @@
+[pca] jepa-hsc-vit.h5 -> jepa-hsc-vit-pca64.h5 (n_components=64)
+  hsc_only/hsc_e1: (16000, 192) -> (16000, 64)  explained_var=0.9812
+  hsc_only/hsc_e2: (16000, 192) -> (16000, 64)  explained_var=0.9812
+  legacy_only/legacy_e1: (16000, 192) -> (16000, 64)  explained_var=0.9873
+  legacy_only/legacy_e2: (16000, 192) -> (16000, 64)  explained_var=0.9873
+  overlap/combined_e1: (5469, 384) -> (5469, 64)  explained_var=0.9688
+  overlap/combined_e2: (5469, 384) -> (5469, 64)  explained_var=0.9688
+  overlap/hsc_e1: (5469, 192) -> (5469, 64)  explained_var=0.9857
+  overlap/hsc_e2: (5469, 192) -> (5469, 64)  explained_var=0.9857
+  overlap/legacy_e1: (5469, 192) -> (5469, 64)  explained_var=0.9903
+  overlap/legacy_e2: (5469, 192) -> (5469, 64)  explained_var=0.9903
+[pca] wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/jepa-hsc-vit-pca64.h5
+Reading embeddings from /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/embeddings/jepa-hsc-vit-pca64.h5
+  checkpoint_name=jepa-hsc-vit  arch=contrastive  has_e2=True
+  mlp_arch=aion
+  [physics] family probe :: combined_e1  (9 targets, n=5469)
+  [physics] family probe :: combined_e2  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e1  (9 targets, n=5469)
+  [hsc-inst] family probe :: combined_e2  (9 targets, n=5469)
+  [legacy-inst] family probe :: combined_e1  (21 targets, n=5469)
+  [legacy-inst] family probe :: combined_e2  (21 targets, n=5469)
+
+Wrote /home/pablomer/orcd/pool/tess-generative/galaxy_images/galaxy_model/downstream_evaluation/engaging/outputs/predictions/predict_jepa-hsc-vit-pca64__aion.csv  (78 rows)
+Done at Fri Jul 31 20:47:15 EDT 2026

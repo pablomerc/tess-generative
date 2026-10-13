@@ -1,0 +1,42 @@
+[replot160] tags: jepa-cf jepa-cross jepa-hsc-resnet jepa-hsc-vit spatial-conv1x1 spatial-conv1x1_hscdown_474k 
+=== jepa-cf -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf_160 ===
+[plot] tag=jepa-cf  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf_160
+[plot] prefetching 65 distinct stamps with 16 workers...
+[plot] prefetched in 1.0s (15 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf_160/joint_top12_flow_jepa-cf_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf_160/joint_top12_iforest_jepa-cf_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf_160/joint_top12_knn_jepa-cf_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cf_160/joint_top12_mahal_jepa-cf_160.png
+=== jepa-cross -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cross_160 ===
+[plot] tag=jepa-cross  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cross_160
+[plot] prefetching 35 distinct stamps with 16 workers...
+[plot] prefetched in 0.8s (22 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cross_160/joint_top12_flow_jepa-cross_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cross_160/joint_top12_iforest_jepa-cross_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cross_160/joint_top12_knn_jepa-cross_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-cross_160/joint_top12_mahal_jepa-cross_160.png
+=== jepa-hsc-resnet -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-resnet_160 ===
+[plot] tag=jepa-hsc-resnet  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-resnet_160
+[plot] prefetching 19 distinct stamps with 16 workers...
+[plot] prefetched in 0.5s (29 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-resnet_160/joint_top12_flow_jepa-hsc-resnet_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-resnet_160/joint_top12_iforest_jepa-hsc-resnet_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-resnet_160/joint_top12_knn_jepa-hsc-resnet_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-resnet_160/joint_top12_mahal_jepa-hsc-resnet_160.png
+=== jepa-hsc-vit -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-vit_160 ===
+[plot] tag=jepa-hsc-vit  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-vit_160
+[plot] prefetching 34 distinct stamps with 16 workers...
+[plot] prefetched in 0.5s (14 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-vit_160/joint_top12_flow_jepa-hsc-vit_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-vit_160/joint_top12_iforest_jepa-hsc-vit_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-vit_160/joint_top12_knn_jepa-hsc-vit_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-hsc-vit_160/joint_top12_mahal_jepa-hsc-vit_160.png
+=== spatial-conv1x1 -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_160 ===
+[plot] tag=spatial-conv1x1  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_160
+[plot] prefetching 60 distinct stamps with 16 workers...
+[plot] prefetched in 0.5s (9 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_160/joint_top12_flow_spatial-conv1x1_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_160/joint_top12_iforest_spatial-conv1x1_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_160/joint_top12_knn_spatial-conv1x1_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_160/joint_top12_mahal_spatial-conv1x1_160.png
+=== spatial-conv1x1_hscdown_474k -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_spatial-conv1x1_hscdown_474k_160 ===

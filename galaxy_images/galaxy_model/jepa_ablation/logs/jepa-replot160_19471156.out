@@ -1,0 +1,10 @@
+[replot160] tags: jepa-multi-vit
+=== jepa-multi-vit -> /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-multi-vit_160 ===
+[plot] tag=jepa-multi-vit  stamps=full160  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-multi-vit_160
+[plot] prefetching 34 distinct stamps with 16 workers...
+[plot] prefetched in 0.1s (3 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-multi-vit_160/joint_top12_flow_jepa-multi-vit_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-multi-vit_160/joint_top12_iforest_jepa-multi-vit_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-multi-vit_160/joint_top12_knn_jepa-multi-vit_160.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-multi-vit_160/joint_top12_mahal_jepa-multi-vit_160.png
+Done at Sat Aug  1 20:38:48 EDT 2026

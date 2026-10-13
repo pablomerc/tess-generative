@@ -1,0 +1,10 @@
+=== hsc-resnet ===
+  physics/e1     dim=  64  norm_std=0.0675 (rel 0.54, centered 0.95)  eff_rank=7.9  top1_var=0.375  -> healthy
+=== hsc-vit ===
+  physics/e1     dim= 192  norm_std=0.0569 (rel 0.79, centered 0.97)  eff_rank=20.2  top1_var=0.264  -> healthy
+=== cf ===
+  physics/e1     dim=  64  norm_std=0.0487 (rel 0.39, centered 0.96)  eff_rank=11.3  top1_var=0.329  -> healthy [offset-dominated]
+  instrument/e2  dim=  64  norm_std=0.0906 (rel 0.73, centered 0.97)  eff_rank=12.9  top1_var=0.379  -> healthy
+=== cross ===
+  physics/e1     dim=  64  norm_std=0.0312 (rel 0.25, centered 0.98)  eff_rank=16.8  top1_var=0.158  -> healthy [offset-dominated]
+Done at Fri Jul 31 20:56:32 EDT 2026

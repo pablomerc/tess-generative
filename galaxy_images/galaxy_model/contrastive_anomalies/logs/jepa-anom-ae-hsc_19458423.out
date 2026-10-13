@@ -1,0 +1,289 @@
+=== config ===
+  ckpt    : /orcd/pool/007/pablomer/checkpoints_new/jepa-ae-hsc/latest-step=100000.ckpt
+  tag     : jepa-ae-hsc
+  data    : /orcd/pool/007/pablomer/efficient_neighs_48
+  out     : /orcd/pool/007/pablomer/outputs/contrastive_anomalies
+  torch   : 2.6.0+cu124 cuda True
+=== [1/4] encode ===
+[encode] checkpoint : /orcd/pool/007/pablomer/checkpoints_new/jepa-ae-hsc/latest-step=100000.ckpt
+[encode] device     : cuda
+[encode] pool=conv1x1  physics_dim=64  instrument_dim=64
+[anchor_data] lens ground truth: 74 / 74 lenses present among 103,741 anchors
+[encode] anchors: 103,741  (lenses: 74)
+[anchor_data] hsc: 21,111/103,741 anchors read
+[anchor_data] hsc: 40,248/103,741 anchors read
+[anchor_data] hsc: 60,511/103,741 anchors read
+[anchor_data] hsc: 81,338/103,741 anchors read
+[anchor_data] hsc: 101,762/103,741 anchors read
+[anchor_data] hsc: 1.91 GB resident
+[encode] hsc: 51,200/103,741  (25,499 img/s)
+[encode] hsc: 102,400/103,741  (28,446 img/s)
+[encode] hsc: done in 3.6s
+[anchor_data] legacy: 21,111/103,741 anchors read
+[anchor_data] legacy: 40,248/103,741 anchors read
+[anchor_data] legacy: 60,511/103,741 anchors read
+[anchor_data] legacy: 81,338/103,741 anchors read
+[anchor_data] legacy: 101,762/103,741 anchors read
+[anchor_data] legacy: 1.91 GB resident
+[encode] legacy: 51,200/103,741  (32,799 img/s)
+[encode] legacy: 102,400/103,741  (33,050 img/s)
+[encode] legacy: done in 3.1s
+[encode] physics_hsc          (103741, 64)  mean=+0.369 std=1.165
+[encode] instrument_hsc       (103741, 64)  mean=+0.369 std=1.165
+[encode] physics_legacy       (103741, 64)  mean=+0.531 std=1.533
+[encode] instrument_legacy    (103741, 64)  mean=+0.531 std=1.533
+[encode] physics_mean         (103741, 64)  mean=+0.450 std=1.279
+[encode] saved: /orcd/pool/007/pablomer/outputs/contrastive_anomalies/latents_jepa-ae-hsc.h5
+=== [2/4] fit + score ===
+[fit] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/latents_jepa-ae-hsc.h5
+[fit] N=103,741  train=82,992  test=20,749  lenses=74
+[fit] standardize=True  knn_self_excluded=True  n_jobs=8
+
+=== physics_hsc  dim=64 ===
+  [knn     ]    0.5s  finite=103,741/103,741
+  [iforest ]    3.3s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=57.2666  best=57.2666
+      NSF epoch 20/50  loss=55.6325  best=55.6325
+      NSF epoch 30/50  loss=54.6941  best=54.6941
+      NSF epoch 40/50  loss=54.1484  best=54.1318
+      NSF epoch 50/50  loss=53.6049  best=53.6049
+  [flow    ]  158.0s  finite=103,741/103,741
+
+=== physics_legacy  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    1.2s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=55.4391  best=55.4391
+      NSF epoch 20/50  loss=54.2999  best=54.2999
+      NSF epoch 30/50  loss=53.7324  best=53.7324
+      NSF epoch 40/50  loss=53.2988  best=53.2988
+      NSF epoch 50/50  loss=53.0240  best=53.0240
+  [flow    ]  153.0s  finite=103,741/103,741
+
+=== physics_mean  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    1.0s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=56.1364  best=56.1364
+      NSF epoch 20/50  loss=54.8272  best=54.8272
+      NSF epoch 30/50  loss=54.0881  best=54.0881
+      NSF epoch 40/50  loss=53.6380  best=53.6380
+      NSF epoch 50/50  loss=53.2589  best=53.2589
+  [flow    ]  155.0s  finite=103,741/103,741
+
+=== instrument_hsc  dim=64 ===
+  [knn     ]    0.2s  finite=103,741/103,741
+  [iforest ]    1.4s  finite=103,741/103,741
+  [mahal   ]    0.6s  finite=103,741/103,741
+      NSF epoch 10/50  loss=57.2666  best=57.2666
+      NSF epoch 20/50  loss=55.6325  best=55.6325
+      NSF epoch 30/50  loss=54.6941  best=54.6941
+      NSF epoch 40/50  loss=54.1484  best=54.1318
+      NSF epoch 50/50  loss=53.6049  best=53.6049
+  [flow    ]  147.9s  finite=103,741/103,741
+
+=== instrument_legacy  dim=64 ===
+  [knn     ]    0.3s  finite=103,741/103,741
+  [iforest ]    1.1s  finite=103,741/103,741
+  [mahal   ]    0.5s  finite=103,741/103,741
+      NSF epoch 10/50  loss=55.4391  best=55.4391
+      NSF epoch 20/50  loss=54.2999  best=54.2999
+      NSF epoch 30/50  loss=53.7324  best=53.7324
+      NSF epoch 40/50  loss=53.2988  best=53.2988
+      NSF epoch 50/50  loss=53.0240  best=53.0240
+  [flow    ]  160.6s  finite=103,741/103,741
+
+[fit] saved: /orcd/pool/007/pablomer/outputs/contrastive_anomalies/scores_jepa-ae-hsc.h5
+[fit] keys: ['instrument_hsc/flow', 'instrument_hsc/iforest', 'instrument_hsc/knn', 'instrument_hsc/mahal', 'instrument_legacy/flow', 'instrument_legacy/iforest', 'instrument_legacy/knn', 'instrument_legacy/mahal', 'physics_hsc/flow', 'physics_hsc/iforest', 'physics_hsc/knn', 'physics_hsc/mahal', 'physics_legacy/flow', 'physics_legacy/iforest', 'physics_legacy/knn', 'physics_legacy/mahal', 'physics_mean/flow', 'physics_mean/iforest', 'physics_mean/knn', 'physics_mean/mahal']
+=== [3/4] evaluate ===
+[eval] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/scores_jepa-ae-hsc.h5  (20 score arrays, 74 lenses)
+[eval] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/lens_metrics_jepa-ae-hsc.csv
+[eval] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/space_agreement_jepa-ae-hsc.csv
+[eval] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/summary_jepa-ae-hsc.md
+
+# Contrastive anomaly detection — `jepa-ae-hsc`
+
+- checkpoint: `/orcd/pool/007/pablomer/checkpoints_new/jepa-ae-hsc/latest-step=100000.ckpt`
+- encoder pool: `conv1x1`
+- anchors: **103,741**, strong lenses: **74**
+- fit on 80% train split (seed 42), scored on all anchors
+- standardized: `True`, kNN self-excluded: `True`
+
+## A. Strong-lens retrieval
+
+Chance AUC = 0.500, chance AP = 0.00071, chance recall@1000 = 0.010.
+
+| representation | method | roc_auc | avg_precision | recall@100 | recall@1000 | recall@5000 | lift@1000 | lens_pct_rank_median |
+|---|---|---|---|---|---|---|---|---|
+| instrument_hsc | flow | 0.615 | 0.0011 | 0.000 | 0.014 | 0.081 | 1.4x | 30.1% |
+| instrument_hsc | iforest | 0.620 | 0.0011 | 0.000 | 0.027 | 0.081 | 2.8x | 30.3% |
+| instrument_hsc | knn | 0.574 | 0.0011 | 0.000 | 0.014 | 0.068 | 1.4x | 36.3% |
+| instrument_hsc | mahal | 0.611 | 0.0011 | 0.000 | 0.014 | 0.054 | 1.4x | 33.5% |
+| instrument_legacy | flow | 0.403 | 0.0006 | 0.000 | 0.000 | 0.014 | 0.0x | 65.4% |
+| instrument_legacy | iforest | 0.483 | 0.0007 | 0.000 | 0.014 | 0.054 | 1.4x | 51.3% |
+| instrument_legacy | knn | 0.330 | 0.0005 | 0.000 | 0.000 | 0.014 | 0.0x | 72.8% |
+| instrument_legacy | mahal | 0.393 | 0.0006 | 0.000 | 0.000 | 0.000 | 0.0x | 63.8% |
+| physics_hsc | flow | 0.615 | 0.0011 | 0.000 | 0.014 | 0.081 | 1.4x | 30.1% |
+| physics_hsc | iforest | 0.620 | 0.0011 | 0.000 | 0.027 | 0.081 | 2.8x | 30.3% |
+| physics_hsc | knn | 0.574 | 0.0011 | 0.000 | 0.014 | 0.068 | 1.4x | 36.3% |
+| physics_hsc | mahal | 0.611 | 0.0011 | 0.000 | 0.014 | 0.054 | 1.4x | 33.5% |
+| physics_legacy | flow | 0.403 | 0.0006 | 0.000 | 0.000 | 0.014 | 0.0x | 65.4% |
+| physics_legacy | iforest | 0.483 | 0.0007 | 0.000 | 0.014 | 0.054 | 1.4x | 51.3% |
+| physics_legacy | knn | 0.330 | 0.0005 | 0.000 | 0.000 | 0.014 | 0.0x | 72.8% |
+| physics_legacy | mahal | 0.393 | 0.0006 | 0.000 | 0.000 | 0.000 | 0.0x | 63.8% |
+| physics_mean | flow | 0.559 | 0.0009 | 0.000 | 0.014 | 0.041 | 1.4x | 41.2% |
+| physics_mean | iforest | 0.620 | 0.0011 | 0.000 | 0.027 | 0.068 | 2.8x | 30.6% |
+| physics_mean | knn | 0.481 | 0.0007 | 0.000 | 0.000 | 0.014 | 0.0x | 49.0% |
+| physics_mean | mahal | 0.547 | 0.0008 | 0.000 | 0.000 | 0.054 | 0.0x | 42.1% |
+
+Best AUC: **physics_mean / iforest** = 0.620 (AP 0.0011).
+
+## B. Do the two spaces find the same objects?
+
+Spearman rho over all anchors and Jaccard overlap of the top-1000 sets.
+Physics-vs-instrument pairs at the same method are the ones to read.
+
+| a | b | spearman | top1000_overlap | top1000_jaccard |
+|---|---|---|---|---|
+| instrument_hsc/flow | physics_hsc/flow | 1.000 | 1000 | 1.000 |
+| instrument_hsc/flow | physics_legacy/flow | 0.438 | 86 | 0.045 |
+| instrument_hsc/flow | physics_mean/flow | 0.815 | 603 | 0.432 |
+| instrument_hsc/iforest | physics_hsc/iforest | 1.000 | 1000 | 1.000 |
+| instrument_hsc/iforest | physics_legacy/iforest | 0.591 | 759 | 0.612 |
+| instrument_hsc/iforest | physics_mean/iforest | 0.871 | 872 | 0.773 |
+| instrument_hsc/knn | physics_hsc/knn | 1.000 | 1000 | 1.000 |
+| instrument_hsc/knn | physics_legacy/knn | 0.419 | 104 | 0.055 |
+| instrument_hsc/knn | physics_mean/knn | 0.839 | 612 | 0.441 |
+| instrument_hsc/mahal | physics_hsc/mahal | 1.000 | 1000 | 1.000 |
+| instrument_hsc/mahal | physics_legacy/mahal | 0.508 | 217 | 0.122 |
+| instrument_hsc/mahal | physics_mean/mahal | 0.876 | 684 | 0.520 |
+| instrument_legacy/flow | physics_hsc/flow | 0.438 | 86 | 0.045 |
+| instrument_legacy/flow | physics_legacy/flow | 1.000 | 1000 | 1.000 |
+| instrument_legacy/flow | physics_mean/flow | 0.807 | 219 | 0.123 |
+| instrument_legacy/iforest | physics_hsc/iforest | 0.591 | 759 | 0.612 |
+| instrument_legacy/iforest | physics_legacy/iforest | 1.000 | 1000 | 1.000 |
+| instrument_legacy/iforest | physics_mean/iforest | 0.824 | 813 | 0.685 |
+| instrument_legacy/knn | physics_hsc/knn | 0.419 | 104 | 0.055 |
+| instrument_legacy/knn | physics_legacy/knn | 1.000 | 1000 | 1.000 |
+| instrument_legacy/knn | physics_mean/knn | 0.795 | 263 | 0.151 |
+| instrument_legacy/mahal | physics_hsc/mahal | 0.508 | 217 | 0.122 |
+| instrument_legacy/mahal | physics_legacy/mahal | 1.000 | 1000 | 1.000 |
+| instrument_legacy/mahal | physics_mean/mahal | 0.816 | 364 | 0.222 |
+
+_Full pairwise matrix in `space_agreement_jepa-ae-hsc.csv`._
+
+=== [4/4] figures ===
+[plot] tag=jepa-ae-hsc  stamps=ram48  reps=['instrument_hsc', 'instrument_legacy', 'physics_hsc', 'physics_legacy', 'physics_mean']  methods=['flow', 'iforest', 'knn', 'mahal']  out=/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc
+[plot] prefetching 67 distinct stamps with 16 workers...
+[plot] prefetched in 0.0s (0 ms/stamp effective)
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_hsc_flow_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_legacy_flow_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_hsc_flow_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_legacy_flow_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_mean_flow_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/joint_top12_flow_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_hsc_iforest_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_legacy_iforest_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_hsc_iforest_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_legacy_iforest_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_mean_iforest_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/joint_top12_iforest_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_hsc_knn_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_legacy_knn_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_hsc_knn_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_legacy_knn_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_mean_knn_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/joint_top12_knn_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_hsc_mahal_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_instrument_legacy_mahal_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_hsc_mahal_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_legacy_mahal_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/top12_physics_mean_mahal_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/joint_top12_mahal_jepa-ae-hsc.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc/roc_lens_jepa-ae-hsc.png
+=== done Sat Aug  1 17:06:43 EDT 2026 ===
+/orcd/pool/007/pablomer/outputs/contrastive_anomalies:
+total 1.4G
+drwxrwxr-x 2 pablomer pablomer   12 Jul 29 23:42 compare474k
+drwxrwxr-x 3 pablomer pablomer   25 Jul 29 19:47 control
+drwxrwxr-x 2 pablomer pablomer   27 Aug  1 17:06 figures_jepa-ae-hsc
+drwxrwxr-x 2 pablomer pablomer   27 Jul 31 21:03 figures_jepa-cf
+drwxrwxr-x 2 pablomer pablomer    6 Aug  1 15:51 figures_jepa-cf_160
+drwxrwxr-x 2 pablomer pablomer   27 Jul 31 20:57 figures_jepa-cross
+drwxrwxr-x 2 pablomer pablomer    6 Aug  1 15:51 figures_jepa-cross_160
+drwxrwxr-x 2 pablomer pablomer   27 Jul 31 20:52 figures_jepa-hsc-resnet
+drwxrwxr-x 2 pablomer pablomer    6 Aug  1 15:51 figures_jepa-hsc-resnet_160
+drwxrwxr-x 2 pablomer pablomer   27 Jul 31 20:56 figures_jepa-hsc-vit
+drwxrwxr-x 2 pablomer pablomer    6 Aug  1 15:51 figures_jepa-hsc-vit_160
+drwxrwxr-x 2 pablomer pablomer   27 Aug  1 16:04 figures_ours-fmbase
+drwxrwxr-x 2 pablomer pablomer    6 Aug  1 16:07 figures_ours-fmbase_160
+drwxrwxr-x 2 pablomer pablomer   51 Jul 28 01:31 figures_spatial-conv1x1
+drwxrwxr-x 2 pablomer pablomer    6 Aug  1 15:52 figures_spatial-conv1x1_160
+drwxrwxr-x 2 pablomer pablomer   14 Jul 29 23:40 flows474k
+-rw------- 1 pablomer pablomer 128M Aug  1 16:53 latents_jepa-ae-hsc.h5
+-rw------- 1 pablomer pablomer 127M Jul 31 20:53 latents_jepa-cf.h5
+-rw------- 1 pablomer pablomer 125M Jul 31 20:46 latents_jepa-cross.h5
+-rw------- 1 pablomer pablomer 126M Jul 31 20:42 latents_jepa-hsc-resnet.h5
+-rw------- 1 pablomer pablomer 360M Jul 31 20:42 latents_jepa-hsc-vit.h5
+-rw------- 1 pablomer pablomer 128M Aug  1 15:54 latents_ours-fmbase.h5
+-rw------- 1 pablomer pablomer 128M Jul 27 23:16 latents_spatial-conv1x1.h5
+-rw------- 1 pablomer pablomer 220M Jul 29 22:46 latents_spatial-conv1x1_hscdown_474k.h5
+-rw-rw-r-- 1 pablomer pablomer 4.7K Aug  1 17:06 lens_metrics_jepa-ae-hsc.csv
+-rw-rw-r-- 1 pablomer pablomer 4.4K Jul 31 21:03 lens_metrics_jepa-cf.csv
+-rw-rw-r-- 1 pablomer pablomer 4.2K Jul 31 20:56 lens_metrics_jepa-cross.csv
+-rw-rw-r-- 1 pablomer pablomer 5.2K Jul 31 20:52 lens_metrics_jepa-hsc-resnet.csv
+-rw-rw-r-- 1 pablomer pablomer 4.3K Jul 31 20:56 lens_metrics_jepa-hsc-vit.csv
+-rw-rw-r-- 1 pablomer pablomer 4.5K Aug  1 16:04 lens_metrics_ours-fmbase.csv
+-rw-rw-r-- 1 pablomer pablomer 4.5K Jul 27 23:27 lens_metrics_spatial-conv1x1.csv
+-rw-rw-r-- 1 pablomer pablomer 2.8M Jul 29 23:09 pool367k_rows.npy
+-rw------- 1 pablomer pablomer 7.8M Aug  1 17:06 scores_jepa-ae-hsc.h5
+-rw------- 1 pablomer pablomer 7.8M Jul 31 21:03 scores_jepa-cf.h5
+-rw------- 1 pablomer pablomer 7.8M Jul 31 20:56 scores_jepa-cross.h5
+-rw------- 1 pablomer pablomer 7.8M Jul 31 20:52 scores_jepa-hsc-resnet.h5
+-rw------- 1 pablomer pablomer 7.8M Jul 31 20:56 scores_jepa-hsc-vit.h5
+-rw------- 1 pablomer pablomer 7.8M Aug  1 16:04 scores_ours-fmbase.h5
+-rw------- 1 pablomer pablomer 7.8M Jul 27 23:27 scores_spatial-conv1x1.h5
+-rw------- 1 pablomer pablomer  10M Jul 29 23:03 scores_spatial-conv1x1_hscdown_474k.h5
+-rw-rw-r-- 1 pablomer pablomer  16K Aug  1 17:06 space_agreement_jepa-ae-hsc.csv
+-rw-rw-r-- 1 pablomer pablomer  16K Jul 31 21:03 space_agreement_jepa-cf.csv
+-rw-rw-r-- 1 pablomer pablomer  16K Jul 31 20:56 space_agreement_jepa-cross.csv
+-rw-rw-r-- 1 pablomer pablomer  16K Jul 31 20:52 space_agreement_jepa-hsc-resnet.csv
+-rw-rw-r-- 1 pablomer pablomer  16K Jul 31 20:56 space_agreement_jepa-hsc-vit.csv
+-rw-rw-r-- 1 pablomer pablomer  16K Aug  1 16:04 space_agreement_ours-fmbase.csv
+-rw-rw-r-- 1 pablomer pablomer  16K Jul 27 23:27 space_agreement_spatial-conv1x1.csv
+-rw-rw-r-- 1 pablomer pablomer 4.2K Aug  1 17:06 summary_jepa-ae-hsc.md
+-rw-rw-r-- 1 pablomer pablomer 4.2K Jul 31 21:03 summary_jepa-cf.md
+-rw-rw-r-- 1 pablomer pablomer 4.2K Jul 31 20:56 summary_jepa-cross.md
+-rw-rw-r-- 1 pablomer pablomer 4.3K Jul 31 20:52 summary_jepa-hsc-resnet.md
+-rw-rw-r-- 1 pablomer pablomer 4.2K Jul 31 20:56 summary_jepa-hsc-vit.md
+-rw-rw-r-- 1 pablomer pablomer 4.2K Aug  1 16:04 summary_ours-fmbase.md
+-rw-rw-r-- 1 pablomer pablomer 4.3K Jul 27 23:27 summary_spatial-conv1x1.md
+
+/orcd/pool/007/pablomer/outputs/contrastive_anomalies/figures_jepa-ae-hsc:
+total 3.8M
+-rw-rw-r-- 1 pablomer pablomer 173K Aug  1 17:06 joint_top12_flow_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 150K Aug  1 17:06 joint_top12_iforest_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 178K Aug  1 17:06 joint_top12_knn_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 182K Aug  1 17:06 joint_top12_mahal_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 162K Aug  1 17:06 roc_lens_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 129K Aug  1 17:06 top12_instrument_hsc_flow_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 105K Aug  1 17:06 top12_instrument_hsc_iforest_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 134K Aug  1 17:06 top12_instrument_hsc_knn_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 139K Aug  1 17:06 top12_instrument_hsc_mahal_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 127K Aug  1 17:06 top12_instrument_legacy_flow_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 105K Aug  1 17:06 top12_instrument_legacy_iforest_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 134K Aug  1 17:06 top12_instrument_legacy_knn_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 135K Aug  1 17:06 top12_instrument_legacy_mahal_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 129K Aug  1 17:06 top12_physics_hsc_flow_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 105K Aug  1 17:06 top12_physics_hsc_iforest_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 134K Aug  1 17:06 top12_physics_hsc_knn_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 139K Aug  1 17:06 top12_physics_hsc_mahal_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 127K Aug  1 17:06 top12_physics_legacy_flow_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 105K Aug  1 17:06 top12_physics_legacy_iforest_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 134K Aug  1 17:06 top12_physics_legacy_knn_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 135K Aug  1 17:06 top12_physics_legacy_mahal_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 116K Aug  1 17:06 top12_physics_mean_flow_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 108K Aug  1 17:06 top12_physics_mean_iforest_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 133K Aug  1 17:06 top12_physics_mean_knn_jepa-ae-hsc.png
+-rw-rw-r-- 1 pablomer pablomer 137K Aug  1 17:06 top12_physics_mean_mahal_jepa-ae-hsc.png

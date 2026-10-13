@@ -1,0 +1,9 @@
+[collapse] ae-hsc  ckpt=latest-step=100000.ckpt  n=1024  single_encoder=True  device=cuda
+  physics/e1     dim=  64  norm_std=0.0797 (rel 0.64, centered 0.98)  eff_rank=22.8  top1_var=0.301  -> healthy
+[umap-jepa] loaded AEHSCModule single_encoder=True
+[NeighborsRAM48Dataset] 103,741 anchors / 468,197 rows | in_ram=False | max_neighbors=0 | random_neighbors=False
+[umap-jepa] encoded dim=64 in 0.3s (load 0.4s)
+[umap-jepa] pair/unpaired ratios: e1=0.6504 e2=0.6504
+[umap-jepa] wrote umap_both_encoders_zdim64_zoom_flat_jepa-ae-hsc_ae-hsc-j19458633_data.npz + umap_both_encoders_zdim64_zoom_flat_jepa-ae-hsc_ae-hsc-j19458633_metadata.json
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/jepa_ablation/results/umap/umap_both_encoders_zdim64_zoom_flat_jepa-ae-hsc_ae-hsc-j19458633_tuned.png
+[umap-jepa] total 28.3s — png=/orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/jepa_ablation/results/umap/umap_both_encoders_zdim64_zoom_flat_jepa-ae-hsc_ae-hsc-j19458633_tuned.png
