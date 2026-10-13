@@ -1,0 +1,21 @@
+[arm] ARM=base-instrument POOL=367k host=node4900 part=pg_mki_aryeh
+NVIDIA H200
+[pool] restricting to the paper pool: 366,706 rows
+[fit] base-instrument / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=31.0263
+      epoch 10/50  loss=9.1073
+      epoch 20/50  loss=6.7475
+      epoch 30/50  loss=5.5253
+      epoch 40/50  loss=4.6780
+      epoch 50/50  loss=4.0486
+[fit] base-instrument/std done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_base-instrument_std_367k.h5
+[fit] base-instrument / raw  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=-24.2304
+      epoch 10/50  loss=-51.4499
+      epoch 20/50  loss=-54.0868
+      epoch 30/50  loss=-55.4760
+      epoch 40/50  loss=-56.3738
+      epoch 50/50  loss=-57.0664
+[fit] base-instrument/raw done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_base-instrument_raw_367k.h5

@@ -1,0 +1,21 @@
+[arm] ARM=contra-instrument POOL=367k host=node4900 part=pg_mki_aryeh
+NVIDIA H200
+[pool] restricting to the paper pool: 366,706 rows
+[fit] contra-instrument / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=-4.6713
+      epoch 10/50  loss=-35.0055
+      epoch 20/50  loss=-37.1354
+      epoch 30/50  loss=-38.1838
+      epoch 40/50  loss=-38.9081
+      epoch 50/50  loss=-39.4204
+[fit] contra-instrument/std done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_contra-instrument_std_367k.h5
+[fit] contra-instrument / raw  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=9.8556
+      epoch 10/50  loss=-21.6718
+      epoch 20/50  loss=-23.9865
+      epoch 30/50  loss=-25.1472
+      epoch 40/50  loss=-25.8768
+      epoch 50/50  loss=-26.4311
+[fit] contra-instrument/raw done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_contra-instrument_raw_367k.h5

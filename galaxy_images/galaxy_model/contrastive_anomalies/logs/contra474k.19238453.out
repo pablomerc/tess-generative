@@ -1,0 +1,45 @@
+[setup] python=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python  host=node3404
+[encode] ckpt   : /orcd/pool/007/pablomer/checkpoints_new/contrastive-spatial-conv1x1/best-epoch=53-step=83000.ckpt
+[encode] device : cuda
+[encode] pool=conv1x1  class=DualEncoderContrastiveModule
+[encode] corpus: 474,954 galaxies (4x48x48, view='ours')
+[encode] 25,600/474,954  (11,344 img/s, ETA 0.7 min)
+[encode] 51,200/474,954  (14,426 img/s, ETA 0.5 min)
+[encode] 76,800/474,954  (15,594 img/s, ETA 0.4 min)
+[encode] 102,400/474,954  (16,803 img/s, ETA 0.4 min)
+[encode] 128,000/474,954  (17,563 img/s, ETA 0.3 min)
+[encode] 153,600/474,954  (18,102 img/s, ETA 0.3 min)
+[encode] 179,200/474,954  (18,511 img/s, ETA 0.3 min)
+[encode] 204,800/474,954  (18,649 img/s, ETA 0.2 min)
+[encode] 230,400/474,954  (18,776 img/s, ETA 0.2 min)
+[encode] 256,000/474,954  (19,015 img/s, ETA 0.2 min)
+[encode] 281,600/474,954  (18,929 img/s, ETA 0.2 min)
+[encode] 307,200/474,954  (19,027 img/s, ETA 0.1 min)
+[encode] 332,800/474,954  (18,900 img/s, ETA 0.1 min)
+[encode] 358,400/474,954  (18,992 img/s, ETA 0.1 min)
+[encode] 384,000/474,954  (19,031 img/s, ETA 0.1 min)
+[encode] 409,600/474,954  (18,942 img/s, ETA 0.1 min)
+[encode] 435,200/474,954  (18,972 img/s, ETA 0.0 min)
+[encode] 460,800/474,954  (19,019 img/s, ETA 0.0 min)
+[encode] done in 0.4 min
+[encode] saved /orcd/pool/007/pablomer/outputs/contrastive_anomalies/latents_spatial-conv1x1_hscdown_474k.h5
+[encode] physics_hsc      (474954, 64)  mean=+0.306 std=1.659
+[encode] instrument_hsc   (474954, 64)  mean=+0.154 std=1.456
+[fit] n=474,954  train=379,963  standardize=True
+[fit] physics_hsc :: NSF (50 epochs)
+    NSF epoch 1/50  loss=17.3611
+    NSF epoch 10/50  loss=-20.8051
+    NSF epoch 20/50  loss=-27.3985
+    NSF epoch 30/50  loss=-30.9305
+    NSF epoch 40/50  loss=-33.3844
+    NSF epoch 50/50  loss=-35.2805
+[fit] physics_hsc done in 8.6 min
+[fit] instrument_hsc :: NSF (50 epochs)
+    NSF epoch 1/50  loss=-7.9391
+    NSF epoch 10/50  loss=-34.2223
+    NSF epoch 20/50  loss=-36.1988
+    NSF epoch 30/50  loss=-37.2242
+    NSF epoch 40/50  loss=-37.8977
+    NSF epoch 50/50  loss=-38.4089
+[fit] instrument_hsc done in 8.6 min
+[fit] saved /orcd/pool/007/pablomer/outputs/contrastive_anomalies/scores_spatial-conv1x1_hscdown_474k.h5

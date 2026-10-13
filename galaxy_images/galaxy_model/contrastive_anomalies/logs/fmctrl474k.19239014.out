@@ -1,0 +1,15 @@
+[setup] python=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python  host=node3006
+Loading model from /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/frozen/fm-control-75k-fixed.ckpt
+  cross_attention_dim=16
+  Encoding 474954 examples (total: 474954)
+  raw_index: (474954,)
+  hsc_flat:  (474954, 64)  (n_tokens=4, cross_dim=16)
+  hsc_mean:  (474954, 16)
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_latents_ours_fmctrl_474k.h5
+Loading model from /orcd/pool/007/pablomer/checkpoints_new/diffusion_ablation/frozen/fm-control-75k-fixed.ckpt
+  instrument_zdim=None
+  Encoding 474954 examples (total: 474954)
+  raw_index: (474954,)
+  hsc_flat:  (474954, 64)  (n_tokens=4)
+  hsc_mean:  (474954, 16)
+Saved: /orcd/pool/007/pablomer/tess-generative/galaxy_images/galaxy_model/anomaly_detection/outputs/anomaly_latents_ins_fmctrl_474k.h5

@@ -1,0 +1,21 @@
+[arm] ARM=fmctrl-instrument POOL=367k host=node3007 part=mit_normal_gpu
+NVIDIA L40S
+[pool] restricting to the paper pool: 366,706 rows
+[fit] fmctrl-instrument / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=49.9877
+      epoch 10/50  loss=36.3336
+      epoch 20/50  loss=35.0734
+      epoch 30/50  loss=34.4247
+      epoch 40/50  loss=33.9469
+      epoch 50/50  loss=33.6177
+[fit] fmctrl-instrument/std done in 6.0 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_fmctrl-instrument_std_367k.h5
+[fit] fmctrl-instrument / raw  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=-7.1288
+      epoch 10/50  loss=-24.3996
+      epoch 20/50  loss=-25.8376
+      epoch 30/50  loss=-26.5781
+      epoch 40/50  loss=-27.0838
+      epoch 50/50  loss=-27.4494
+[fit] fmctrl-instrument/raw done in 6.0 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_fmctrl-instrument_raw_367k.h5

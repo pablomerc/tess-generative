@@ -1,0 +1,5 @@
+[setup] python=/orcd/home/002/pablomer/miniforge3/envs/torchenv/bin/python  host=node3006
+[pool] restricting to the paper pool: 366,706 rows
+[fit] base-physics / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=42.6333
+      epoch 10/50  loss=16.7416

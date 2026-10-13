@@ -1,0 +1,21 @@
+[arm] ARM=contra-physics POOL=367k host=node4900 part=pg_mki_aryeh
+NVIDIA H200
+[pool] restricting to the paper pool: 366,706 rows
+[fit] contra-physics / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=21.2246
+      epoch 10/50  loss=-18.5436
+      epoch 20/50  loss=-25.4431
+      epoch 30/50  loss=-29.1153
+      epoch 40/50  loss=-31.6042
+      epoch 50/50  loss=-33.5619
+[fit] contra-physics/std done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_contra-physics_std_367k.h5
+[fit] contra-physics / raw  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=58.2858
+      epoch 10/50  loss=16.9864
+      epoch 20/50  loss=10.2442
+      epoch 30/50  loss=6.4333
+      epoch 40/50  loss=3.8336
+      epoch 50/50  loss=1.9288
+[fit] contra-physics/raw done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_contra-physics_raw_367k.h5

@@ -1,0 +1,3 @@
+[pool] restricting to the paper pool: 366,706 rows
+[fit] base-physics / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=42.6333

@@ -1,0 +1,21 @@
+[arm] ARM=fmctrl-physics POOL=367k host=node4900 part=pg_mki_aryeh
+NVIDIA H200
+[pool] restricting to the paper pool: 366,706 rows
+[fit] fmctrl-physics / std  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=53.0616
+      epoch 10/50  loss=34.6558
+      epoch 20/50  loss=32.1096
+      epoch 30/50  loss=30.6455
+      epoch 40/50  loss=29.6595
+      epoch 50/50  loss=28.9010
+[fit] fmctrl-physics/std done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_fmctrl-physics_std_367k.h5
+[fit] fmctrl-physics / raw  n=366,706 dim=64 train=293,364
+      epoch 1/50  loss=51.2246
+      epoch 10/50  loss=30.9019
+      epoch 20/50  loss=28.0220
+      epoch 30/50  loss=26.4428
+      epoch 40/50  loss=25.3900
+      epoch 50/50  loss=24.6614
+[fit] fmctrl-physics/raw done in 6.6 min (finite 366,706/366,706)
+[fit] wrote /orcd/pool/007/pablomer/outputs/contrastive_anomalies/flows474k/scores_fmctrl-physics_raw_367k.h5

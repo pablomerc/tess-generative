@@ -1,0 +1,428 @@
+
+=== variant std (standardized) — arms: ['base-physics', 'base-instrument', 'contra-physics', 'contra-instrument', 'fmctrl-physics', 'fmctrl-instrument'] ===
+[stamps] fetching 49 rows...
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_base_367k_std.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_contra_367k_std.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_fmctrl_367k_std.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_all_367k_std.png
+[report] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/report_367k_std.md
+# Top-12 overlap — 367k pool (366,706 galaxies) — standardized flows
+
+Pool: 366,706 HSC galaxies — the paper-figure pool. Dedup: 10.0" RA/Dec. Sky match: 5.0". Panel indices refer to these figures.
+
+| arm | dedup dropped | rank of #1..#12 |
+|---|---|---|
+| Ours (Physics) | 12 | 1, 3, 5, 9, 11, 12, 16, 17, 18, 19, 22, 24 |
+| Ours (Instrument) | 5 | 1, 2, 3, 5, 6, 7, 8, 9, 12, 13, 15, 17 |
+| Contrastive (Physics) | 0 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 |
+| Contrastive (Instrument) | 3 | 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14, 15 |
+| FM-control (Physics) | 20 | 1, 2, 10, 14, 15, 20, 23, 25, 27, 30, 31, 32 |
+| FM-control (Instrument) | 3 | 1, 2, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15 |
+
+## Pairwise counts (physics / instrument of the target model)
+
+| source arm | → base | → contrastive | → FM control |
+|---|---|---|---|
+| Ours (Physics) | — | 2p / 0i | 9p / 0i |
+| Ours (Instrument) | — | 2p / 6i | 0p / 6i |
+| Contrastive (Physics) | 2p / 2i | — | 2p / 2i |
+| Contrastive (Instrument) | 0p / 6i | — | 0p / 7i |
+| FM-control (Physics) | 9p / 0i | 2p / 0i | — |
+| FM-control (Instrument) | 0p / 6i | 2p / 7i | — |
+
+## Sentences
+
+**Ours (Physics) → Contrastive (spatial-conv1x1)**  (2/12 in its physics, 0/12 in its instrument)
+- #1 is in neither top-12 (ranks 90 physics / 7,308 instrument of 366,706).
+- #2 is in neither top-12 (ranks 75 physics / 2,247 instrument of 366,706).
+- #3 is the **#3 physics** anomaly of Contrastive (spatial-conv1x1).
+- #4 is in neither top-12 (ranks 213 physics / 17,249 instrument of 366,706).
+- #5 is in neither top-12 (ranks 258 physics / 11,361 instrument of 366,706).
+- #6 is in neither top-12 (ranks 73 physics / 1,512 instrument of 366,706).
+- #7 is in neither top-12 (ranks 65 physics / 5,446 instrument of 366,706).
+- #8 is in neither top-12 (ranks 691 physics / 6,331 instrument of 366,706).
+- #9 is in neither top-12 (ranks 501 physics / 11,160 instrument of 366,706).
+- #10 is in neither top-12 (ranks 153 physics / 4,294 instrument of 366,706).
+- #11 is the **#2 physics** anomaly of Contrastive (spatial-conv1x1).
+- #12 is in neither top-12 (ranks 250 physics / 10,815 instrument of 366,706).
+
+**Ours (Physics) → FM control (diffusion ablation)**  (9/12 in its physics, 0/12 in its instrument)
+- #1 is the **#1 physics** anomaly of FM control (diffusion ablation).
+- #2 is the **#2 physics** anomaly of FM control (diffusion ablation).
+- #3 is the **#10 physics** anomaly of FM control (diffusion ablation).
+- #4 is the **#4 physics** anomaly of FM control (diffusion ablation).
+- #5 is the **#7 physics** anomaly of FM control (diffusion ablation).
+- #6 is the **#3 physics** anomaly of FM control (diffusion ablation).
+- #7 is in neither top-12 (ranks 37 physics / 128 instrument of 366,706).
+- #8 is the **#11 physics** anomaly of FM control (diffusion ablation).
+- #9 is the **#6 physics** anomaly of FM control (diffusion ablation).
+- #10 is in neither top-12 (ranks 69 physics / 264 instrument of 366,706).
+- #11 is the **#9 physics** anomaly of FM control (diffusion ablation).
+- #12 is in neither top-12 (ranks 93 physics / 418 instrument of 366,706).
+
+**Ours (Instrument) → Contrastive (spatial-conv1x1)**  (2/12 in its physics, 6/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #2 is the **#1 physics** anomaly and the **#6 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #3 is in neither top-12 (ranks 160 physics / 16 instrument of 366,706).
+- #4 is the **#9 physics** anomaly of Contrastive (spatial-conv1x1).
+- #5 is the **#2 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #6 is the **#7 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #7 is in neither top-12 (ranks 455 physics / 319 instrument of 366,706).
+- #8 is in neither top-12 (ranks 188 physics / 24 instrument of 366,706).
+- #9 is in neither top-12 (ranks 308 physics / 43 instrument of 366,706).
+- #10 is the **#9 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #11 is in neither top-12 (ranks 685 physics / 64 instrument of 366,706).
+- #12 is the **#4 instrument** anomaly of Contrastive (spatial-conv1x1).
+
+**Ours (Instrument) → FM control (diffusion ablation)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of FM control (diffusion ablation).
+- #2 is the **#3 instrument** anomaly of FM control (diffusion ablation).
+- #3 is in neither top-12 (ranks 328 physics / 19 instrument of 366,706).
+- #4 is the **#7 instrument** anomaly of FM control (diffusion ablation).
+- #5 is the **#2 instrument** anomaly of FM control (diffusion ablation).
+- #6 is the **#5 instrument** anomaly of FM control (diffusion ablation).
+- #7 is in neither top-12 (ranks 792 physics / 120 instrument of 366,706).
+- #8 is in neither top-12 (ranks 941 physics / 21 instrument of 366,706).
+- #9 is in neither top-12 (ranks 456 physics / 26 instrument of 366,706).
+- #10 is in neither top-12 (ranks 1,824 physics / 31 instrument of 366,706).
+- #11 is in neither top-12 (ranks 1,781 physics / 17 instrument of 366,706).
+- #12 is the **#6 instrument** anomaly of FM control (diffusion ablation).
+
+**Contrastive (Physics) → Base (paper ckpt)**  (2/12 in its physics, 2/12 in its instrument)
+- #1 is the **#2 instrument** anomaly of Base (paper ckpt).
+- #2 is the **#11 physics** anomaly of Base (paper ckpt).
+- #3 is the **#3 physics** anomaly of Base (paper ckpt).
+- #4 is in neither top-12 (ranks 230 physics / 550 instrument of 366,706).
+- #5 is in neither top-12 (ranks 154 physics / 337 instrument of 366,706).
+- #6 is in neither top-12 (ranks 186 physics / 494 instrument of 366,706).
+- #7 is in neither top-12 (ranks 193 physics / 438 instrument of 366,706).
+- #8 is in neither top-12 (ranks 89 physics / 996 instrument of 366,706).
+- #9 is the **#4 instrument** anomaly of Base (paper ckpt).
+- #10 is in neither top-12 (ranks 158 physics / 35 instrument of 366,706).
+- #11 is in neither top-12 (ranks 70 physics / 190 instrument of 366,706).
+- #12 is in neither top-12 (ranks 968 physics / 186 instrument of 366,706).
+
+**Contrastive (Physics) → FM control (diffusion ablation)**  (2/12 in its physics, 2/12 in its instrument)
+- #1 is the **#3 instrument** anomaly of FM control (diffusion ablation).
+- #2 is the **#9 physics** anomaly of FM control (diffusion ablation).
+- #3 is the **#10 physics** anomaly of FM control (diffusion ablation).
+- #4 is in neither top-12 (ranks 282 physics / 322 instrument of 366,706).
+- #5 is in neither top-12 (ranks 327 physics / 200 instrument of 366,706).
+- #6 is in neither top-12 (ranks 230 physics / 425 instrument of 366,706).
+- #7 is in neither top-12 (ranks 427 physics / 253 instrument of 366,706).
+- #8 is in neither top-12 (ranks 145 physics / 808 instrument of 366,706).
+- #9 is the **#7 instrument** anomaly of FM control (diffusion ablation).
+- #10 is in neither top-12 (ranks 207 physics / 50 instrument of 366,706).
+- #11 is in neither top-12 (ranks 102 physics / 283 instrument of 366,706).
+- #12 is in neither top-12 (ranks 2,828 physics / 135 instrument of 366,706).
+
+**Contrastive (Instrument) → Base (paper ckpt)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of Base (paper ckpt).
+- #2 is the **#5 instrument** anomaly of Base (paper ckpt).
+- #3 is in neither top-12 (ranks 94,862 physics / 574 instrument of 366,706).
+- #4 is the **#12 instrument** anomaly of Base (paper ckpt).
+- #5 is in neither top-12 (ranks 1,336 physics / 4 instrument of 366,706).
+- #6 is the **#2 instrument** anomaly of Base (paper ckpt).
+- #7 is the **#6 instrument** anomaly of Base (paper ckpt).
+- #8 is in neither top-12 (ranks 1,386 physics / 321 instrument of 366,706).
+- #9 is the **#10 instrument** anomaly of Base (paper ckpt).
+- #10 is in neither top-12 (ranks 805 physics / 559 instrument of 366,706).
+- #11 is in neither top-12 (ranks 7,948 physics / 82 instrument of 366,706).
+- #12 is in neither top-12 (ranks 31,823 physics / 140 instrument of 366,706).
+
+**Contrastive (Instrument) → FM control (diffusion ablation)**  (0/12 in its physics, 7/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of FM control (diffusion ablation).
+- #2 is the **#2 instrument** anomaly of FM control (diffusion ablation).
+- #3 is in neither top-12 (ranks 29,971 physics / 477 instrument of 366,706).
+- #4 is the **#6 instrument** anomaly of FM control (diffusion ablation).
+- #5 is the **#11 instrument** anomaly of FM control (diffusion ablation).
+- #6 is the **#3 instrument** anomaly of FM control (diffusion ablation).
+- #7 is the **#5 instrument** anomaly of FM control (diffusion ablation).
+- #8 is in neither top-12 (ranks 380 physics / 45 instrument of 366,706).
+- #9 is in neither top-12 (ranks 1,824 physics / 31 instrument of 366,706).
+- #10 is in neither top-12 (ranks 1,208 physics / 244 instrument of 366,706).
+- #11 is in neither top-12 (ranks 12,769 physics / 54 instrument of 366,706).
+- #12 is the **#9 instrument** anomaly of FM control (diffusion ablation).
+
+**FM-control (Physics) → Base (paper ckpt)**  (9/12 in its physics, 0/12 in its instrument)
+- #1 is the **#1 physics** anomaly of Base (paper ckpt).
+- #2 is the **#2 physics** anomaly of Base (paper ckpt).
+- #3 is the **#6 physics** anomaly of Base (paper ckpt).
+- #4 is the **#4 physics** anomaly of Base (paper ckpt).
+- #5 is in neither top-12 (ranks 37 physics / 130 instrument of 366,706).
+- #6 is the **#9 physics** anomaly of Base (paper ckpt).
+- #7 is the **#5 physics** anomaly of Base (paper ckpt).
+- #8 is in neither top-12 (ranks 80 physics / 72 instrument of 366,706).
+- #9 is the **#11 physics** anomaly of Base (paper ckpt).
+- #10 is the **#3 physics** anomaly of Base (paper ckpt).
+- #11 is the **#8 physics** anomaly of Base (paper ckpt).
+- #12 is in neither top-12 (ranks 57 physics / 357 instrument of 366,706).
+
+**FM-control (Physics) → Contrastive (spatial-conv1x1)**  (2/12 in its physics, 0/12 in its instrument)
+- #1 is in neither top-12 (ranks 90 physics / 7,308 instrument of 366,706).
+- #2 is in neither top-12 (ranks 75 physics / 2,247 instrument of 366,706).
+- #3 is in neither top-12 (ranks 531 physics / 5,258 instrument of 366,706).
+- #4 is in neither top-12 (ranks 842 physics / 32,363 instrument of 366,706).
+- #5 is in neither top-12 (ranks 2,530 physics / 32,310 instrument of 366,706).
+- #6 is in neither top-12 (ranks 7,156 physics / 14,290 instrument of 366,706).
+- #7 is in neither top-12 (ranks 258 physics / 11,361 instrument of 366,706).
+- #8 is in neither top-12 (ranks 1,040 physics / 21,207 instrument of 366,706).
+- #9 is the **#2 physics** anomaly of Contrastive (spatial-conv1x1).
+- #10 is the **#3 physics** anomaly of Contrastive (spatial-conv1x1).
+- #11 is in neither top-12 (ranks 691 physics / 6,331 instrument of 366,706).
+- #12 is in neither top-12 (ranks 386 physics / 12,891 instrument of 366,706).
+
+**FM-control (Instrument) → Base (paper ckpt)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of Base (paper ckpt).
+- #2 is the **#5 instrument** anomaly of Base (paper ckpt).
+- #3 is the **#2 instrument** anomaly of Base (paper ckpt).
+- #4 is in neither top-12 (ranks 2,315 physics / 20 instrument of 366,706).
+- #5 is the **#6 instrument** anomaly of Base (paper ckpt).
+- #6 is the **#12 instrument** anomaly of Base (paper ckpt).
+- #7 is the **#4 instrument** anomaly of Base (paper ckpt).
+- #8 is in neither top-12 (ranks 2,998 physics / 67 instrument of 366,706).
+- #9 is in neither top-12 (ranks 31,823 physics / 140 instrument of 366,706).
+- #10 is in neither top-12 (ranks 2,976 physics / 87 instrument of 366,706).
+- #11 is in neither top-12 (ranks 1,336 physics / 4 instrument of 366,706).
+- #12 is in neither top-12 (ranks 3,548 physics / 181 instrument of 366,706).
+
+**FM-control (Instrument) → Contrastive (spatial-conv1x1)**  (2/12 in its physics, 7/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #2 is the **#2 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #3 is the **#1 physics** anomaly and the **#6 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #4 is in neither top-12 (ranks 19 physics / 22 instrument of 366,706).
+- #5 is the **#7 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #6 is the **#4 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #7 is the **#9 physics** anomaly of Contrastive (spatial-conv1x1).
+- #8 is in neither top-12 (ranks 41 physics / 56 instrument of 366,706).
+- #9 is the **#12 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #10 is in neither top-12 (ranks 108 physics / 38 instrument of 366,706).
+- #11 is the **#5 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #12 is in neither top-12 (ranks 47 physics / 66 instrument of 366,706).
+
+## Internal purity (own physics top-12 vs own instrument top-12)
+- Base (paper ckpt): 0/12 objects in BOTH its panels.
+- Contrastive (spatial-conv1x1): 1/12 objects in BOTH its panels.
+- FM control (diffusion ablation): 0/12 objects in BOTH its panels.
+
+## Object IDs
+- **Ours (Physics)**: #1=37489781684335642, #2=38557952935750485, #3=37489635655450846, #4=38558777569466195, #5=37485387932781994, #6=37488969935513781, #7=43158747673028179, #8=42089880636902929, #9=42093874956490435, #10=37489085899625067, #11=37489253403350272, #12=43163532266595096
+- **Ours (Instrument)**: #1=42093866366549440, #2=42089597169046782, #3=42687997782542543, #4=42687602645541659, #5=41628635509049879, #6=42687602645542102, #7=37489781684312460, #8=42687997782542571, #9=42687997782542557, #10=42687997782542546, #11=42687602645542065, #12=41628635509049876
+- **Contrastive (Physics)**: #1=42089597169046782, #2=37489253403350228, #3=37489635655450846, #4=41619422804203461, #5=37489098784535530, #6=37484979910907788, #7=37485538256637427, #8=38558781864442237, #9=42687602645541659, #10=41619676207266720, #11=42089605758999871, #12=37488957050611750
+- **Contrastive (Instrument)**: #1=42093866366549440, #2=41628635509049879, #3=41619431394141083, #4=41628635509049876, #5=42687997782542552, #6=42089597169046782, #7=42687602645542102, #8=42089597169046779, #9=42687997782542546, #10=44218651112399407, #11=37494312874814842, #12=37494312874814853
+- **FM-control (Physics)**: #1=37489781684335642, #2=38557952935750485, #3=37488969935513768, #4=38558777569466182, #5=44227447205420001, #6=42093874956490431, #7=37485387932781994, #8=41619693387152997, #9=37489253403350272, #10=37489635655450846, #11=42089880636902929, #12=37489090194602538
+- **FM-control (Instrument)**: #1=42093866366549440, #2=41628635509049879, #3=42089597169046782, #4=42687602645541649, #5=42687602645542102, #6=41628635509049876, #7=42687602645541659, #8=38549436015601973, #9=37494312874814853, #10=38549436015601932, #11=42687997782542552, #12=38549436015601962
+
+=== variant raw (unstandardized) — arms: ['base-physics', 'base-instrument', 'contra-physics', 'contra-instrument', 'fmctrl-physics', 'fmctrl-instrument'] ===
+[stamps] fetching 54 rows...
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_base_367k_raw.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_contra_367k_raw.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_fmctrl_367k_raw.png
+[plot] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/joint_all_367k_raw.png
+[report] /orcd/pool/007/pablomer/outputs/contrastive_anomalies/compare474k/report_367k_raw.md
+# Top-12 overlap — 367k pool (366,706 galaxies) — unstandardized flows
+
+Pool: 366,706 HSC galaxies — the paper-figure pool. Dedup: 10.0" RA/Dec. Sky match: 5.0". Panel indices refer to these figures.
+
+| arm | dedup dropped | rank of #1..#12 |
+|---|---|---|
+| Ours (Physics) | 20 | 1, 3, 8, 10, 13, 14, 15, 16, 18, 23, 24, 32 |
+| Ours (Instrument) | 3 | 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14, 15 |
+| Contrastive (Physics) | 9 | 1, 2, 6, 8, 9, 11, 13, 14, 15, 18, 20, 21 |
+| Contrastive (Instrument) | 3 | 1, 2, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15 |
+| FM-control (Physics) | 17 | 1, 2, 9, 12, 13, 16, 17, 19, 24, 25, 28, 29 |
+| FM-control (Instrument) | 2 | 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14 |
+
+## Pairwise counts (physics / instrument of the target model)
+
+| source arm | → base | → contrastive | → FM control |
+|---|---|---|---|
+| Ours (Physics) | — | 5p / 0i | 8p / 0i |
+| Ours (Instrument) | — | 0p / 6i | 0p / 8i |
+| Contrastive (Physics) | 5p / 0i | — | 5p / 0i |
+| Contrastive (Instrument) | 0p / 6i | — | 0p / 6i |
+| FM-control (Physics) | 8p / 0i | 5p / 0i | — |
+| FM-control (Instrument) | 0p / 8i | 0p / 6i | — |
+
+## Sentences
+
+**Ours (Physics) → Contrastive (spatial-conv1x1)**  (5/12 in its physics, 0/12 in its instrument)
+- #1 is the **#3 physics** anomaly of Contrastive (spatial-conv1x1).
+- #2 is the **#1 physics** anomaly of Contrastive (spatial-conv1x1).
+- #3 is in neither top-12 (ranks 25 physics / 2,245 instrument of 366,706).
+- #4 is the **#5 physics** anomaly of Contrastive (spatial-conv1x1).
+- #5 is the **#7 physics** anomaly of Contrastive (spatial-conv1x1).
+- #6 is in neither top-12 (ranks 49 physics / 5,638 instrument of 366,706).
+- #7 is in neither top-12 (ranks 1,827 physics / 19,040 instrument of 366,706).
+- #8 is in neither top-12 (ranks 327 physics / 38,856 instrument of 366,706).
+- #9 is the **#9 physics** anomaly of Contrastive (spatial-conv1x1).
+- #10 is in neither top-12 (ranks 554 physics / 17,994 instrument of 366,706).
+- #11 is in neither top-12 (ranks 3,360 physics / 9,587 instrument of 366,706).
+- #12 is in neither top-12 (ranks 552 physics / 16,062 instrument of 366,706).
+
+**Ours (Physics) → FM control (diffusion ablation)**  (8/12 in its physics, 0/12 in its instrument)
+- #1 is the **#1 physics** anomaly of FM control (diffusion ablation).
+- #2 is the **#2 physics** anomaly of FM control (diffusion ablation).
+- #3 is in neither top-12 (ranks 45 physics / 702 instrument of 366,706).
+- #4 is the **#3 physics** anomaly of FM control (diffusion ablation).
+- #5 is the **#9 physics** anomaly of FM control (diffusion ablation).
+- #6 is in neither top-12 (ranks 54 physics / 3,172 instrument of 366,706).
+- #7 is the **#5 physics** anomaly of FM control (diffusion ablation).
+- #8 is the **#4 physics** anomaly of FM control (diffusion ablation).
+- #9 is the **#8 physics** anomaly of FM control (diffusion ablation).
+- #10 is the **#10 physics** anomaly of FM control (diffusion ablation).
+- #11 is in neither top-12 (ranks 62 physics / 27,453 instrument of 366,706).
+- #12 is in neither top-12 (ranks 75 physics / 29,830 instrument of 366,706).
+
+**Ours (Instrument) → Contrastive (spatial-conv1x1)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#9 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #2 is the **#2 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #3 is in neither top-12 (ranks 111 physics / 232 instrument of 366,706).
+- #4 is the **#7 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #5 is the **#3 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #6 is in neither top-12 (ranks 15,177 physics / 3,440 instrument of 366,706).
+- #7 is the **#1 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #8 is in neither top-12 (ranks 556 physics / 17 instrument of 366,706).
+- #9 is in neither top-12 (ranks 2,066 physics / 33 instrument of 366,706).
+- #10 is the **#10 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #11 is in neither top-12 (ranks 12,241 physics / 146 instrument of 366,706).
+- #12 is in neither top-12 (ranks 336 physics / 22 instrument of 366,706).
+
+**Ours (Instrument) → FM control (diffusion ablation)**  (0/12 in its physics, 8/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of FM control (diffusion ablation).
+- #2 is the **#4 instrument** anomaly of FM control (diffusion ablation).
+- #3 is in neither top-12 (ranks 1,281 physics / 17 instrument of 366,706).
+- #4 is the **#3 instrument** anomaly of FM control (diffusion ablation).
+- #5 is the **#5 instrument** anomaly of FM control (diffusion ablation).
+- #6 is the **#8 instrument** anomaly of FM control (diffusion ablation).
+- #7 is the **#2 instrument** anomaly of FM control (diffusion ablation).
+- #8 is the **#7 instrument** anomaly of FM control (diffusion ablation).
+- #9 is the **#10 instrument** anomaly of FM control (diffusion ablation).
+- #10 is in neither top-12 (ranks 4,918 physics / 37 instrument of 366,706).
+- #11 is in neither top-12 (ranks 831 physics / 35 instrument of 366,706).
+- #12 is in neither top-12 (ranks 1,001 physics / 19 instrument of 366,706).
+
+**Contrastive (Physics) → Base (paper ckpt)**  (5/12 in its physics, 0/12 in its instrument)
+- #1 is the **#2 physics** anomaly of Base (paper ckpt).
+- #2 is in neither top-12 (ranks 2,269 physics / 660 instrument of 366,706).
+- #3 is the **#1 physics** anomaly of Base (paper ckpt).
+- #4 is in neither top-12 (ranks 1,865 physics / 4,897 instrument of 366,706).
+- #5 is the **#4 physics** anomaly of Base (paper ckpt).
+- #6 is in neither top-12 (ranks 1,874 physics / 883 instrument of 366,706).
+- #7 is the **#5 physics** anomaly of Base (paper ckpt).
+- #8 is in neither top-12 (ranks 477 physics / 19,181 instrument of 366,706).
+- #9 is the **#9 physics** anomaly of Base (paper ckpt).
+- #10 is in neither top-12 (ranks 528 physics / 8,316 instrument of 366,706).
+- #11 is in neither top-12 (ranks 1,218 physics / 5,313 instrument of 366,706).
+- #12 is in neither top-12 (ranks 88 physics / 3,383 instrument of 366,706).
+
+**Contrastive (Physics) → FM control (diffusion ablation)**  (5/12 in its physics, 0/12 in its instrument)
+- #1 is the **#2 physics** anomaly of FM control (diffusion ablation).
+- #2 is in neither top-12 (ranks 1,734 physics / 425 instrument of 366,706).
+- #3 is the **#1 physics** anomaly of FM control (diffusion ablation).
+- #4 is in neither top-12 (ranks 883 physics / 4,648 instrument of 366,706).
+- #5 is the **#3 physics** anomaly of FM control (diffusion ablation).
+- #6 is in neither top-12 (ranks 826 physics / 784 instrument of 366,706).
+- #7 is the **#9 physics** anomaly of FM control (diffusion ablation).
+- #8 is in neither top-12 (ranks 662 physics / 32,440 instrument of 366,706).
+- #9 is the **#8 physics** anomaly of FM control (diffusion ablation).
+- #10 is in neither top-12 (ranks 396 physics / 8,080 instrument of 366,706).
+- #11 is in neither top-12 (ranks 1,228 physics / 6,722 instrument of 366,706).
+- #12 is in neither top-12 (ranks 164 physics / 8,522 instrument of 366,706).
+
+**Contrastive (Instrument) → Base (paper ckpt)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#7 instrument** anomaly of Base (paper ckpt).
+- #2 is the **#2 instrument** anomaly of Base (paper ckpt).
+- #3 is the **#5 instrument** anomaly of Base (paper ckpt).
+- #4 is in neither top-12 (ranks 11,916 physics / 20 instrument of 366,706).
+- #5 is in neither top-12 (ranks 3,483 physics / 90 instrument of 366,706).
+- #6 is in neither top-12 (ranks 16,391 physics / 24 instrument of 366,706).
+- #7 is the **#4 instrument** anomaly of Base (paper ckpt).
+- #8 is in neither top-12 (ranks 33,266 physics / 39 instrument of 366,706).
+- #9 is the **#1 instrument** anomaly of Base (paper ckpt).
+- #10 is the **#10 instrument** anomaly of Base (paper ckpt).
+- #11 is in neither top-12 (ranks 5,139 physics / 193 instrument of 366,706).
+- #12 is in neither top-12 (ranks 689 physics / 70 instrument of 366,706).
+
+**Contrastive (Instrument) → FM control (diffusion ablation)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#2 instrument** anomaly of FM control (diffusion ablation).
+- #2 is the **#4 instrument** anomaly of FM control (diffusion ablation).
+- #3 is the **#5 instrument** anomaly of FM control (diffusion ablation).
+- #4 is the **#12 instrument** anomaly of FM control (diffusion ablation).
+- #5 is in neither top-12 (ranks 855 physics / 61 instrument of 366,706).
+- #6 is in neither top-12 (ranks 16,827 physics / 21 instrument of 366,706).
+- #7 is the **#3 instrument** anomaly of FM control (diffusion ablation).
+- #8 is in neither top-12 (ranks 55,734 physics / 60 instrument of 366,706).
+- #9 is the **#1 instrument** anomaly of FM control (diffusion ablation).
+- #10 is in neither top-12 (ranks 4,918 physics / 37 instrument of 366,706).
+- #11 is in neither top-12 (ranks 3,368 physics / 523 instrument of 366,706).
+- #12 is in neither top-12 (ranks 7,349 physics / 93 instrument of 366,706).
+
+**FM-control (Physics) → Base (paper ckpt)**  (8/12 in its physics, 0/12 in its instrument)
+- #1 is the **#1 physics** anomaly of Base (paper ckpt).
+- #2 is the **#2 physics** anomaly of Base (paper ckpt).
+- #3 is the **#4 physics** anomaly of Base (paper ckpt).
+- #4 is the **#8 physics** anomaly of Base (paper ckpt).
+- #5 is the **#7 physics** anomaly of Base (paper ckpt).
+- #6 is in neither top-12 (ranks 44 physics / 1,377 instrument of 366,706).
+- #7 is in neither top-12 (ranks 55 physics / 22,986 instrument of 366,706).
+- #8 is the **#9 physics** anomaly of Base (paper ckpt).
+- #9 is the **#5 physics** anomaly of Base (paper ckpt).
+- #10 is the **#10 physics** anomaly of Base (paper ckpt).
+- #11 is in neither top-12 (ranks 57 physics / 25,842 instrument of 366,706).
+- #12 is in neither top-12 (ranks 37 physics / 255 instrument of 366,706).
+
+**FM-control (Physics) → Contrastive (spatial-conv1x1)**  (5/12 in its physics, 0/12 in its instrument)
+- #1 is the **#3 physics** anomaly of Contrastive (spatial-conv1x1).
+- #2 is the **#1 physics** anomaly of Contrastive (spatial-conv1x1).
+- #3 is the **#5 physics** anomaly of Contrastive (spatial-conv1x1).
+- #4 is in neither top-12 (ranks 169 physics / 40,484 instrument of 366,706).
+- #5 is in neither top-12 (ranks 351 physics / 9,347 instrument of 366,706).
+- #6 is in neither top-12 (ranks 78 physics / 20,544 instrument of 366,706).
+- #7 is in neither top-12 (ranks 355 physics / 41,926 instrument of 366,706).
+- #8 is the **#9 physics** anomaly of Contrastive (spatial-conv1x1).
+- #9 is the **#7 physics** anomaly of Contrastive (spatial-conv1x1).
+- #10 is in neither top-12 (ranks 758 physics / 11,636 instrument of 366,706).
+- #11 is in neither top-12 (ranks 2,841 physics / 24,534 instrument of 366,706).
+- #12 is in neither top-12 (ranks 38 physics / 16,317 instrument of 366,706).
+
+**FM-control (Instrument) → Base (paper ckpt)**  (0/12 in its physics, 8/12 in its instrument)
+- #1 is the **#1 instrument** anomaly of Base (paper ckpt).
+- #2 is the **#7 instrument** anomaly of Base (paper ckpt).
+- #3 is the **#4 instrument** anomaly of Base (paper ckpt).
+- #4 is the **#2 instrument** anomaly of Base (paper ckpt).
+- #5 is the **#5 instrument** anomaly of Base (paper ckpt).
+- #6 is in neither top-12 (ranks 30,289 physics / 42 instrument of 366,706).
+- #7 is the **#8 instrument** anomaly of Base (paper ckpt).
+- #8 is the **#6 instrument** anomaly of Base (paper ckpt).
+- #9 is in neither top-12 (ranks 4,880 physics / 17 instrument of 366,706).
+- #10 is the **#9 instrument** anomaly of Base (paper ckpt).
+- #11 is in neither top-12 (ranks 7,482 physics / 38 instrument of 366,706).
+- #12 is in neither top-12 (ranks 11,916 physics / 20 instrument of 366,706).
+
+**FM-control (Instrument) → Contrastive (spatial-conv1x1)**  (0/12 in its physics, 6/12 in its instrument)
+- #1 is the **#9 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #2 is the **#1 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #3 is the **#7 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #4 is the **#2 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #5 is the **#3 instrument** anomaly of Contrastive (spatial-conv1x1).
+- #6 is in neither top-12 (ranks 16,388 physics / 19 instrument of 366,706).
+- #7 is in neither top-12 (ranks 556 physics / 17 instrument of 366,706).
+- #8 is in neither top-12 (ranks 15,177 physics / 3,440 instrument of 366,706).
+- #9 is in neither top-12 (ranks 527 physics / 23 instrument of 366,706).
+- #10 is in neither top-12 (ranks 2,066 physics / 33 instrument of 366,706).
+- #11 is in neither top-12 (ranks 112 physics / 73 instrument of 366,706).
+- #12 is the **#4 instrument** anomaly of Contrastive (spatial-conv1x1).
+
+## Internal purity (own physics top-12 vs own instrument top-12)
+- Base (paper ckpt): 0/12 objects in BOTH its panels.
+- Contrastive (spatial-conv1x1): 0/12 objects in BOTH its panels.
+- FM control (diffusion ablation): 0/12 objects in BOTH its panels.
+
+## Object IDs
+- **Ours (Physics)**: #1=37489781684335642, #2=38557952935750511, #3=37489635655450846, #4=37488969935513781, #5=37489253403350272, #6=43158747673028179, #7=37485387932781994, #8=38558777569466182, #9=44227447205420001, #10=42093874956490435, #11=42089880636902929, #12=37494476083589291
+- **Ours (Instrument)**: #1=42089597169046782, #2=42093866366549440, #3=42687602645541659, #4=42687602645542102, #5=41619431394141083, #6=37489781684335858, #7=41628635509049879, #8=42687997782542552, #9=42687997782542491, #10=42687997782542546, #11=42687997782542589, #12=42687602645541874
+- **Contrastive (Physics)**: #1=38557952935750511, #2=41619293955192002, #3=37489781684335642, #4=42697077343414774, #5=37488969935513775, #6=41619293955192003, #7=37489253403350228, #8=42089605759001351, #9=44227447205420002, #10=44223053453876099, #11=41619130746427229, #12=43154207892596210
+- **Contrastive (Instrument)**: #1=41628635509049879, #2=42093866366549440, #3=41619431394141083, #4=41628635509049876, #5=42089597169046779, #6=37494312874814842, #7=42687602645542102, #8=42692129541097370, #9=42089597169046782, #10=42687997782542546, #11=43154341036564570, #12=42687997782542520
+- **FM-control (Physics)**: #1=37489781684335642, #2=38557952935750485, #3=37488969935513768, #4=38558777569466174, #5=37485387932781991, #6=37489932008196710, #7=41619693387152997, #8=44227447205420003, #9=37489253403350236, #10=42093874956490431, #11=37489360777538908, #12=41614328972989900
+- **FM-control (Instrument)**: #1=42089597169046782, #2=41628635509049879, #3=42687602645542102, #4=42093866366549440, #5=41619431394141083, #6=37494312874814853, #7=42687997782542552, #8=37489781684335858, #9=42687602645541649, #10=42687997782542491, #11=38549436015601973, #12=41628635509049876
