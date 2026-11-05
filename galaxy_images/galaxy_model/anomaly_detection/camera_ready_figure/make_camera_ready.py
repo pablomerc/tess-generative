@@ -42,13 +42,20 @@ N_COLS_PER = 3
 # (read off anomaly_detection_figure_science.pdf with PyMuPDF).
 PAGE_W, OLD_PAGE_H = 892.8, 413.28
 COL_X0 = [8.03, 101.9, 195.76, 307.4, 401.27, 495.14, 606.78, 700.65, 794.51]
-ROW_Y0 = [28.28, 124.28, 220.27, 316.27]
+PUB_ROW_Y0 = [28.28, 124.28, 220.27, 316.27]
 STAMP = 90.36                       # 1.255 in -> 251 px at dpi=200, as published
-SEP_X, SEP_Y = [296.71, 596.09], (27.36, 407.65)
-TITLE_BASELINE = 19.0
-ROW5_GAP = 30.0                     # row 4 bottom -> row 5 top; holds the row-5 header
-BOTTOM_PAD = OLD_PAGE_H - (ROW_Y0[-1] + STAMP)
+SEP_X, PUB_SEP_Y = [296.71, 596.09], (27.36, 407.65)
+BOTTOM_PAD = OLD_PAGE_H - (PUB_ROW_Y0[-1] + STAMP)
 DPI = 200
+
+# Font sizes (published: titles 17, "#i" 10). Bigger fonts need a little more
+# header room, so rows 1-4 move down by TOP_SHIFT (pixels untouched).
+FS_TITLE, FS_RANK, FS_ROW5_HEADER, FS_PCT, FS_INSET = 19, 12, 17, 13, 9.5
+TOP_SHIFT = 2.5
+TITLE_BASELINE = 20.5
+ROW_Y0 = [y + TOP_SHIFT for y in PUB_ROW_Y0]
+SEP_Y = tuple(y + TOP_SHIFT for y in PUB_SEP_Y)
+ROW5_GAP = 36.0                     # row 4 bottom -> row 5 top; holds the row-5 header
 
 SEP_STYLE = dict(color="#888888", linestyle="--", linewidth=1.2, dashes=(6, 4),
                  solid_capstyle="butt")
@@ -104,8 +111,8 @@ def build_figure(published, row5_imgs, row5_pct, variant):
         ax.axis("off")
         return ax
 
-    def label(ax, text):
-        ax.text(0.5, 0.04, text, transform=ax.transAxes, fontsize=10, fontweight="bold",
+    def label(ax, text, fontsize):
+        ax.text(0.5, 0.04, text, transform=ax.transAxes, fontsize=fontsize, fontweight="bold",
                 color="black", va="bottom", ha="center", bbox=LABEL_BOX)
 
     sep_ax = fig.add_axes([0, 0, 1, 1], zorder=-1)
@@ -120,34 +127,35 @@ def build_figure(published, row5_imgs, row5_pct, variant):
     for g, src in enumerate(SOURCES):
         x_mid = (COL_X0[g * N_COLS_PER] + COL_X0[g * N_COLS_PER + 2] + STAMP) / 2
         fig.text(x_mid / PAGE_W, 1 - TITLE_BASELINE / H, src["label"], ha="center",
-                 va="baseline", fontsize=17, fontweight="bold")
+                 va="baseline", fontsize=FS_TITLE, fontweight="bold")
         for k in range(len(ROW_Y0) * N_COLS_PER):
             r, c = divmod(k, N_COLS_PER)
-            label(add_stamp(COL_X0[g * N_COLS_PER + c], ROW_Y0[r], published[g, k]), f"#{k + 1}")
+            label(add_stamp(COL_X0[g * N_COLS_PER + c], ROW_Y0[r], published[g, k]),
+                  f"#{k + 1}", FS_RANK)
 
     # Row 5.
     header = ("Typical galaxies (random draws from each model's 40–60th score percentile)"
               if variant == "band" else
               "Random galaxies (inset: anomaly-score percentile under each model)")
     fig.text(0.5, 1 - (ROW_Y0[-1] + STAMP + ROW5_GAP * 0.70) / H, header, ha="center",
-             va="baseline", fontsize=13, fontweight="bold")
+             va="baseline", fontsize=FS_ROW5_HEADER, fontweight="bold")
     if variant == "band":
         for g in range(len(SOURCES)):
             for c in range(N_COLS_PER):
                 ax = add_stamp(COL_X0[g * N_COLS_PER + c], row5_y0, row5_imgs[g][c])
-                label(ax, f"{ordinal(int(row5_pct[g][c][g]))} pct.")
+                label(ax, f"{ordinal(int(row5_pct[g][c][g]))} pct.", FS_PCT)
     else:
         n = len(row5_imgs[0])
         pitch = (COL_X0[-1] - COL_X0[0]) / (n - 1)
         for j in range(n):
             ax = add_stamp(COL_X0[0] + j * pitch, row5_y0, row5_imgs[0][j])
-            x_l, x_r, y_t, dy = 0.50, 0.975, 0.965, 0.105
+            x_l, x_r, y_t, dy = 0.44, 0.975, 0.965, 0.125
             ax.add_patch(Rectangle((x_l - 0.025, y_t - 3 * dy - 0.03), x_r - x_l + 0.04,
                                    3 * dy + 0.05, transform=ax.transAxes, facecolor="white",
                                    alpha=0.7, linewidth=0, zorder=3))
             for m, name in enumerate(SHORT):
                 y = y_t - (m + 0.5) * dy
-                kw = dict(transform=ax.transAxes, fontsize=8, fontweight="bold",
+                kw = dict(transform=ax.transAxes, fontsize=FS_INSET, fontweight="bold",
                           color="black", va="center", zorder=4)
                 ax.text(x_l, y, name, ha="left", **kw)
                 ax.text(x_r, y, f"{int(row5_pct[0][j][m])}", ha="right", **kw)
